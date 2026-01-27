@@ -1,0 +1,194 @@
+@page "/hours"
+@inject HttpClient Http
+
+<PageTitle>Hours</PageTitle>
+
+<FluentCard Class="hours-card">
+    <div class="hours-grid">
+        <div>
+            <FluentLabel>Company</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCompanyId" @onchange="OnCompanyChanged">
+                @foreach (var company in companies)
+                {
+                    <FluentOption TOption="string" Value="@company.Id.ToString()">@company.Name</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Employee</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId">
+                @foreach (var employee in employees)
+                {
+                    <FluentOption TOption="string" Value="@employee.Id.ToString()">
+                        @employee.DisplayName (@employee.Trade)
+                    </FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Job</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId">
+                @foreach (var job in jobs)
+                {
+                    <FluentOption TOption="string" Value="@job.Id.ToString()">
+                        @job.Code - @job.Name
+                    </FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Date</FluentLabel>
+            <FluentDatePicker @bind-Value="workDate" />
+        </div>
+
+        <div>
+            <FluentLabel>Hours</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" />
+        </div>
+
+        <div class="hours-notes">
+            <FluentLabel>Notes</FluentLabel>
+            <FluentTextField @bind-Value="notes" Placeholder="Optional notes" />
+        </div>
+    </div>
+
+    <div class="hours-actions">
+        <FluentButton Appearance="Appearance.Accent" @onclick="SaveEntryAsync">Save Hours</FluentButton>
+    </div>
+</FluentCard>
+
+<FluentCard Class="hours-card">
+    <FluentLabel Typo="Typography.PaneHeader">Recent Entries</FluentLabel>
+
+    @if (entries.Count == 0)
+    {
+        <p>No entries yet.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Employee</th>
+                    <th>Job</th>
+                    <th>Hours</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in entries)
+                {
+                    <tr>
+                        <td>@entry.WorkDate</td>
+                        <td>@employeeLookup.GetValueOrDefault(entry.EmployeeId, entry.EmployeeId.ToString())</td>
+                        <td>@jobLookup.GetValueOrDefault(entry.JobId, entry.JobId.ToString())</td>
+                        <td>@entry.Hours</td>
+                        <td>@entry.Notes</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</FluentCard>
+
+@code {
+    private readonly List<Company> companies = [];
+    private readonly List<Employee> employees = [];
+    private readonly List<Job> jobs = [];
+    private readonly List<TimeEntry> entries = [];
+
+    private readonly Dictionary<Guid, string> employeeLookup = new();
+    private readonly Dictionary<Guid, string> jobLookup = new();
+
+    private string? selectedCompanyId;
+    private string? selectedEmployeeId;
+    private string? selectedJobId;
+    private DateTime? workDate = DateTime.Today;
+    private decimal hours = 8m;
+    private string notes = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var loadedCompanies = await Http.GetFromJsonAsync<List<Company>>("api/companies") ?? [];
+        companies.AddRange(loadedCompanies);
+
+        selectedCompanyId = companies.FirstOrDefault()?.Id.ToString();
+        await LoadCompanyDataAsync();
+    }
+
+    private async Task OnCompanyChanged(ChangeEventArgs _)
+    {
+        await LoadCompanyDataAsync();
+    }
+
+    private async Task LoadCompanyDataAsync()
+    {
+        employees.Clear();
+        jobs.Clear();
+        entries.Clear();
+        employeeLookup.Clear();
+        jobLookup.Clear();
+
+        if (!Guid.TryParse(selectedCompanyId, out var companyId))
+        {
+            return;
+        }
+
+        var loadedEmployees = await Http.GetFromJsonAsync<List<Employee>>($"api/employees?companyId={companyId}") ?? [];
+        employees.AddRange(loadedEmployees);
+
+        foreach (var employee in employees)
+        {
+            employeeLookup[employee.Id] = employee.DisplayName;
+        }
+
+        selectedEmployeeId ??= employees.FirstOrDefault()?.Id.ToString();
+
+        var loadedJobs = await Http.GetFromJsonAsync<List<Job>>($"api/jobs?companyId={companyId}") ?? [];
+        jobs.AddRange(loadedJobs);
+
+        foreach (var job in jobs)
+        {
+            jobLookup[job.Id] = $"{job.Code} - {job.Name}";
+        }
+
+        selectedJobId ??= jobs.FirstOrDefault()?.Id.ToString();
+
+        var from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
+        var loadedEntries = await Http.GetFromJsonAsync<List<TimeEntry>>(
+                $"api/timeentries?companyId={companyId}&from={from:yyyy-MM-dd}") ?? [];
+        entries.AddRange(loadedEntries);
+    }
+
+    private async Task SaveEntryAsync()
+    {
+        if (!Guid.TryParse(selectedCompanyId, out var companyId) ||
+            !Guid.TryParse(selectedEmployeeId, out var employeeId) ||
+            !Guid.TryParse(selectedJobId, out var jobId) ||
+            workDate is null)
+        {
+            return;
+        }
+
+        var entry = new TimeEntry
+        {
+            CompanyId = companyId,
+            EmployeeId = employeeId,
+            JobId = jobId,
+            WorkDate = DateOnly.FromDateTime(workDate.Value.Date),
+            Hours = hours,
+            Notes = notes
+        };
+
+        var response = await Http.PostAsJsonAsync("api/timeentries", entry);
+        if (response.IsSuccessStatusCode)
+        {
+            notes = string.Empty;
+            await LoadCompanyDataAsync();
+        }
+    }
+}

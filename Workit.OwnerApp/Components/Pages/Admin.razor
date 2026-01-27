@@ -1,0 +1,213 @@
+@page "/admin"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<PageTitle>Admin</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Company</FluentLabel>
+    <div class="admin-row">
+        <FluentTextField @bind-Value="newCompanyName" Placeholder="New company name" />
+        <FluentButton Appearance="Appearance.Accent" @onclick="CreateCompanyAsync">Create</FluentButton>
+    </div>
+
+    <FluentLabel>Active company</FluentLabel>
+    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCompanyId" @onchange="OnCompanyChanged">
+        @foreach (var company in companies)
+        {
+            <FluentOption TOption="string" Value="@company.Id.ToString()">@company.Name</FluentOption>
+        }
+    </FluentSelect>
+</FluentCard>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Customers</FluentLabel>
+    <div class="admin-row">
+        <FluentTextField @bind-Value="newCustomerName" Placeholder="Customer name" />
+        <FluentButton @onclick="CreateCustomerAsync">Add</FluentButton>
+    </div>
+
+    <ul>
+        @foreach (var customer in customers)
+        {
+            <li>@customer.Name</li>
+        }
+    </ul>
+</FluentCard>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
+    <div class="admin-grid">
+        <FluentTextField @bind-Value="newEmployeeName" Placeholder="Employee name" />
+        <FluentTextField @bind-Value="newEmployeeTrade" Placeholder="Trade (Electrician, Carpenter)" />
+        <FluentButton @onclick="CreateEmployeeAsync">Add</FluentButton>
+    </div>
+
+    <ul>
+        @foreach (var employee in employees)
+        {
+            <li>@employee.DisplayName (@employee.Trade)</li>
+        }
+    </ul>
+</FluentCard>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
+    <div class="admin-grid">
+        <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId">
+            @foreach (var customer in customers)
+            {
+                <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+            }
+        </FluentSelect>
+        <FluentTextField @bind-Value="newJobCode" Placeholder="Job code" />
+        <FluentTextField @bind-Value="newJobName" Placeholder="Job name" />
+        <FluentButton @onclick="CreateJobAsync">Add</FluentButton>
+    </div>
+
+    <ul>
+        @foreach (var job in jobs)
+        {
+            <li>@job.Code - @job.Name</li>
+        }
+    </ul>
+</FluentCard>
+
+@code {
+    private readonly List<Company> companies = [];
+    private readonly List<Customer> customers = [];
+    private readonly List<Employee> employees = [];
+    private readonly List<Job> jobs = [];
+
+    private string? selectedCompanyId;
+    private string? selectedCustomerId;
+
+    private string newCompanyName = string.Empty;
+    private string newCustomerName = string.Empty;
+    private string newEmployeeName = string.Empty;
+    private string newEmployeeTrade = string.Empty;
+    private string newJobCode = string.Empty;
+    private string newJobName = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompaniesAsync();
+        await LoadCompanyDataAsync();
+    }
+
+    private async Task OnCompanyChanged(ChangeEventArgs _)
+    {
+        await LoadCompanyDataAsync();
+    }
+
+    private async Task LoadCompaniesAsync()
+    {
+        companies.Clear();
+        var loaded = await Http.GetFromJsonAsync<List<Company>>("api/companies") ?? [];
+        companies.AddRange(loaded);
+        selectedCompanyId ??= companies.FirstOrDefault()?.Id.ToString();
+    }
+
+    private async Task LoadCompanyDataAsync()
+    {
+        customers.Clear();
+        employees.Clear();
+        jobs.Clear();
+
+        if (!Guid.TryParse(selectedCompanyId, out var companyId))
+        {
+            return;
+        }
+
+        var loadedCustomers = await Http.GetFromJsonAsync<List<Customer>>($"api/customers?companyId={companyId}") ?? [];
+        customers.AddRange(loadedCustomers);
+        selectedCustomerId ??= customers.FirstOrDefault()?.Id.ToString();
+
+        var loadedEmployees = await Http.GetFromJsonAsync<List<Employee>>($"api/employees?companyId={companyId}") ?? [];
+        employees.AddRange(loadedEmployees);
+
+        var loadedJobs = await Http.GetFromJsonAsync<List<Job>>($"api/jobs?companyId={companyId}") ?? [];
+        jobs.AddRange(loadedJobs);
+    }
+
+    private async Task CreateCompanyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newCompanyName))
+        {
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/companies", new Company { Name = newCompanyName.Trim() });
+        if (response.IsSuccessStatusCode)
+        {
+            newCompanyName = string.Empty;
+            await LoadCompaniesAsync();
+            await LoadCompanyDataAsync();
+        }
+    }
+
+    private async Task CreateCustomerAsync()
+    {
+        if (!Guid.TryParse(selectedCompanyId, out var companyId) || string.IsNullOrWhiteSpace(newCustomerName))
+        {
+            return;
+        }
+
+        var customer = new Customer { CompanyId = companyId, Name = newCustomerName.Trim() };
+        var response = await Http.PostAsJsonAsync("api/customers", customer);
+        if (response.IsSuccessStatusCode)
+        {
+            newCustomerName = string.Empty;
+            await LoadCompanyDataAsync();
+        }
+    }
+
+    private async Task CreateEmployeeAsync()
+    {
+        if (!Guid.TryParse(selectedCompanyId, out var companyId) || string.IsNullOrWhiteSpace(newEmployeeName))
+        {
+            return;
+        }
+
+        var employee = new Employee
+        {
+            CompanyId = companyId,
+            DisplayName = newEmployeeName.Trim(),
+            Trade = newEmployeeTrade.Trim()
+        };
+
+        var response = await Http.PostAsJsonAsync("api/employees", employee);
+        if (response.IsSuccessStatusCode)
+        {
+            newEmployeeName = string.Empty;
+            newEmployeeTrade = string.Empty;
+            await LoadCompanyDataAsync();
+        }
+    }
+
+    private async Task CreateJobAsync()
+    {
+        if (!Guid.TryParse(selectedCompanyId, out var companyId) ||
+            !Guid.TryParse(selectedCustomerId, out var customerId) ||
+            string.IsNullOrWhiteSpace(newJobName))
+        {
+            return;
+        }
+
+        var job = new Job
+        {
+            CompanyId = companyId,
+            CustomerId = customerId,
+            Code = string.IsNullOrWhiteSpace(newJobCode) ? "JOB" : newJobCode.Trim(),
+            Name = newJobName.Trim()
+        };
+
+        var response = await Http.PostAsJsonAsync("api/jobs", job);
+        if (response.IsSuccessStatusCode)
+        {
+            newJobCode = string.Empty;
+            newJobName = string.Empty;
+            await LoadCompanyDataAsync();
+        }
+    }
+}
