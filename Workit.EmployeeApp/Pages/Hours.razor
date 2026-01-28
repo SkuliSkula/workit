@@ -3,18 +3,72 @@
 
 <PageTitle>Hours</PageTitle>
 
-<FluentCard Class="hours-card">
-    <div class="hours-grid">
-        <div>
-            <FluentLabel>Company</FluentLabel>
-            <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCompanyId" @onchange="OnCompanyChanged">
-                @foreach (var company in companies)
-                {
-                    <FluentOption TOption="string" Value="@company.Id.ToString()">@company.Name</FluentOption>
-                }
-            </FluentSelect>
-        </div>
+<FluentCard Class="hours-card hours-summary">
+    <div>
+        <FluentLabel>Company</FluentLabel>
+        <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCompanyId" @onchange="OnCompanyChanged">
+            @foreach (var company in companies)
+            {
+                <FluentOption TOption="string" Value="@company.Id.ToString()">@company.Name</FluentOption>
+            }
+        </FluentSelect>
+    </div>
 
+    <div class="hours-actions">
+        <FluentButton Appearance="Appearance.Accent" @onclick="OpenSheet">
+            <FluentIcon Value="new Size20.Add()" />
+            <span class="button-label">New Entry</span>
+        </FluentButton>
+    </div>
+</FluentCard>
+
+<FluentCard Class="hours-card">
+    <FluentLabel Typo="Typography.PaneHeader">Recent Entries</FluentLabel>
+
+    @if (entries.Count == 0)
+    {
+        <p>No entries yet.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Employee</th>
+                    <th>Job</th>
+                    <th>Hours</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in entries)
+                {
+                    <tr>
+                        <td>@entry.WorkDate</td>
+                        <td>@employeeLookup.GetValueOrDefault(entry.EmployeeId, entry.EmployeeId.ToString())</td>
+                        <td>@jobLookup.GetValueOrDefault(entry.JobId, entry.JobId.ToString())</td>
+                        <td>@entry.Hours</td>
+                        <td>@entry.Notes</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</FluentCard>
+
+<div class="sheet-backdrop @(isSheetOpen ? "show" : string.Empty)" @onclick="CloseSheet"></div>
+
+<section class="sheet @(isSheetOpen ? "show" : string.Empty)">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+        <h2>New time entry</h2>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="CloseSheet">
+            <FluentIcon Value="new Size20.Dismiss()" />
+        </FluentButton>
+    </div>
+
+    <div class="hours-grid sheet-content">
         <div>
             <FluentLabel>Employee</FluentLabel>
             <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId">
@@ -55,45 +109,10 @@
         </div>
     </div>
 
-    <div class="hours-actions">
+    <div class="hours-actions sheet-actions">
         <FluentButton Appearance="Appearance.Accent" @onclick="SaveEntryAsync">Save Hours</FluentButton>
     </div>
-</FluentCard>
-
-<FluentCard Class="hours-card">
-    <FluentLabel Typo="Typography.PaneHeader">Recent Entries</FluentLabel>
-
-    @if (entries.Count == 0)
-    {
-        <p>No entries yet.</p>
-    }
-    else
-    {
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Employee</th>
-                    <th>Job</th>
-                    <th>Hours</th>
-                    <th>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var entry in entries)
-                {
-                    <tr>
-                        <td>@entry.WorkDate</td>
-                        <td>@employeeLookup.GetValueOrDefault(entry.EmployeeId, entry.EmployeeId.ToString())</td>
-                        <td>@jobLookup.GetValueOrDefault(entry.JobId, entry.JobId.ToString())</td>
-                        <td>@entry.Hours</td>
-                        <td>@entry.Notes</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-</FluentCard>
+</section>
 
 @code {
     private readonly List<Company> companies = [];
@@ -110,6 +129,7 @@
     private DateTime? workDate = DateTime.Today;
     private decimal hours = 8m;
     private string notes = string.Empty;
+    private bool isSheetOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -188,7 +208,18 @@
         if (response.IsSuccessStatusCode)
         {
             notes = string.Empty;
+            isSheetOpen = false;
             await LoadCompanyDataAsync();
         }
+    }
+
+    private void OpenSheet()
+    {
+        isSheetOpen = true;
+    }
+
+    private void CloseSheet()
+    {
+        isSheetOpen = false;
     }
 }
