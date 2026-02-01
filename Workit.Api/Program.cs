@@ -1,8 +1,23 @@
 using Microsoft.EntityFrameworkCore;
+using Serilog;
+using Serilog.Events;
 using Workit.Api.Data;
 using Workit.Shared.Models;
 
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "Logs/workit-api-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        shared: true)
+    .CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -21,6 +36,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:5100",
                 "http://localhost:5300",
                 "http://localhost:5200",
+                "http://192.168.86.26:5100",
+                "http://192.168.86.26:5300",
                 "http://192.168.86.31:5100",
                 "http://192.168.86.31:5300");
     });
@@ -142,4 +159,11 @@ if (app.Environment.IsDevelopment() && !isDesignTime)
     }
 }
 
-app.Run();
+try
+{
+    app.Run();
+}
+finally
+{
+    Log.CloseAndFlush();
+}
