@@ -127,7 +127,9 @@ app.MapPost("/api/timeentries", async (WorkitDbContext db, TimeEntry entry, Canc
     })
     .WithName("CreateTimeEntry");
 
-if (app.Environment.IsDevelopment())
+var isDesignTime = string.Equals(Environment.GetEnvironmentVariable("EF_DESIGN_TIME"), "true", StringComparison.OrdinalIgnoreCase);
+
+if (app.Environment.IsDevelopment() && !isDesignTime)
 {
     var skipSeed = builder.Configuration.GetValue<bool>("SkipDatabaseSeed");
     if (!skipSeed)

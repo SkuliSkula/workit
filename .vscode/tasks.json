@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Kill Workit Ports",
+      "type": "shell",
+      "command": "for p in 5100 5200 5300 7100 7200 7300; do lsof -ti tcp:$p | xargs -r kill; done",
+      "problemMatcher": []
+    },
+    {
+      "label": "Open Workit Safari",
+      "type": "shell",
+      "command": "osascript -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5100\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5200/swagger\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5300\"}'",
+      "problemMatcher": []
+    }
+  ]
+}

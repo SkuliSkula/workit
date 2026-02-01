@@ -34,7 +34,7 @@ public static class SeedData
             Notes = "Initial demo entry"
         };
 
-        await dbContext.AddRangeAsync(company, customer, employee, job, entry, cancellationToken);
+        await dbContext.AddRangeAsync(new object[] { company, customer, employee, job, entry }, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
