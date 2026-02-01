@@ -20,7 +20,9 @@ builder.Services.AddCors(options =>
                 "https://localhost:7200",
                 "http://localhost:5100",
                 "http://localhost:5300",
-                "http://localhost:5200");
+                "http://localhost:5200",
+                "http://192.168.86.31:5100",
+                "http://192.168.86.31:5300");
     });
 });
 
