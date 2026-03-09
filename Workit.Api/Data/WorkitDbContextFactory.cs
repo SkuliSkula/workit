@@ -18,10 +18,10 @@ public sealed class WorkitDbContextFactory : IDesignTimeDbContextFactory<WorkitD
             .Build();
 
         var connectionString = configuration.GetConnectionString("WorkitDb")
-            ?? "Server=localhost,1433;Database=WorkitDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True";
+            ?? "Host=localhost;Port=5432;Database=workkit;Username=postgres;Password=postgres";
 
         var optionsBuilder = new DbContextOptionsBuilder<WorkitDbContext>();
-        optionsBuilder.UseSqlServer(connectionString);
+        optionsBuilder.UseNpgsql(connectionString);
 
         return new WorkitDbContext(optionsBuilder.Options);
     }

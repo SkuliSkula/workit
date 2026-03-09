@@ -7,7 +7,7 @@ public static class SeedData
 {
     public static async Task EnsureSeededAsync(WorkitDbContext dbContext, CancellationToken cancellationToken = default)
     {
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        await dbContext.Database.MigrateAsync(cancellationToken);
 
         if (await dbContext.Companies.AnyAsync(cancellationToken))
         {

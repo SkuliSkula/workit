@@ -47,8 +47,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<WorkitDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("WorkitDb")
-        ?? "Server=localhost;Database=WorkitDb;User Id=sa;Password=Your_password123;TrustServerCertificate=True";
-    options.UseSqlServer(connectionString);
+        ?? "Host=localhost;Port=5432;Database=workkit;Username=postgres;Password=postgres";
+    options.UseNpgsql(connectionString);
 });
 
 var app = builder.Build();
