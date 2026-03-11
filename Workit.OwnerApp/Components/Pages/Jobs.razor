@@ -1,0 +1,201 @@
+@page "/jobs"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<PageTitle>Jobs</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
+
+    @if (company is null)
+    {
+        <FluentLabel>Set up the company first in Admin before adding jobs.</FluentLabel>
+    }
+    else
+    {
+        <div class="admin-grid">
+            @if (customers.Count > 0)
+            {
+                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId">
+                    @foreach (var customer in customers)
+                    {
+                        <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+                    }
+                </FluentSelect>
+            }
+            else
+            {
+                <FluentLabel>No customers available yet.</FluentLabel>
+            }
+
+            <FluentTextField @bind-Value="newJobCode" Placeholder="Job code" />
+            <FluentTextField @bind-Value="newJobName" Placeholder="Job name" />
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync" Disabled="@(!HasSelectedCustomer)">Add Job</FluentButton>
+        </div>
+    }
+
+    @if (editingJob is not null)
+    {
+        <FluentCard Class="admin-card">
+            <FluentLabel Typo="Typography.PaneHeader">Edit Job</FluentLabel>
+            <div class="admin-grid">
+                <FluentSelect TValue="string" TOption="string" @bind-Value="editingCustomerId">
+                    @foreach (var customer in customers)
+                    {
+                        <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+                    }
+                </FluentSelect>
+                <FluentTextField @bind-Value="editingJob.Code" Placeholder="Job code" />
+                <FluentTextField @bind-Value="editingJob.Name" Placeholder="Job name" />
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save Changes</FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
+            </div>
+        </FluentCard>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel>@loadError</FluentLabel>
+    }
+
+    @if (jobs.Count > 0)
+    {
+        <FluentDataGrid TGridItem="Job" Items="@jobs.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+            <PropertyColumn Property="@(x => x.Code)" Title="Code" />
+            <PropertyColumn Property="@(x => x.Name)" Title="Name" />
+            <TemplateColumn Title="Customer">
+                <FluentLabel>@customerLookup.GetValueOrDefault(context.CustomerId, context.CustomerId.ToString())</FluentLabel>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditJob(context))">Edit</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No jobs yet.</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+    private readonly List<Customer> customers = [];
+    private readonly List<Job> jobs = [];
+    private readonly Dictionary<Guid, string> customerLookup = new();
+    private Company? company;
+    private Job? editingJob;
+    private string? selectedCustomerId;
+    private string? editingCustomerId;
+    private string newJobCode = string.Empty;
+    private string newJobName = string.Empty;
+    private string? loadError;
+
+    private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
+    private bool HasEditingCustomer => Guid.TryParse(editingCustomerId, out _);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+        customers.Clear();
+        jobs.Clear();
+        customerLookup.Clear();
+        selectedCustomerId = null;
+
+        try
+        {
+            company = await Http.GetFromJsonAsync<Company?>("api/company");
+            if (company is null)
+            {
+                return;
+            }
+
+            var loadedCustomers = await Http.GetFromJsonAsync<List<Customer>>($"api/customers?companyId={company.Id}") ?? [];
+            customers.AddRange(loadedCustomers);
+            selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
+
+            foreach (var customer in customers)
+            {
+                customerLookup[customer.Id] = customer.Name;
+            }
+
+            var loadedJobs = await Http.GetFromJsonAsync<List<Job>>($"api/jobs?companyId={company.Id}") ?? [];
+            jobs.AddRange(loadedJobs);
+        }
+        catch (Exception)
+        {
+            loadError = "Jobs could not be loaded right now.";
+        }
+    }
+
+    private async Task CreateJobAsync()
+    {
+        if (company is null ||
+            !Guid.TryParse(selectedCustomerId, out var customerId) ||
+            string.IsNullOrWhiteSpace(newJobName))
+        {
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/jobs", new Job
+        {
+            CompanyId = company.Id,
+            CustomerId = customerId,
+            Code = string.IsNullOrWhiteSpace(newJobCode) ? "JOB" : newJobCode.Trim(),
+            Name = newJobName.Trim()
+        });
+
+        if (response.IsSuccessStatusCode)
+        {
+            newJobCode = string.Empty;
+            newJobName = string.Empty;
+            await LoadAsync();
+            return;
+        }
+
+        loadError = await response.Content.ReadAsStringAsync();
+    }
+
+    private void BeginEditJob(Job job)
+    {
+        editingJob = new Job
+        {
+            Id = job.Id,
+            CompanyId = job.CompanyId,
+            CustomerId = job.CustomerId,
+            Code = job.Code,
+            Name = job.Name
+        };
+        editingCustomerId = job.CustomerId.ToString();
+    }
+
+    private async Task SaveJobAsync()
+    {
+        if (editingJob is null || !Guid.TryParse(editingCustomerId, out var customerId))
+        {
+            return;
+        }
+
+        editingJob.CustomerId = customerId;
+
+        var response = await Http.PutAsJsonAsync($"api/jobs/{editingJob.Id}", editingJob);
+        if (response.IsSuccessStatusCode)
+        {
+            editingJob = null;
+            editingCustomerId = null;
+            await LoadAsync();
+            return;
+        }
+
+        loadError = await response.Content.ReadAsStringAsync();
+    }
+
+    private void CancelJobEdit()
+    {
+        editingJob = null;
+        editingCustomerId = null;
+    }
+}

@@ -75,6 +75,16 @@ api.MapGet("/companies", async (WorkitDbContext db, CancellationToken ct) =>
 api.MapPost("/companies", async (WorkitDbContext db, Company company, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!IsValidCompany(company))
+            {
+                return Results.BadRequest("Company name, SSN, email, address, phone, and owner are required.");
+            }
+
+            if (await db.Companies.AnyAsync(ct))
+            {
+                return Results.Conflict("A company has already been configured.");
+            }
+
             db.Companies.Add(company);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/companies/{company.Id}", company);
@@ -82,6 +92,13 @@ api.MapPost("/companies", async (WorkitDbContext db, Company company, Cancellati
         apiLogger,
         "creating a company"))
     .WithName("CreateCompany");
+
+api.MapGet("/company", async (WorkitDbContext db, CancellationToken ct) =>
+        await ExecuteDbAsync(
+            async () => Results.Ok(await db.Companies.OrderBy(x => x.Name).FirstOrDefaultAsync(ct)),
+            apiLogger,
+            "loading company"))
+    .WithName("GetCompany");
 
 api.MapGet("/customers", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
         await ExecuteDbAsync(
@@ -93,6 +110,11 @@ api.MapGet("/customers", async (WorkitDbContext db, Guid companyId, Cancellation
 api.MapPost("/customers", async (WorkitDbContext db, Customer customer, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!IsValidCustomer(customer))
+            {
+                return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
+            }
+
             db.Customers.Add(customer);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/customers/{customer.Id}", customer);
@@ -100,6 +122,38 @@ api.MapPost("/customers", async (WorkitDbContext db, Customer customer, Cancella
         apiLogger,
         "creating a customer"))
     .WithName("CreateCustomer");
+
+api.MapPut("/customers/{id:guid}", async (WorkitDbContext db, Guid id, Customer customer, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (id != customer.Id)
+            {
+                return Results.BadRequest("Customer id mismatch.");
+            }
+
+            if (!IsValidCustomer(customer))
+            {
+                return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
+            }
+
+            var existing = await db.Customers.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (existing is null)
+            {
+                return Results.NotFound();
+            }
+
+            existing.Name = customer.Name.Trim();
+            existing.Ssn = customer.Ssn.Trim();
+            existing.Email = customer.Email.Trim();
+            existing.Phone = customer.Phone.Trim();
+            existing.ContactPerson = customer.ContactPerson.Trim();
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "updating a customer"))
+    .WithName("UpdateCustomer");
 
 api.MapGet("/employees", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
         await ExecuteDbAsync(
@@ -111,6 +165,11 @@ api.MapGet("/employees", async (WorkitDbContext db, Guid companyId, Cancellation
 api.MapPost("/employees", async (WorkitDbContext db, Employee employee, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!IsValidEmployee(employee))
+            {
+                return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
+            }
+
             db.Employees.Add(employee);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/employees/{employee.Id}", employee);
@@ -118,6 +177,39 @@ api.MapPost("/employees", async (WorkitDbContext db, Employee employee, Cancella
         apiLogger,
         "creating an employee"))
     .WithName("CreateEmployee");
+
+api.MapPut("/employees/{id:guid}", async (WorkitDbContext db, Guid id, Employee employee, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (id != employee.Id)
+            {
+                return Results.BadRequest("Employee id mismatch.");
+            }
+
+            if (!IsValidEmployee(employee))
+            {
+                return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
+            }
+
+            var existing = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (existing is null)
+            {
+                return Results.NotFound();
+            }
+
+            existing.DisplayName = employee.DisplayName.Trim();
+            existing.Trade = employee.Trade.Trim();
+            existing.Ssn = employee.Ssn.Trim();
+            existing.Email = employee.Email.Trim();
+            existing.Phone = employee.Phone.Trim();
+            existing.ContactPerson = employee.ContactPerson.Trim();
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "updating an employee"))
+    .WithName("UpdateEmployee");
 
 api.MapGet("/jobs", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
         await ExecuteDbAsync(
@@ -136,6 +228,36 @@ api.MapPost("/jobs", async (WorkitDbContext db, Job job, CancellationToken ct) =
         apiLogger,
         "creating a job"))
     .WithName("CreateJob");
+
+api.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, Guid id, Job job, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (id != job.Id)
+            {
+                return Results.BadRequest("Job id mismatch.");
+            }
+
+            if (string.IsNullOrWhiteSpace(job.Name) || string.IsNullOrWhiteSpace(job.Code))
+            {
+                return Results.BadRequest("Job name and code are required.");
+            }
+
+            var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (existing is null)
+            {
+                return Results.NotFound();
+            }
+
+            existing.CustomerId = job.CustomerId;
+            existing.Code = job.Code.Trim();
+            existing.Name = job.Name.Trim();
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "updating a job"))
+    .WithName("UpdateJob");
 
 api.MapGet("/timeentries", async (
         WorkitDbContext db,
@@ -262,6 +384,29 @@ static bool IsDatabaseException(Exception ex)
 
     return false;
 }
+
+static bool IsValidCompany(Company company) =>
+    !string.IsNullOrWhiteSpace(company.Name) &&
+    !string.IsNullOrWhiteSpace(company.Ssn) &&
+    !string.IsNullOrWhiteSpace(company.Email) &&
+    !string.IsNullOrWhiteSpace(company.Address) &&
+    !string.IsNullOrWhiteSpace(company.Phone) &&
+    !string.IsNullOrWhiteSpace(company.Owner);
+
+static bool IsValidCustomer(Customer customer) =>
+    !string.IsNullOrWhiteSpace(customer.Name) &&
+    !string.IsNullOrWhiteSpace(customer.Ssn) &&
+    !string.IsNullOrWhiteSpace(customer.Email) &&
+    !string.IsNullOrWhiteSpace(customer.Phone) &&
+    !string.IsNullOrWhiteSpace(customer.ContactPerson);
+
+static bool IsValidEmployee(Employee employee) =>
+    !string.IsNullOrWhiteSpace(employee.DisplayName) &&
+    !string.IsNullOrWhiteSpace(employee.Trade) &&
+    !string.IsNullOrWhiteSpace(employee.Ssn) &&
+    !string.IsNullOrWhiteSpace(employee.Email) &&
+    !string.IsNullOrWhiteSpace(employee.Phone) &&
+    !string.IsNullOrWhiteSpace(employee.ContactPerson);
 
 static async Task LogStartupDatabaseStatusAsync(
     IServiceProvider services,

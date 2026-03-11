@@ -4,6 +4,11 @@ public sealed class Company
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
+    public string Ssn { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Address { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string Owner { get; set; } = string.Empty;
 }
 
 public sealed class Customer
@@ -11,6 +16,10 @@ public sealed class Customer
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CompanyId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Ssn { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string ContactPerson { get; set; } = string.Empty;
 }
 
 public sealed class Employee
@@ -19,6 +28,10 @@ public sealed class Employee
     public Guid CompanyId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string Trade { get; set; } = string.Empty;
+    public string Ssn { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string ContactPerson { get; set; } = string.Empty;
 }
 
 public sealed class Job

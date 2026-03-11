@@ -1,0 +1,178 @@
+@page "/employees"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<PageTitle>Employees</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
+
+    @if (company is null)
+    {
+        <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
+    }
+    else
+    {
+        <div class="admin-grid">
+            <FluentTextField @bind-Value="newEmployeeName" Placeholder="Employee name" />
+            <FluentTextField @bind-Value="newEmployeeTrade" Placeholder="Trade" />
+            <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="SSN" />
+            <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="Email" />
+            <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone" />
+            <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Contact person" />
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
+        </div>
+    }
+
+    @if (editingEmployee is not null)
+    {
+        <FluentCard Class="admin-card">
+            <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
+            <div class="admin-grid">
+                <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Employee name" />
+                <FluentTextField @bind-Value="editingEmployee.Trade" Placeholder="Trade" />
+                <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="SSN" />
+                <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="Email" />
+                <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone" />
+                <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Contact person" />
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
+            </div>
+        </FluentCard>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel>@loadError</FluentLabel>
+    }
+
+    @if (employees.Count > 0)
+    {
+        <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+            <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
+            <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
+            <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
+            <PropertyColumn Property="@(x => x.Email)" Title="Email" />
+            <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
+            <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No employees yet.</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+    private readonly List<Employee> employees = [];
+    private Company? company;
+    private Employee? editingEmployee;
+    private string newEmployeeName = string.Empty;
+    private string newEmployeeTrade = string.Empty;
+    private string newEmployeeSsn = string.Empty;
+    private string newEmployeeEmail = string.Empty;
+    private string newEmployeePhone = string.Empty;
+    private string newEmployeeContactPerson = string.Empty;
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+        employees.Clear();
+
+        try
+        {
+            company = await Http.GetFromJsonAsync<Company?>("api/company");
+            if (company is null)
+            {
+                return;
+            }
+
+            var loadedEmployees = await Http.GetFromJsonAsync<List<Employee>>($"api/employees?companyId={company.Id}") ?? [];
+            employees.AddRange(loadedEmployees);
+        }
+        catch (Exception)
+        {
+            loadError = "Employees could not be loaded right now.";
+        }
+    }
+
+    private async Task CreateEmployeeAsync()
+    {
+        if (company is null || string.IsNullOrWhiteSpace(newEmployeeName))
+        {
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/employees", new Employee
+        {
+            CompanyId = company.Id,
+            DisplayName = newEmployeeName.Trim(),
+            Trade = newEmployeeTrade.Trim(),
+            Ssn = newEmployeeSsn.Trim(),
+            Email = newEmployeeEmail.Trim(),
+            Phone = newEmployeePhone.Trim(),
+            ContactPerson = newEmployeeContactPerson.Trim()
+        });
+
+        if (response.IsSuccessStatusCode)
+        {
+            newEmployeeName = string.Empty;
+            newEmployeeTrade = string.Empty;
+            newEmployeeSsn = string.Empty;
+            newEmployeeEmail = string.Empty;
+            newEmployeePhone = string.Empty;
+            newEmployeeContactPerson = string.Empty;
+            await LoadAsync();
+            return;
+        }
+
+        loadError = await response.Content.ReadAsStringAsync();
+    }
+
+    private void BeginEditEmployee(Employee employee)
+    {
+        editingEmployee = new Employee
+        {
+            Id = employee.Id,
+            CompanyId = employee.CompanyId,
+            DisplayName = employee.DisplayName,
+            Trade = employee.Trade,
+            Ssn = employee.Ssn,
+            Email = employee.Email,
+            Phone = employee.Phone,
+            ContactPerson = employee.ContactPerson
+        };
+    }
+
+    private async Task SaveEmployeeAsync()
+    {
+        if (editingEmployee is null)
+        {
+            return;
+        }
+
+        var response = await Http.PutAsJsonAsync($"api/employees/{editingEmployee.Id}", editingEmployee);
+        if (response.IsSuccessStatusCode)
+        {
+            editingEmployee = null;
+            await LoadAsync();
+            return;
+        }
+
+        loadError = await response.Content.ReadAsStringAsync();
+    }
+
+    private void CancelEmployeeEdit()
+    {
+        editingEmployee = null;
+    }
+}
