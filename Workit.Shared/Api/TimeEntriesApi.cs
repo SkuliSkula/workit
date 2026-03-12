@@ -4,17 +4,32 @@ using Workit.Shared.Models;
 
 public interface ITimeEntriesApi
 {
-    Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly from);
+    Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly from, DateOnly? to = null, Guid? employeeId = null);
     Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry);
 }
 
 internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
     : ApiClientBase(httpClient, accessTokenAccessor), ITimeEntriesApi
 {
-    public async Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly from)
+    public async Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly from, DateOnly? to = null, Guid? employeeId = null)
     {
+        var query = new List<string>
+        {
+            $"from={from:yyyy-MM-dd}"
+        };
+
+        if (to is not null)
+        {
+            query.Add($"to={to:yyyy-MM-dd}");
+        }
+
+        if (employeeId is not null)
+        {
+            query.Add($"employeeId={employeeId}");
+        }
+
         var result = await GetAsync<List<TimeEntry>>(
-            $"api/timeentries?from={from:yyyy-MM-dd}",
+            $"api/timeentries?{string.Join("&", query)}",
             "Time entries could not be loaded right now.");
 
         return result.IsSuccess

@@ -1,37 +1,237 @@
-﻿@page "/"
+@page "/"
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
+@inject ICompanyApi CompanyApi
+@inject IEmployeesApi EmployeesApi
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
 
 <PageTitle>Home</PageTitle>
 
-<FluentCard Class="hours-card">
-    <FluentLabel Typo="Typography.PaneHeader">Employee Login</FluentLabel>
-    <div class="hours-grid">
-        <div>
-            <FluentLabel>Email</FluentLabel>
-            <FluentTextField @bind-Value="email" Placeholder="Email" />
-        </div>
-        <div>
-            <FluentLabel>Password</FluentLabel>
-            <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
-        </div>
-    </div>
+@if (session is null)
+{
+    <FluentCard Class="hours-card employee-shell">
+        <span class="employee-eyebrow">Employee access</span>
+        <FluentLabel Typo="Typography.PaneHeader">Monthly view for your hours</FluentLabel>
+        <p>Sign in to see your hours, worked days, top jobs, and this month’s activity.</p>
 
-    <div class="hours-actions">
-        <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
-    </div>
+        <div class="hours-grid">
+            <div>
+                <FluentLabel>Email</FluentLabel>
+                <FluentTextField @bind-Value="email" Placeholder="Email" />
+            </div>
+            <div>
+                <FluentLabel>Password</FluentLabel>
+                <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
+            </div>
+        </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <p>@errorMessage</p>
-    }
-</FluentCard>
+        <div class="hours-actions">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <p>@errorMessage</p>
+        }
+    </FluentCard>
+}
+else if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <FluentCard Class="hours-card employee-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
+        <p>@loadError</p>
+        <div class="hours-actions">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadDashboardAsync">Retry</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+        </div>
+    </FluentCard>
+}
+else if (isLoading)
+{
+    <FluentCard Class="hours-card employee-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Loading your month...</FluentLabel>
+    </FluentCard>
+}
+else
+{
+    <section class="employee-dashboard">
+        <FluentCard Class="hours-card employee-shell employee-hero">
+            <div>
+                <span class="employee-eyebrow">Monthly view</span>
+                <h1>@employeeName</h1>
+                <p>@(company?.Name ?? "Your company")</p>
+            </div>
+
+            <div class="employee-hero-controls">
+                <div class="month-toolbar">
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="PreviousMonthAsync">Previous</FluentButton>
+                    <input class="month-picker" type="month" value="@selectedMonthValue" @onchange="OnMonthChangedAsync" />
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="NextMonthAsync">Next</FluentButton>
+                </div>
+
+                <div class="employee-hero-meta">
+                    <div>
+                        <span class="meta-label">Month</span>
+                        <strong>@monthTitle</strong>
+                    </div>
+                    <div>
+                        <span class="meta-label">Worked days</span>
+                        <strong>@workedDays</strong>
+                    </div>
+                </div>
+
+                <div class="hours-actions employee-actions">
+                    <FluentButton Appearance="Appearance.Accent" Href="/hours">Log Hours</FluentButton>
+                    <FluentButton Appearance="Appearance.Outline" Href="/hours">Open Hours</FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+                </div>
+            </div>
+        </FluentCard>
+
+        <section class="employee-kpis">
+            <FluentCard Class="hours-card employee-kpi">
+                <span class="employee-kpi-label">Total Hours</span>
+                <strong>@totalHours.ToString("0.##")</strong>
+                <span>@averageHoursPerWorkedDay.ToString("0.##") avg per worked day</span>
+            </FluentCard>
+
+            <FluentCard Class="hours-card employee-kpi">
+                <span class="employee-kpi-label">Jobs Worked</span>
+                <strong>@jobSummaries.Count</strong>
+                <span>@topJobLabel</span>
+            </FluentCard>
+
+            <FluentCard Class="hours-card employee-kpi">
+                <span class="employee-kpi-label">Entries Logged</span>
+                <strong>@entries.Count</strong>
+                <span>@latestEntryLabel</span>
+            </FluentCard>
+        </section>
+
+        <FluentCard Class="hours-card employee-shell">
+            <div class="employee-section-head">
+                <div>
+                    <span class="employee-eyebrow">Daily load</span>
+                    <h2>@monthTitle</h2>
+                </div>
+            </div>
+
+            <div class="employee-day-strip">
+                @foreach (var day in dailyLoads)
+                {
+                    <div class="employee-day-cell">
+                        <span class="employee-day-number">@day.Day</span>
+                        <div class="employee-day-bar-wrap">
+                            <div class="employee-day-bar" style="@($"height:{day.HeightPercent:0.##}%")"></div>
+                        </div>
+                        <span class="employee-day-hours">@day.Hours.ToString("0.#")</span>
+                    </div>
+                }
+            </div>
+        </FluentCard>
+
+        <div class="employee-panels">
+            <FluentCard Class="hours-card employee-shell">
+                <div class="employee-section-head">
+                    <div>
+                        <span class="employee-eyebrow">Top jobs</span>
+                        <h2>Where your time went</h2>
+                    </div>
+                </div>
+
+                @if (jobSummaries.Count == 0)
+                {
+                    <p>No hours logged this month.</p>
+                }
+                else
+                {
+                    @foreach (var item in jobSummaries.Take(5))
+                    {
+                        <div class="employee-summary-row">
+                            <div class="employee-summary-copy">
+                                <strong>@item.Name</strong>
+                                <span>@item.EntryCount entries</span>
+                            </div>
+                            <div class="employee-summary-bar-wrap">
+                                <div class="employee-summary-bar" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                            </div>
+                            <div class="employee-summary-value">@item.Hours.ToString("0.##") h</div>
+                        </div>
+                    }
+                }
+            </FluentCard>
+
+            <FluentCard Class="hours-card employee-shell">
+                <div class="employee-section-head">
+                    <div>
+                        <span class="employee-eyebrow">Recent entries</span>
+                        <h2>Latest activity</h2>
+                    </div>
+                </div>
+
+                @if (recentEntries.Count == 0)
+                {
+                    <p>No entries yet this month.</p>
+                }
+                else
+                {
+                    <div class="employee-entry-table">
+                        <div class="employee-entry-head">Date</div>
+                        <div class="employee-entry-head">Job</div>
+                        <div class="employee-entry-head right">Hours</div>
+
+                        @foreach (var entry in recentEntries)
+                        {
+                            <div>@entry.WorkDate.ToString("yyyy-MM-dd")</div>
+                            <div>@entry.JobName</div>
+                            <div class="right">@entry.Hours.ToString("0.##")</div>
+                        }
+                    </div>
+                }
+            </FluentCard>
+        </div>
+    </section>
+}
 
 @code {
+    private sealed record AggregateRow(string Name, decimal Hours, int EntryCount, decimal WidthPercent);
+    private sealed record DayLoad(int Day, decimal Hours, decimal HeightPercent);
+    private sealed record RecentEntryRow(DateOnly WorkDate, string JobName, decimal Hours);
+
     private string email = string.Empty;
     private string password = string.Empty;
     private string? errorMessage;
+    private string? loadError;
+    private bool isLoading;
+    private LoginResponse? session;
+    private Company? company;
+    private Employee? employee;
+    private readonly List<Job> jobs = [];
+    private readonly List<TimeEntry> entries = [];
+    private readonly List<AggregateRow> jobSummaries = [];
+    private readonly List<DayLoad> dailyLoads = [];
+    private readonly List<RecentEntryRow> recentEntries = [];
+    private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
+    private decimal totalHours;
+    private decimal averageHoursPerWorkedDay;
+    private int workedDays;
+
+    private string selectedMonthValue => $"{selectedMonth.Year:D4}-{selectedMonth.Month:D2}";
+    private string monthTitle => selectedMonth.ToDateTime(TimeOnly.MinValue).ToString("MMMM yyyy");
+    private string employeeName => employee?.DisplayName ?? session?.Email ?? "Employee";
+    private string topJobLabel => jobSummaries.Count == 0 ? "No jobs this month" : $"{jobSummaries[0].Name} leads";
+    private string latestEntryLabel => recentEntries.Count == 0 ? "No entries yet" : $"Latest {recentEntries[0].WorkDate:yyyy-MM-dd}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        session = await AuthSession.GetSessionAsync();
+
+        if (session is not null && string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            await LoadDashboardAsync();
+        }
+    }
 
     private async Task LoginAsync()
     {
@@ -51,16 +251,163 @@
                 return;
             }
 
-            Navigation.NavigateTo("/hours");
+            session = result.Value;
+            await LoadDashboardAsync();
             return;
         }
 
         errorMessage = result.ErrorMessage ?? "Login failed.";
     }
 
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            var companyResult = await CompanyApi.GetCompanyAsync();
+            if (!companyResult.IsSuccess)
+            {
+                loadError = companyResult.ErrorMessage;
+                return;
+            }
+
+            company = companyResult.Value;
+
+            var employeesResult = await EmployeesApi.GetEmployeesAsync();
+            if (!employeesResult.IsSuccess)
+            {
+                loadError = employeesResult.ErrorMessage;
+                return;
+            }
+
+            employee = employeesResult.Value?.FirstOrDefault();
+
+            var jobsResult = await JobsApi.GetJobsAsync();
+            if (!jobsResult.IsSuccess)
+            {
+                loadError = jobsResult.ErrorMessage;
+                return;
+            }
+
+            jobs.Clear();
+            jobs.AddRange(jobsResult.Value ?? []);
+
+            var entriesResult = await TimeEntriesApi.GetTimeEntriesAsync(GetMonthStart(), GetMonthEnd());
+            if (!entriesResult.IsSuccess)
+            {
+                loadError = entriesResult.ErrorMessage;
+                return;
+            }
+
+            entries.Clear();
+            entries.AddRange(entriesResult.Value ?? []);
+            BuildDashboard();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BuildDashboard()
+    {
+        jobSummaries.Clear();
+        dailyLoads.Clear();
+        recentEntries.Clear();
+
+        totalHours = entries.Sum(x => x.Hours);
+        workedDays = entries.Select(x => x.WorkDate).Distinct().Count();
+        averageHoursPerWorkedDay = workedDays == 0 ? 0m : totalHours / workedDays;
+
+        var jobLookup = jobs.ToDictionary(x => x.Id, x => $"{x.Code} - {x.Name}");
+        var jobSeeds = entries
+            .GroupBy(x => x.JobId)
+            .Select(group => new
+            {
+                Name = jobLookup.GetValueOrDefault(group.Key, "Unknown job"),
+                Hours = group.Sum(x => x.Hours),
+                EntryCount = group.Count()
+            })
+            .OrderByDescending(x => x.Hours)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        var peakJobHours = jobSeeds.Count == 0 ? 0m : jobSeeds.Max(x => x.Hours);
+        foreach (var seed in jobSeeds)
+        {
+            jobSummaries.Add(new AggregateRow(
+                seed.Name,
+                seed.Hours,
+                seed.EntryCount,
+                peakJobHours == 0m ? 0m : decimal.Round((seed.Hours / peakJobHours) * 100m, 2)));
+        }
+
+        recentEntries.AddRange(entries
+            .OrderByDescending(x => x.WorkDate)
+            .ThenByDescending(x => x.Hours)
+            .Take(6)
+            .Select(entry => new RecentEntryRow(
+                entry.WorkDate,
+                jobLookup.GetValueOrDefault(entry.JobId, "Unknown job"),
+                entry.Hours)));
+
+        var monthStart = GetMonthStart();
+        var monthEnd = GetMonthEnd();
+        var dailyTotals = entries
+            .GroupBy(x => x.WorkDate)
+            .ToDictionary(group => group.Key, group => group.Sum(x => x.Hours));
+        var peakDay = dailyTotals.Count == 0 ? 0m : dailyTotals.Max(x => x.Value);
+
+        foreach (var offset in Enumerable.Range(0, monthEnd.DayNumber - monthStart.DayNumber + 1))
+        {
+            var day = monthStart.AddDays(offset);
+            var hours = dailyTotals.GetValueOrDefault(day);
+            dailyLoads.Add(new DayLoad(
+                day.Day,
+                hours,
+                peakDay == 0m ? 0m : decimal.Round((hours / peakDay) * 100m, 2)));
+        }
+    }
+
+    private async Task PreviousMonthAsync()
+    {
+        selectedMonth = selectedMonth.AddMonths(-1);
+        await LoadDashboardAsync();
+    }
+
+    private async Task NextMonthAsync()
+    {
+        selectedMonth = selectedMonth.AddMonths(1);
+        await LoadDashboardAsync();
+    }
+
+    private async Task OnMonthChangedAsync(ChangeEventArgs args)
+    {
+        var rawValue = args.Value?.ToString();
+        if (!string.IsNullOrWhiteSpace(rawValue) && DateOnly.TryParse($"{rawValue}-01", out var month))
+        {
+            selectedMonth = month;
+            await LoadDashboardAsync();
+        }
+    }
+
+    private DateOnly GetMonthStart() => new(selectedMonth.Year, selectedMonth.Month, 1);
+
+    private DateOnly GetMonthEnd() => GetMonthStart().AddMonths(1).AddDays(-1);
+
     private async Task LogoutAsync()
     {
         await AuthSession.LogoutAsync();
+        session = null;
+        company = null;
+        employee = null;
+        entries.Clear();
+        jobs.Clear();
+        jobSummaries.Clear();
+        dailyLoads.Clear();
+        recentEntries.Clear();
         Navigation.NavigateTo("/");
     }
 }

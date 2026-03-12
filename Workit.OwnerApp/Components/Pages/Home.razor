@@ -1,25 +1,707 @@
-﻿@page "/"
+@page "/"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
+@inject ICompanyApi CompanyApi
+@inject ICustomersApi CustomersApi
+@inject IEmployeesApi EmployeesApi
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
 
 <PageTitle>Home</PageTitle>
 
-<FluentCard Class="admin-card">
-    <FluentLabel Typo="Typography.PaneHeader">Workit Owner</FluentLabel>
-    <p>Admins register companies and owners. Owners manage customers, employees, and jobs for their company.</p>
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <FluentCard Class="dashboard-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
+        <p>@loadError</p>
+        <div class="dashboard-actions">
+            <FluentButton Appearance="Appearance.Accent" @onclick="ReloadAsync">Retry</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+        </div>
+    </FluentCard>
+}
+else if (isLoading)
+{
+    <FluentCard Class="dashboard-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Loading monthly dashboard...</FluentLabel>
+    </FluentCard>
+}
+else if (session is null)
+{
+    <FluentCard Class="dashboard-shell dashboard-hero">
+        <div>
+            <span class="eyebrow">Owner workspace</span>
+            <FluentLabel Typo="Typography.PaneHeader">Monthly operations dashboard</FluentLabel>
+            <p>Track labor hours by customer, job, and employee from one monthly view.</p>
+        </div>
 
-    <div class="admin-grid">
-        <FluentButton Appearance="Appearance.Accent" Href="/login">Login</FluentButton>
-        <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
-    </div>
-</FluentCard>
+        <div class="dashboard-actions">
+            <FluentButton Appearance="Appearance.Accent" Href="/login">Login</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
+        </div>
+    </FluentCard>
+}
+else if (!isOwnerSession)
+{
+    <FluentCard Class="dashboard-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Admin access</FluentLabel>
+        <p>The monthly dashboard is available for owner accounts. Admins can still register companies and manage setup.</p>
+        <div class="dashboard-actions">
+            <FluentButton Appearance="Appearance.Accent" Href="/admin">Open Admin</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+        </div>
+    </FluentCard>
+}
+else
+{
+    <section class="dashboard">
+        <FluentCard Class="dashboard-shell dashboard-hero">
+            <div class="hero-copy">
+                <span class="eyebrow">Monthly view</span>
+                <h1>@(company?.Name ?? "Owner Dashboard")</h1>
+                <p>
+                    Review labor this month with fast rollups by customer, job, and employee.
+                    The most useful default is a ranked operations board: total hours at the top, then who consumed the hours underneath.
+                </p>
+            </div>
+
+            <div class="hero-controls">
+                <div class="month-toolbar">
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="PreviousMonthAsync">Previous</FluentButton>
+                    <input class="month-picker" type="month" value="@selectedMonthValue" @onchange="OnMonthChangedAsync" />
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="NextMonthAsync">Next</FluentButton>
+                </div>
+
+                <div class="hero-meta">
+                    <div>
+                        <span class="meta-label">Period</span>
+                        <strong>@monthTitle</strong>
+                    </div>
+                    <div>
+                        <span class="meta-label">Worked days</span>
+                        <strong>@dailyLoads.Count(x => x.Hours > 0m)</strong>
+                    </div>
+                    <div>
+                        <span class="meta-label">Entries</span>
+                        <strong>@timeEntries.Count</strong>
+                    </div>
+                </div>
+
+                <div class="dashboard-actions">
+                    <FluentButton Appearance="Appearance.Outline" Href="/jobs">Manage Jobs</FluentButton>
+                    <FluentButton Appearance="Appearance.Outline" Href="/employees">Manage Employees</FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+                </div>
+            </div>
+        </FluentCard>
+
+        <section class="dashboard-kpis">
+            <FluentCard Class="kpi-card">
+                <span class="kpi-label">Total Hours</span>
+                <strong>@totalHours.ToString("0.##")</strong>
+                <span class="kpi-foot">@averageHoursPerWorkedDay.ToString("0.##") avg per worked day</span>
+            </FluentCard>
+
+            <FluentCard Class="kpi-card">
+                <span class="kpi-label">Customers Active</span>
+                <strong>@customerSummaries.Count</strong>
+                <span class="kpi-foot">@TopName(customerSummaries, "No customer activity")</span>
+            </FluentCard>
+
+            <FluentCard Class="kpi-card">
+                <span class="kpi-label">Jobs Running</span>
+                <strong>@jobSummaries.Count</strong>
+                <span class="kpi-foot">@TopName(jobSummaries, "No jobs logged")</span>
+            </FluentCard>
+
+            <FluentCard Class="kpi-card">
+                <span class="kpi-label">Employees Logged</span>
+                <strong>@employeeSummaries.Count</strong>
+                <span class="kpi-foot">@TopName(employeeSummaries, "No employee activity")</span>
+            </FluentCard>
+        </section>
+
+        <FluentCard Class="dashboard-shell">
+            <div class="section-head">
+                <div>
+                    <span class="eyebrow">Drill down</span>
+                    <h2>Filter the month</h2>
+                </div>
+                @if (HasActiveFilters)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="ClearFilters">Clear filters</FluentButton>
+                }
+            </div>
+
+            <div class="filter-grid">
+                <label class="filter-field">
+                    <span>Customer</span>
+                    <select class="filter-select" value="@selectedCustomerId" @onchange="OnCustomerFilterChanged">
+                        <option value="">All customers</option>
+                        @foreach (var customer in AvailableCustomers)
+                        {
+                            <option value="@customer.Id">@customer.Name</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="filter-field">
+                    <span>Job</span>
+                    <select class="filter-select" value="@selectedJobId" @onchange="OnJobFilterChanged">
+                        <option value="">All jobs</option>
+                        @foreach (var job in AvailableJobs)
+                        {
+                            <option value="@job.Id">@job.Code - @job.Name</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="filter-field">
+                    <span>Employee</span>
+                    <select class="filter-select" value="@selectedEmployeeId" @onchange="OnEmployeeFilterChanged">
+                        <option value="">All employees</option>
+                        @foreach (var employee in AvailableEmployees)
+                        {
+                            <option value="@employee.Id">@employee.DisplayName</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            @if (HasActiveFilters)
+            {
+                <div class="active-filters">
+                    @if (SelectedCustomer is not null)
+                    {
+                        <button type="button" class="filter-chip" @onclick="@(() => SetCustomerFilter(null))">
+                            Customer: @SelectedCustomer.Name
+                        </button>
+                    }
+                    @if (SelectedJob is not null)
+                    {
+                        <button type="button" class="filter-chip" @onclick="@(() => SetJobFilter(null))">
+                            Job: @SelectedJob.Code - @SelectedJob.Name
+                        </button>
+                    }
+                    @if (SelectedEmployee is not null)
+                    {
+                        <button type="button" class="filter-chip" @onclick="@(() => SetEmployeeFilter(null))">
+                            Employee: @SelectedEmployee.DisplayName
+                        </button>
+                    }
+                </div>
+            }
+        </FluentCard>
+
+        <FluentCard Class="dashboard-shell">
+            <div class="section-head">
+                <div>
+                    <span class="eyebrow">Daily load</span>
+                    <h2>Hours across @monthTitle</h2>
+                </div>
+                <p class="section-note">A quick monthly scan to spot thin days, spikes, and uneven staffing.</p>
+            </div>
+
+            <div class="day-strip">
+                @foreach (var day in dailyLoads)
+                {
+                    <div class="day-cell">
+                        <span class="day-number">@day.Day</span>
+                        <div class="day-bar-wrap">
+                            <div class="day-bar" style="@($"height:{day.HeightPercent:0.##}%")"></div>
+                        </div>
+                        <span class="day-hours">@day.Hours.ToString("0.#")</span>
+                    </div>
+                }
+            </div>
+        </FluentCard>
+
+        <section class="dashboard-panels">
+            <FluentCard Class="dashboard-shell">
+                <div class="section-head">
+                    <div>
+                        <span class="eyebrow">By customer</span>
+                        <h2>Customer load</h2>
+                    </div>
+                </div>
+                @if (customerSummaries.Count == 0)
+                {
+                    <p>No customer hours were logged this month.</p>
+                }
+                else
+                {
+                    @foreach (var item in customerSummaries.Take(6))
+                    {
+                        <button type="button" class="summary-row summary-button @(IsSelectedCustomer(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => SetCustomerFilter(item.Id))">
+                            <div class="summary-copy">
+                                <strong>@item.Name</strong>
+                                <span>@item.EntryCount entries</span>
+                            </div>
+                            <div class="summary-bar-wrap">
+                                <div class="summary-bar" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                            </div>
+                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
+                        </button>
+                    }
+                }
+            </FluentCard>
+
+            <FluentCard Class="dashboard-shell">
+                <div class="section-head">
+                    <div>
+                        <span class="eyebrow">By job</span>
+                        <h2>Job load</h2>
+                    </div>
+                </div>
+                @if (jobSummaries.Count == 0)
+                {
+                    <p>No job hours were logged this month.</p>
+                }
+                else
+                {
+                    @foreach (var item in jobSummaries.Take(8))
+                    {
+                        <button type="button" class="summary-row summary-button @(IsSelectedJob(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => SetJobFilter(item.Id))">
+                            <div class="summary-copy">
+                                <strong>@item.Name</strong>
+                                <span>@item.EntryCount entries</span>
+                            </div>
+                            <div class="summary-bar-wrap">
+                                <div class="summary-bar coral" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                            </div>
+                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
+                        </button>
+                    }
+                }
+            </FluentCard>
+
+            <FluentCard Class="dashboard-shell">
+                <div class="section-head">
+                    <div>
+                        <span class="eyebrow">By employee</span>
+                        <h2>Team load</h2>
+                    </div>
+                </div>
+                @if (employeeSummaries.Count == 0)
+                {
+                    <p>No employee hours were logged this month.</p>
+                }
+                else
+                {
+                    @foreach (var item in employeeSummaries.Take(8))
+                    {
+                        <button type="button" class="summary-row summary-button @(IsSelectedEmployee(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => SetEmployeeFilter(item.Id))">
+                            <div class="summary-copy">
+                                <strong>@item.Name</strong>
+                                <span>@item.EntryCount entries</span>
+                            </div>
+                            <div class="summary-bar-wrap">
+                                <div class="summary-bar gold" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                            </div>
+                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
+                        </button>
+                    }
+                }
+            </FluentCard>
+        </section>
+
+        <FluentCard Class="dashboard-shell">
+            <div class="section-head">
+                <div>
+                    <span class="eyebrow">Latest entries</span>
+                    <h2>Recent activity</h2>
+                </div>
+                <p class="section-note">Most recent submissions inside the selected month.</p>
+            </div>
+
+            @if (recentEntries.Count == 0)
+            {
+                <p>No hours have been logged for this month yet.</p>
+            }
+            else
+            {
+                <div class="entry-table">
+                    <div class="entry-table-head">Date</div>
+                    <div class="entry-table-head">Employee</div>
+                    <div class="entry-table-head">Job</div>
+                    <div class="entry-table-head">Customer</div>
+                    <div class="entry-table-head right">Hours</div>
+
+                    @foreach (var entry in recentEntries)
+                    {
+                        <div>@entry.WorkDate.ToString("yyyy-MM-dd")</div>
+                        <div>@entry.EmployeeName</div>
+                        <div>@entry.JobName</div>
+                        <div>@entry.CustomerName</div>
+                        <div class="right">@entry.Hours.ToString("0.##")</div>
+                    }
+                </div>
+            }
+        </FluentCard>
+    </section>
+}
 
 @code {
+    private LoginResponse? session;
+    private Company? company;
+    private bool isLoading = true;
+    private string? loadError;
+    private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
+    private List<Customer> customers = [];
+    private List<Employee> employees = [];
+    private List<Job> jobs = [];
+    private List<TimeEntry> timeEntries = [];
+    private List<AggregateRow> customerSummaries = [];
+    private List<AggregateRow> jobSummaries = [];
+    private List<AggregateRow> employeeSummaries = [];
+    private List<DayLoad> dailyLoads = [];
+    private List<RecentEntryRow> recentEntries = [];
+    private decimal totalHours;
+    private decimal averageHoursPerWorkedDay;
+    private Guid? selectedCustomerId;
+    private Guid? selectedJobId;
+    private Guid? selectedEmployeeId;
+
+    private bool isOwnerSession => string.Equals(session?.Role, WorkitRoles.Owner, StringComparison.Ordinal);
+    private string selectedMonthValue => $"{selectedMonth.Year:D4}-{selectedMonth.Month:D2}";
+    private string monthTitle => selectedMonth.ToDateTime(TimeOnly.MinValue).ToString("MMMM yyyy");
+    private bool HasActiveFilters => selectedCustomerId is not null || selectedJobId is not null || selectedEmployeeId is not null;
+    private Customer? SelectedCustomer => customers.FirstOrDefault(x => x.Id == selectedCustomerId);
+    private Job? SelectedJob => jobs.FirstOrDefault(x => x.Id == selectedJobId);
+    private Employee? SelectedEmployee => employees.FirstOrDefault(x => x.Id == selectedEmployeeId);
+    private IReadOnlyList<Customer> AvailableCustomers => customers
+        .Where(x => timeEntries.Any(entry => JobMatchesCustomer(entry.JobId, x.Id) && EntryMatchesSelectedJobAndEmployee(entry)))
+        .OrderBy(x => x.Name)
+        .ToList();
+    private IReadOnlyList<Job> AvailableJobs => jobs
+        .Where(x => EntryMatchesSelectedCustomerForJob(x) && timeEntries.Any(entry => entry.JobId == x.Id && EntryMatchesSelectedEmployee(entry)))
+        .OrderBy(x => x.Code)
+        .ThenBy(x => x.Name)
+        .ToList();
+    private IReadOnlyList<Employee> AvailableEmployees => employees
+        .Where(x => timeEntries.Any(entry => entry.EmployeeId == x.Id && EntryMatchesSelectedCustomerAndJob(entry)))
+        .OrderBy(x => x.DisplayName)
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            session = await AuthSession.GetSessionAsync();
+            if (session is null || !isOwnerSession)
+            {
+                ResetDashboard();
+                return;
+            }
+
+            var companyResult = await CompanyApi.GetCompanyAsync();
+            if (!companyResult.IsSuccess || companyResult.Value is null)
+            {
+                loadError = companyResult.ErrorMessage ?? "Company could not be loaded.";
+                ResetDashboard();
+                return;
+            }
+
+            company = companyResult.Value;
+
+            var customersResult = await CustomersApi.GetCustomersAsync();
+            var employeesResult = await EmployeesApi.GetEmployeesAsync();
+            var jobsResult = await JobsApi.GetJobsAsync();
+            var timeEntriesResult = await TimeEntriesApi.GetTimeEntriesAsync(GetMonthStart(), GetMonthEnd());
+
+            if (!customersResult.IsSuccess || !employeesResult.IsSuccess || !jobsResult.IsSuccess || !timeEntriesResult.IsSuccess)
+            {
+                loadError = customersResult.ErrorMessage
+                    ?? employeesResult.ErrorMessage
+                    ?? jobsResult.ErrorMessage
+                    ?? timeEntriesResult.ErrorMessage
+                    ?? "Dashboard data could not be loaded.";
+                ResetDashboard();
+                return;
+            }
+
+            customers = customersResult.Value ?? [];
+            employees = employeesResult.Value ?? [];
+            jobs = jobsResult.Value ?? [];
+            timeEntries = timeEntriesResult.Value ?? [];
+
+            BuildDashboard();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadDashboardAsync();
+    }
+
+    private async Task PreviousMonthAsync()
+    {
+        selectedMonth = selectedMonth.AddMonths(-1);
+        await LoadDashboardAsync();
+    }
+
+    private async Task NextMonthAsync()
+    {
+        selectedMonth = selectedMonth.AddMonths(1);
+        await LoadDashboardAsync();
+    }
+
+    private async Task OnMonthChangedAsync(ChangeEventArgs args)
+    {
+        var rawValue = args.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return;
+        }
+
+        if (DateOnly.TryParse($"{rawValue}-01", out var month))
+        {
+            selectedMonth = month;
+            await LoadDashboardAsync();
+        }
+    }
+
+    private void OnCustomerFilterChanged(ChangeEventArgs args)
+    {
+        SetCustomerFilter(ParseGuid(args.Value?.ToString()));
+    }
+
+    private void OnJobFilterChanged(ChangeEventArgs args)
+    {
+        SetJobFilter(ParseGuid(args.Value?.ToString()));
+    }
+
+    private void OnEmployeeFilterChanged(ChangeEventArgs args)
+    {
+        SetEmployeeFilter(ParseGuid(args.Value?.ToString()));
+    }
+
+    private void BuildDashboard()
+    {
+        var employeeNames = employees.ToDictionary(x => x.Id, x => x.DisplayName);
+        var jobNames = jobs.ToDictionary(x => x.Id, x => $"{x.Code} - {x.Name}");
+        var customerNames = customers.ToDictionary(x => x.Id, x => x.Name);
+        var jobToCustomer = jobs.ToDictionary(x => x.Id, x => x.CustomerId);
+        var filteredEntries = GetFilteredEntries(jobToCustomer);
+
+        totalHours = filteredEntries.Sum(x => x.Hours);
+        var workedDays = filteredEntries.Select(x => x.WorkDate).Distinct().Count();
+        averageHoursPerWorkedDay = workedDays == 0 ? 0m : totalHours / workedDays;
+
+        var customerSeeds = filteredEntries
+            .Where(x => jobToCustomer.ContainsKey(x.JobId))
+            .GroupBy(x => jobToCustomer[x.JobId])
+            .Select(group => new AggregateSeed(
+                group.Key,
+                customerNames.GetValueOrDefault(group.Key, "Unknown customer"),
+                group.Sum(x => x.Hours),
+                group.Count()))
+            .OrderByDescending(x => x.Hours)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        customerSummaries = ToAggregateRows(customerSeeds);
+
+        var jobSeeds = filteredEntries
+            .GroupBy(x => x.JobId)
+            .Select(group => new AggregateSeed(
+                group.Key,
+                jobNames.GetValueOrDefault(group.Key, "Unknown job"),
+                group.Sum(x => x.Hours),
+                group.Count()))
+            .OrderByDescending(x => x.Hours)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        jobSummaries = ToAggregateRows(jobSeeds);
+
+        var employeeSeeds = filteredEntries
+            .GroupBy(x => x.EmployeeId)
+            .Select(group => new AggregateSeed(
+                group.Key,
+                employeeNames.GetValueOrDefault(group.Key, "Unknown employee"),
+                group.Sum(x => x.Hours),
+                group.Count()))
+            .OrderByDescending(x => x.Hours)
+            .ThenBy(x => x.Name)
+            .ToList();
+
+        employeeSummaries = ToAggregateRows(employeeSeeds);
+
+        recentEntries = filteredEntries
+            .OrderByDescending(x => x.WorkDate)
+            .ThenByDescending(x => x.Hours)
+            .Take(10)
+            .Select(entry =>
+            {
+                var customerId = jobToCustomer.GetValueOrDefault(entry.JobId);
+                return new RecentEntryRow(
+                    entry.WorkDate,
+                    employeeNames.GetValueOrDefault(entry.EmployeeId, "Unknown employee"),
+                    jobNames.GetValueOrDefault(entry.JobId, "Unknown job"),
+                    customerNames.GetValueOrDefault(customerId, "Unknown customer"),
+                    entry.Hours);
+            })
+            .ToList();
+
+        var monthStart = GetMonthStart();
+        var monthEnd = GetMonthEnd();
+        var dailyTotals = filteredEntries
+            .GroupBy(x => x.WorkDate)
+            .ToDictionary(group => group.Key, group => group.Sum(x => x.Hours));
+        var peakDay = dailyTotals.Count == 0 ? 0m : dailyTotals.Max(x => x.Value);
+
+        dailyLoads = Enumerable.Range(0, monthEnd.DayNumber - monthStart.DayNumber + 1)
+            .Select(offset =>
+            {
+                var day = monthStart.AddDays(offset);
+                var hours = dailyTotals.GetValueOrDefault(day);
+                var height = peakDay == 0m ? 0m : decimal.Round((hours / peakDay) * 100m, 2);
+                return new DayLoad(day.Day, hours, height);
+            })
+            .ToList();
+    }
+
+    private void ResetDashboard()
+    {
+        company = null;
+        customers = [];
+        employees = [];
+        jobs = [];
+        timeEntries = [];
+        customerSummaries = [];
+        jobSummaries = [];
+        employeeSummaries = [];
+        dailyLoads = [];
+        recentEntries = [];
+        totalHours = 0m;
+        averageHoursPerWorkedDay = 0m;
+    }
+
+    private List<TimeEntry> GetFilteredEntries(IReadOnlyDictionary<Guid, Guid> jobToCustomer) =>
+        timeEntries
+            .Where(entry =>
+                (selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId) &&
+                (selectedJobId is null || entry.JobId == selectedJobId) &&
+                (selectedCustomerId is null || (jobToCustomer.TryGetValue(entry.JobId, out var customerId) && customerId == selectedCustomerId)))
+            .ToList();
+
+    private DateOnly GetMonthStart() => new(selectedMonth.Year, selectedMonth.Month, 1);
+
+    private DateOnly GetMonthEnd() => GetMonthStart().AddMonths(1).AddDays(-1);
+
+    private static string TopName(IReadOnlyList<AggregateRow> rows, string fallback) =>
+        rows.Count == 0 ? fallback : $"{rows[0].Name} leads";
+
+    private static List<AggregateRow> ToAggregateRows(List<AggregateSeed> seeds)
+    {
+        var peak = seeds.Count == 0 ? 0m : seeds.Max(x => x.Hours);
+
+        return seeds
+            .Select(seed => new AggregateRow(
+                seed.Id,
+                seed.Name,
+                seed.Hours,
+                seed.EntryCount,
+                peak == 0m ? 0m : decimal.Round((seed.Hours / peak) * 100m, 2)))
+            .ToList();
+    }
+
+    private void ClearFilters()
+    {
+        selectedCustomerId = null;
+        selectedJobId = null;
+        selectedEmployeeId = null;
+        BuildDashboard();
+    }
+
+    private void SetCustomerFilter(Guid? customerId)
+    {
+        selectedCustomerId = selectedCustomerId == customerId ? null : customerId;
+
+        if (selectedJobId is not null && jobs.FirstOrDefault(x => x.Id == selectedJobId)?.CustomerId != selectedCustomerId)
+        {
+            selectedJobId = null;
+        }
+
+        if (selectedEmployeeId is not null && !AvailableEmployees.Any(x => x.Id == selectedEmployeeId))
+        {
+            selectedEmployeeId = null;
+        }
+
+        BuildDashboard();
+    }
+
+    private void SetJobFilter(Guid? jobId)
+    {
+        selectedJobId = selectedJobId == jobId ? null : jobId;
+
+        if (selectedJobId is not null)
+        {
+            selectedCustomerId = jobs.FirstOrDefault(x => x.Id == selectedJobId)?.CustomerId;
+        }
+
+        if (selectedEmployeeId is not null && !AvailableEmployees.Any(x => x.Id == selectedEmployeeId))
+        {
+            selectedEmployeeId = null;
+        }
+
+        BuildDashboard();
+    }
+
+    private void SetEmployeeFilter(Guid? employeeId)
+    {
+        selectedEmployeeId = selectedEmployeeId == employeeId ? null : employeeId;
+        BuildDashboard();
+    }
+
+    private static Guid? ParseGuid(string? rawValue) =>
+        Guid.TryParse(rawValue, out var parsed) ? parsed : null;
+
+    private bool IsSelectedCustomer(Guid? id) => selectedCustomerId == id;
+    private bool IsSelectedJob(Guid? id) => selectedJobId == id;
+    private bool IsSelectedEmployee(Guid? id) => selectedEmployeeId == id;
+    private bool JobMatchesCustomer(Guid jobId, Guid customerId) => jobs.FirstOrDefault(x => x.Id == jobId)?.CustomerId == customerId;
+    private bool EntryMatchesSelectedJobAndEmployee(TimeEntry entry) =>
+        (selectedJobId is null || entry.JobId == selectedJobId) &&
+        (selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId);
+    private bool EntryMatchesSelectedEmployee(TimeEntry entry) =>
+        selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId;
+    private bool EntryMatchesSelectedCustomerAndJob(TimeEntry entry)
+    {
+        var job = jobs.FirstOrDefault(x => x.Id == entry.JobId);
+        if (job is null)
+        {
+            return false;
+        }
+
+        return (selectedCustomerId is null || job.CustomerId == selectedCustomerId) &&
+               (selectedJobId is null || entry.JobId == selectedJobId);
+    }
+    private bool EntryMatchesSelectedCustomerForJob(Job job) =>
+        selectedCustomerId is null || job.CustomerId == selectedCustomerId;
+
     private async Task LogoutAsync()
     {
         await AuthSession.LogoutAsync();
         Navigation.NavigateTo("/", forceLoad: true);
     }
+
+    private sealed record AggregateSeed(Guid Id, string Name, decimal Hours, int EntryCount);
+    private sealed record AggregateRow(Guid Id, string Name, decimal Hours, int EntryCount, decimal WidthPercent);
+    private sealed record DayLoad(int Day, decimal Hours, decimal HeightPercent);
+    private sealed record RecentEntryRow(DateOnly WorkDate, string EmployeeName, string JobName, string CustomerName, decimal Hours);
 }

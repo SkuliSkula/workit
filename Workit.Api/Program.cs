@@ -486,21 +486,25 @@ securedApi.MapGet("/timeentries", async (
         var userContext = httpContext.User.ToUserContext();
         var query = db.TimeEntries.Where(x => x.CompanyId == userContext.CompanyId);
 
-        if (!string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal))
         {
-            return Results.Forbid();
+            if (employeeId is not null)
+            {
+                query = query.Where(x => x.EmployeeId == employeeId.Value);
+            }
         }
-
-        if (userContext.EmployeeId is not Guid currentEmployeeId)
+        else if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
         {
-            return Results.Forbid();
-        }
+            if (userContext.EmployeeId is not Guid currentEmployeeId)
+            {
+                return Results.Forbid();
+            }
 
-        query = query.Where(x => x.EmployeeId == currentEmployeeId);
-
-        if (employeeId is not null)
-        {
             query = query.Where(x => x.EmployeeId == currentEmployeeId);
+        }
+        else
+        {
+            return Results.Forbid();
         }
 
         if (from is not null)
