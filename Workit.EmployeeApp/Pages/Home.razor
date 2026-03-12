@@ -1,7 +1,66 @@
 ﻿@page "/"
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<FluentCard Class="hours-card">
+    <FluentLabel Typo="Typography.PaneHeader">Employee Login</FluentLabel>
+    <div class="hours-grid">
+        <div>
+            <FluentLabel>Email</FluentLabel>
+            <FluentTextField @bind-Value="email" Placeholder="Email" />
+        </div>
+        <div>
+            <FluentLabel>Password</FluentLabel>
+            <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
+        </div>
+    </div>
 
-Welcome to your new app.
+    <div class="hours-actions">
+        <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <p>@errorMessage</p>
+    }
+</FluentCard>
+
+@code {
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string? errorMessage;
+
+    private async Task LoginAsync()
+    {
+        errorMessage = null;
+        var result = await AuthSession.LoginAsync(new LoginRequest
+        {
+            Email = email.Trim(),
+            Password = password
+        });
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            if (result.Value.Role != WorkitRoles.Employee)
+            {
+                await AuthSession.LogoutAsync();
+                errorMessage = "Only employee accounts can use the Employee app.";
+                return;
+            }
+
+            Navigation.NavigateTo("/hours");
+            return;
+        }
+
+        errorMessage = result.ErrorMessage ?? "Login failed.";
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/");
+    }
+}

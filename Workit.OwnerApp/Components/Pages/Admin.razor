@@ -1,6 +1,8 @@
 @page "/admin"
-@rendermode InteractiveServer
-@inject HttpClient Http
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
 
 <PageTitle>Admin</PageTitle>
 
@@ -9,17 +11,8 @@
 
     @if (company is null)
     {
-        <div class="admin-grid">
-            <FluentTextField @bind-Value="newCompany.Name" Placeholder="Company name" />
-            <FluentTextField @bind-Value="newCompany.Ssn" Placeholder="SSN" />
-            <FluentTextField @bind-Value="newCompany.Owner" Placeholder="Owner" />
-            <FluentTextField @bind-Value="newCompany.Email" Placeholder="Email" />
-            <FluentTextField @bind-Value="newCompany.Phone" Placeholder="Phone" />
-            <FluentTextField @bind-Value="newCompany.Address" Placeholder="Address" />
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateCompanyAsync">Create Company</FluentButton>
-        </div>
-
-        <p>Set up your company once. After it is created, manage customers, employees, and jobs from their own pages.</p>
+        <p>No company was found for this logged-in owner account.</p>
+        <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
     }
     else
     {
@@ -32,7 +25,9 @@
             <div><dt>Address</dt><dd>@company.Address</dd></div>
         </dl>
 
-        <p>This company is fixed after setup.</p>
+        <div class="admin-grid">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+        </div>
     }
 
     @if (!string.IsNullOrWhiteSpace(loadError))
@@ -43,53 +38,27 @@
 
 @code {
     private Company? company;
-    private Company newCompany = new();
     private string? loadError;
+    private bool isAdmin;
 
     protected override async Task OnInitializedAsync()
     {
+        var session = await AuthSession.GetSessionAsync();
+        isAdmin = session?.Role == WorkitRoles.Admin;
         await LoadCompanyAsync();
     }
 
     private async Task LoadCompanyAsync()
     {
         loadError = null;
-
-        try
-        {
-            company = await Http.GetFromJsonAsync<Company?>("api/company");
-        }
-        catch (Exception)
-        {
-            company = null;
-            loadError ??= "The company profile could not be loaded right now.";
-        }
+        var result = await CompanyApi.GetCompanyAsync();
+        company = result.Value;
+        loadError = result.IsSuccess || isAdmin ? null : result.ErrorMessage;
     }
 
-    private async Task CreateCompanyAsync()
+    private async Task LogoutAsync()
     {
-        if (!IsCompanySetupValid(newCompany))
-        {
-            loadError = "Company name, SSN, email, address, phone, and owner are required.";
-            return;
-        }
-
-        var response = await Http.PostAsJsonAsync("api/companies", newCompany);
-        if (response.IsSuccessStatusCode)
-        {
-            newCompany = new Company();
-            await LoadCompanyAsync();
-            return;
-        }
-
-        loadError = await response.Content.ReadAsStringAsync();
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
-
-    private static bool IsCompanySetupValid(Company input) =>
-        !string.IsNullOrWhiteSpace(input.Name) &&
-        !string.IsNullOrWhiteSpace(input.Ssn) &&
-        !string.IsNullOrWhiteSpace(input.Email) &&
-        !string.IsNullOrWhiteSpace(input.Address) &&
-        !string.IsNullOrWhiteSpace(input.Phone) &&
-        !string.IsNullOrWhiteSpace(input.Owner);
 }

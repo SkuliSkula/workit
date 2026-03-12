@@ -1,5 +1,8 @@
 @page "/hours"
-@inject HttpClient Http
+@inject ICompanyApi CompanyApi
+@inject IEmployeesApi EmployeesApi
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
 
 <PageTitle>Hours</PageTitle>
 
@@ -167,15 +170,9 @@
 
     private async Task LoadCompanyAsync()
     {
-        try
-        {
-            company = await Http.GetFromJsonAsync<Company?>("api/company");
-        }
-        catch (Exception)
-        {
-            company = null;
-            loadError = "The company profile could not be loaded right now.";
-        }
+        var result = await CompanyApi.GetCompanyAsync();
+        company = result.Value;
+        loadError = result.IsSuccess ? null : result.ErrorMessage;
     }
 
     private async Task LoadCompanyDataAsync()
@@ -193,8 +190,14 @@
             return;
         }
 
-        var loadedEmployees = await GetListAsync<Employee>($"api/employees?companyId={company.Id}");
-        employees.AddRange(loadedEmployees);
+        var employeesResult = await EmployeesApi.GetEmployeesAsync();
+        if (!employeesResult.IsSuccess)
+        {
+            loadError ??= employeesResult.ErrorMessage;
+            return;
+        }
+
+        employees.AddRange(employeesResult.Value ?? []);
 
         foreach (var employee in employees)
         {
@@ -203,8 +206,14 @@
 
         selectedEmployeeId = employees.FirstOrDefault()?.Id.ToString();
 
-        var loadedJobs = await GetListAsync<Job>($"api/jobs?companyId={company.Id}");
-        jobs.AddRange(loadedJobs);
+        var jobsResult = await JobsApi.GetJobsAsync();
+        if (!jobsResult.IsSuccess)
+        {
+            loadError ??= jobsResult.ErrorMessage;
+            return;
+        }
+
+        jobs.AddRange(jobsResult.Value ?? []);
 
         foreach (var job in jobs)
         {
@@ -214,8 +223,14 @@
         selectedJobId = jobs.FirstOrDefault()?.Id.ToString();
 
         var from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
-        var loadedEntries = await GetListAsync<TimeEntry>($"api/timeentries?companyId={company.Id}&from={from:yyyy-MM-dd}");
-        entries.AddRange(loadedEntries);
+        var entriesResult = await TimeEntriesApi.GetTimeEntriesAsync(from);
+        if (!entriesResult.IsSuccess)
+        {
+            loadError ??= entriesResult.ErrorMessage;
+            return;
+        }
+
+        entries.AddRange(entriesResult.Value ?? []);
     }
 
     private async Task SaveEntryAsync()
@@ -238,25 +253,16 @@
             Notes = notes
         };
 
-        var response = await Http.PostAsJsonAsync("api/timeentries", entry);
-        if (response.IsSuccessStatusCode)
+        var result = await TimeEntriesApi.CreateTimeEntryAsync(entry);
+        if (result.IsSuccess)
         {
             notes = string.Empty;
             isSheetOpen = false;
             await LoadCompanyDataAsync();
         }
-    }
-
-    private async Task<List<T>> GetListAsync<T>(string requestUri)
-    {
-        try
+        else
         {
-            return await Http.GetFromJsonAsync<List<T>>(requestUri) ?? [];
-        }
-        catch (Exception)
-        {
-            loadError ??= "Some data could not be loaded right now.";
-            return [];
+            loadError = result.ErrorMessage;
         }
     }
 

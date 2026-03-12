@@ -1,6 +1,8 @@
 @page "/jobs"
-@rendermode InteractiveServer
-@inject HttpClient Http
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@inject ICustomersApi CustomersApi
+@inject IJobsApi JobsApi
 
 <PageTitle>Jobs</PageTitle>
 
@@ -104,31 +106,43 @@
         jobs.Clear();
         customerLookup.Clear();
         selectedCustomerId = null;
+        var companyResult = await CompanyApi.GetCompanyAsync();
+        company = companyResult.Value;
 
-        try
+        if (!companyResult.IsSuccess)
         {
-            company = await Http.GetFromJsonAsync<Company?>("api/company");
-            if (company is null)
-            {
-                return;
-            }
-
-            var loadedCustomers = await Http.GetFromJsonAsync<List<Customer>>($"api/customers?companyId={company.Id}") ?? [];
-            customers.AddRange(loadedCustomers);
-            selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
-
-            foreach (var customer in customers)
-            {
-                customerLookup[customer.Id] = customer.Name;
-            }
-
-            var loadedJobs = await Http.GetFromJsonAsync<List<Job>>($"api/jobs?companyId={company.Id}") ?? [];
-            jobs.AddRange(loadedJobs);
+            loadError = companyResult.ErrorMessage;
+            return;
         }
-        catch (Exception)
+
+        if (company is null)
         {
-            loadError = "Jobs could not be loaded right now.";
+            return;
         }
+
+        var customersResult = await CustomersApi.GetCustomersAsync();
+        if (!customersResult.IsSuccess)
+        {
+            loadError = customersResult.ErrorMessage;
+            return;
+        }
+
+        customers.AddRange(customersResult.Value ?? []);
+        selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
+
+        foreach (var customer in customers)
+        {
+            customerLookup[customer.Id] = customer.Name;
+        }
+
+        var jobsResult = await JobsApi.GetJobsAsync();
+        if (!jobsResult.IsSuccess)
+        {
+            loadError = jobsResult.ErrorMessage;
+            return;
+        }
+
+        jobs.AddRange(jobsResult.Value ?? []);
     }
 
     private async Task CreateJobAsync()
@@ -140,7 +154,7 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync("api/jobs", new Job
+        var result = await JobsApi.CreateJobAsync(new Job
         {
             CompanyId = company.Id,
             CustomerId = customerId,
@@ -148,7 +162,7 @@
             Name = newJobName.Trim()
         });
 
-        if (response.IsSuccessStatusCode)
+        if (result.IsSuccess)
         {
             newJobCode = string.Empty;
             newJobName = string.Empty;
@@ -156,7 +170,7 @@
             return;
         }
 
-        loadError = await response.Content.ReadAsStringAsync();
+        loadError = result.ErrorMessage;
     }
 
     private void BeginEditJob(Job job)
@@ -181,8 +195,8 @@
 
         editingJob.CustomerId = customerId;
 
-        var response = await Http.PutAsJsonAsync($"api/jobs/{editingJob.Id}", editingJob);
-        if (response.IsSuccessStatusCode)
+        var result = await JobsApi.UpdateJobAsync(editingJob);
+        if (result.IsSuccess)
         {
             editingJob = null;
             editingCustomerId = null;
@@ -190,7 +204,7 @@
             return;
         }
 
-        loadError = await response.Content.ReadAsStringAsync();
+        loadError = result.ErrorMessage;
     }
 
     private void CancelJobEdit()

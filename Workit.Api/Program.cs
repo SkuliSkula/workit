@@ -1,8 +1,13 @@
+using System.Data.Common;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Events;
-using System.Data.Common;
+using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Shared.Auth;
 using Workit.Shared.Models;
 
 Log.Logger = new LoggerConfiguration()
@@ -44,6 +49,30 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
+builder.Services.Configure<AdminSeedOptions>(builder.Configuration.GetSection(AdminSeedOptions.SectionName));
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey));
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = signingKey,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddSingleton<TokenFactory>();
+
 builder.Services.AddDbContext<WorkitDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("WorkitDb")
@@ -62,58 +91,136 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowBlazorApps");
+app.UseAuthentication();
+app.UseAuthorization();
 
 var api = app.MapGroup("/api");
+var authApi = api.MapGroup("/auth");
+var securedApi = api.MapGroup(string.Empty).RequireAuthorization();
 
-api.MapGet("/companies", async (WorkitDbContext db, CancellationToken ct) =>
-        await ExecuteDbAsync(
-            async () => Results.Ok(await db.Companies.OrderBy(x => x.Name).ToListAsync(ct)),
-            apiLogger,
-            "loading companies"))
-    .WithName("GetCompanies");
-
-api.MapPost("/companies", async (WorkitDbContext db, Company company, CancellationToken ct) =>
+authApi.MapPost("/login", async (WorkitDbContext db, TokenFactory tokenFactory, LoginRequest request, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
-            if (!IsValidCompany(company))
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            {
+                return Results.BadRequest("Email and password are required.");
+            }
+
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Email == normalizedEmail, ct);
+            if (user is null || !PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
+            {
+                return Results.Unauthorized();
+            }
+
+            return Results.Ok(tokenFactory.CreateToken(user));
+        },
+        apiLogger,
+        "authenticating a user"))
+    .WithName("Login");
+
+authApi.MapPost("/register-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, RegisterCompanyRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!string.Equals(httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value, WorkitRoles.Admin, StringComparison.Ordinal))
+            {
+                return Results.Forbid();
+            }
+
+            if (!IsValidCompany(request.Company))
             {
                 return Results.BadRequest("Company name, SSN, email, address, phone, and owner are required.");
             }
 
-            if (await db.Companies.AnyAsync(ct))
+            if (!IsValidCredentials(request.OwnerEmail, request.OwnerPassword))
             {
-                return Results.Conflict("A company has already been configured.");
+                return Results.BadRequest("Owner email and a password with at least 8 characters are required.");
             }
 
+            var normalizedEmail = request.OwnerEmail.Trim().ToLowerInvariant();
+            if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail, ct))
+            {
+                return Results.Conflict("That email address is already in use.");
+            }
+
+            var company = new Company
+            {
+                Name = request.Company.Name.Trim(),
+                Ssn = request.Company.Ssn.Trim(),
+                Email = request.Company.Email.Trim(),
+                Address = request.Company.Address.Trim(),
+                Phone = request.Company.Phone.Trim(),
+                Owner = request.Company.Owner.Trim()
+            };
+
+            var ownerUser = new AppUser
+            {
+                Email = normalizedEmail,
+                PasswordHash = PasswordHasher.HashPassword(request.OwnerPassword),
+                Role = WorkitRoles.Owner,
+                CompanyId = company.Id
+            };
+
             db.Companies.Add(company);
+            db.AppUsers.Add(ownerUser);
             await db.SaveChangesAsync(ct);
-            return Results.Created($"/api/companies/{company.Id}", company);
+
+            return Results.Ok(tokenFactory.CreateToken(ownerUser));
         },
         apiLogger,
-        "creating a company"))
-    .WithName("CreateCompany");
+        "registering a company"))
+    .RequireAuthorization()
+    .WithName("RegisterCompany");
 
-api.MapGet("/company", async (WorkitDbContext db, CancellationToken ct) =>
-        await ExecuteDbAsync(
-            async () => Results.Ok(await db.Companies.OrderBy(x => x.Name).FirstOrDefaultAsync(ct)),
-            apiLogger,
-            "loading company"))
-    .WithName("GetCompany");
-
-api.MapGet("/customers", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
-        await ExecuteDbAsync(
-            async () => Results.Ok(await db.Customers.Where(x => x.CompanyId == companyId).OrderBy(x => x.Name).ToListAsync(ct)),
-            apiLogger,
-            "loading customers"))
-    .WithName("GetCustomers");
-
-api.MapPost("/customers", async (WorkitDbContext db, Customer customer, CancellationToken ct) =>
+securedApi.MapGet("/company", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            var userContext = httpContext.User.ToUserContext();
+            var company = await db.Companies.FirstOrDefaultAsync(x => x.Id == userContext.CompanyId, ct);
+            return company is null ? Results.NotFound() : Results.Ok(company);
+        },
+        apiLogger,
+        "loading company"))
+    .WithName("GetCompany");
+
+securedApi.MapGet("/customers", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
+            var userContext = httpContext.User.ToUserContext();
+            var customers = await db.Customers
+                .Where(x => x.CompanyId == userContext.CompanyId)
+                .OrderBy(x => x.Name)
+                .ToListAsync(ct);
+            return Results.Ok(customers);
+        },
+        apiLogger,
+        "loading customers"))
+    .WithName("GetCustomers");
+
+securedApi.MapPost("/customers", async (WorkitDbContext db, HttpContext httpContext, Customer customer, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
             if (!IsValidCustomer(customer))
             {
                 return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
             }
+
+            customer.CompanyId = httpContext.User.ToUserContext().CompanyId;
+            customer.Name = customer.Name.Trim();
+            customer.Ssn = customer.Ssn.Trim();
+            customer.Email = customer.Email.Trim();
+            customer.Phone = customer.Phone.Trim();
+            customer.ContactPerson = customer.ContactPerson.Trim();
 
             db.Customers.Add(customer);
             await db.SaveChangesAsync(ct);
@@ -123,9 +230,14 @@ api.MapPost("/customers", async (WorkitDbContext db, Customer customer, Cancella
         "creating a customer"))
     .WithName("CreateCustomer");
 
-api.MapPut("/customers/{id:guid}", async (WorkitDbContext db, Guid id, Customer customer, CancellationToken ct) =>
+securedApi.MapPut("/customers/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Customer customer, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
             if (id != customer.Id)
             {
                 return Results.BadRequest("Customer id mismatch.");
@@ -136,7 +248,8 @@ api.MapPut("/customers/{id:guid}", async (WorkitDbContext db, Guid id, Customer 
                 return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
             }
 
-            var existing = await db.Customers.FirstOrDefaultAsync(x => x.Id == id, ct);
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.Customers.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
             if (existing is null)
             {
                 return Results.NotFound();
@@ -155,22 +268,84 @@ api.MapPut("/customers/{id:guid}", async (WorkitDbContext db, Guid id, Customer 
         "updating a customer"))
     .WithName("UpdateCustomer");
 
-api.MapGet("/employees", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
-        await ExecuteDbAsync(
-            async () => Results.Ok(await db.Employees.Where(x => x.CompanyId == companyId).OrderBy(x => x.DisplayName).ToListAsync(ct)),
-            apiLogger,
-            "loading employees"))
-    .WithName("GetEmployees");
-
-api.MapPost("/employees", async (WorkitDbContext db, Employee employee, CancellationToken ct) =>
+securedApi.MapGet("/employees", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
-            if (!IsValidEmployee(employee))
+            var userContext = httpContext.User.ToUserContext();
+
+            IQueryable<Employee> query = db.Employees.Where(x => x.CompanyId == userContext.CompanyId);
+            if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+            {
+                if (userContext.EmployeeId is not Guid currentEmployeeId)
+                {
+                    return Results.Forbid();
+                }
+
+                query = query.Where(x => x.Id == currentEmployeeId);
+            }
+            else if (!string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal))
+            {
+                return Results.Forbid();
+            }
+
+            var employees = await query.OrderBy(x => x.DisplayName).ToListAsync(ct);
+            return Results.Ok(employees);
+        },
+        apiLogger,
+        "loading employees"))
+    .WithName("GetEmployees");
+
+securedApi.MapPost("/employees", async (
+        WorkitDbContext db,
+        HttpContext httpContext,
+        CreateEmployeeUserRequest request,
+        CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
+            if (!IsValidEmployee(request.Employee))
             {
                 return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
             }
 
+            if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+            {
+                return Results.BadRequest("Employee password must be at least 8 characters.");
+            }
+
+            var normalizedEmail = request.Employee.Email.Trim().ToLowerInvariant();
+            if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail, ct))
+            {
+                return Results.Conflict("That email address is already in use.");
+            }
+
+            var userContext = httpContext.User.ToUserContext();
+            var employee = new Employee
+            {
+                CompanyId = userContext.CompanyId,
+                DisplayName = request.Employee.DisplayName.Trim(),
+                Trade = request.Employee.Trade.Trim(),
+                Ssn = request.Employee.Ssn.Trim(),
+                Email = normalizedEmail,
+                Phone = request.Employee.Phone.Trim(),
+                ContactPerson = request.Employee.ContactPerson.Trim()
+            };
+
+            var user = new AppUser
+            {
+                CompanyId = userContext.CompanyId,
+                EmployeeId = employee.Id,
+                Email = normalizedEmail,
+                PasswordHash = PasswordHasher.HashPassword(request.Password),
+                Role = WorkitRoles.Employee
+            };
+
             db.Employees.Add(employee);
+            db.AppUsers.Add(user);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/employees/{employee.Id}", employee);
         },
@@ -178,9 +353,14 @@ api.MapPost("/employees", async (WorkitDbContext db, Employee employee, Cancella
         "creating an employee"))
     .WithName("CreateEmployee");
 
-api.MapPut("/employees/{id:guid}", async (WorkitDbContext db, Guid id, Employee employee, CancellationToken ct) =>
+securedApi.MapPut("/employees/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Employee employee, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
             if (id != employee.Id)
             {
                 return Results.BadRequest("Employee id mismatch.");
@@ -191,18 +371,31 @@ api.MapPut("/employees/{id:guid}", async (WorkitDbContext db, Guid id, Employee 
                 return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
             }
 
-            var existing = await db.Employees.FirstOrDefaultAsync(x => x.Id == id, ct);
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.Employees.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
             if (existing is null)
             {
                 return Results.NotFound();
             }
 
+            var normalizedEmail = employee.Email.Trim().ToLowerInvariant();
+            if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail && x.EmployeeId != id, ct))
+            {
+                return Results.Conflict("That email address is already in use.");
+            }
+
             existing.DisplayName = employee.DisplayName.Trim();
             existing.Trade = employee.Trade.Trim();
             existing.Ssn = employee.Ssn.Trim();
-            existing.Email = employee.Email.Trim();
+            existing.Email = normalizedEmail;
             existing.Phone = employee.Phone.Trim();
             existing.ContactPerson = employee.ContactPerson.Trim();
+
+            var appUser = await db.AppUsers.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
+            if (appUser is not null)
+            {
+                appUser.Email = normalizedEmail;
+            }
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(existing);
@@ -211,16 +404,33 @@ api.MapPut("/employees/{id:guid}", async (WorkitDbContext db, Guid id, Employee 
         "updating an employee"))
     .WithName("UpdateEmployee");
 
-api.MapGet("/jobs", async (WorkitDbContext db, Guid companyId, CancellationToken ct) =>
-        await ExecuteDbAsync(
-            async () => Results.Ok(await db.Jobs.Where(x => x.CompanyId == companyId).OrderBy(x => x.Code).ToListAsync(ct)),
-            apiLogger,
-            "loading jobs"))
-    .WithName("GetJobs");
-
-api.MapPost("/jobs", async (WorkitDbContext db, Job job, CancellationToken ct) =>
+securedApi.MapGet("/jobs", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            var userContext = httpContext.User.ToUserContext();
+            var jobs = await db.Jobs
+                .Where(x => x.CompanyId == userContext.CompanyId)
+                .OrderBy(x => x.Code)
+                .ToListAsync(ct);
+            return Results.Ok(jobs);
+        },
+        apiLogger,
+        "loading jobs"))
+    .WithName("GetJobs");
+
+securedApi.MapPost("/jobs", async (WorkitDbContext db, HttpContext httpContext, Job job, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
+            var userContext = httpContext.User.ToUserContext();
+            job.CompanyId = userContext.CompanyId;
+            job.Code = job.Code.Trim();
+            job.Name = job.Name.Trim();
+
             db.Jobs.Add(job);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/jobs/{job.Id}", job);
@@ -229,9 +439,14 @@ api.MapPost("/jobs", async (WorkitDbContext db, Job job, CancellationToken ct) =
         "creating a job"))
     .WithName("CreateJob");
 
-api.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, Guid id, Job job, CancellationToken ct) =>
+securedApi.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Job job, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
             if (id != job.Id)
             {
                 return Results.BadRequest("Job id mismatch.");
@@ -242,7 +457,8 @@ api.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, Guid id, Job job, Cance
                 return Results.BadRequest("Job name and code are required.");
             }
 
-            var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id, ct);
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
             if (existing is null)
             {
                 return Results.NotFound();
@@ -259,19 +475,32 @@ api.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, Guid id, Job job, Cance
         "updating a job"))
     .WithName("UpdateJob");
 
-api.MapGet("/timeentries", async (
+securedApi.MapGet("/timeentries", async (
         WorkitDbContext db,
-        Guid companyId,
+        HttpContext httpContext,
         Guid? employeeId,
         DateOnly? from,
         DateOnly? to,
         CancellationToken ct) =>
     {
-        var query = db.TimeEntries.Where(x => x.CompanyId == companyId);
+        var userContext = httpContext.User.ToUserContext();
+        var query = db.TimeEntries.Where(x => x.CompanyId == userContext.CompanyId);
+
+        if (!string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            return Results.Forbid();
+        }
+
+        if (userContext.EmployeeId is not Guid currentEmployeeId)
+        {
+            return Results.Forbid();
+        }
+
+        query = query.Where(x => x.EmployeeId == currentEmployeeId);
 
         if (employeeId is not null)
         {
-            query = query.Where(x => x.EmployeeId == employeeId);
+            query = query.Where(x => x.EmployeeId == currentEmployeeId);
         }
 
         if (from is not null)
@@ -291,9 +520,19 @@ api.MapGet("/timeentries", async (
     })
     .WithName("GetTimeEntries");
 
-api.MapPost("/timeentries", async (WorkitDbContext db, TimeEntry entry, CancellationToken ct) =>
+securedApi.MapPost("/timeentries", async (WorkitDbContext db, HttpContext httpContext, TimeEntry entry, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
+            var userContext = httpContext.User.ToUserContext();
+            if (!string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) ||
+                userContext.EmployeeId is not Guid currentEmployeeId)
+            {
+                return Results.Forbid();
+            }
+
+            entry.CompanyId = userContext.CompanyId;
+            entry.EmployeeId = currentEmployeeId;
+
             db.TimeEntries.Add(entry);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/timeentries/{entry.Id}", entry);
@@ -330,9 +569,10 @@ if (app.Environment.IsDevelopment() && !isDesignTime)
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<WorkitDbContext>();
+        var adminSeedOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AdminSeedOptions>>();
         try
         {
-            await SeedData.EnsureSeededAsync(db);
+            await SeedData.EnsureSeededAsync(db, adminSeedOptions);
         }
         catch (Exception ex) when (IsDatabaseException(ex))
         {
@@ -358,6 +598,11 @@ static async Task<IResult> ExecuteDbAsync(
     try
     {
         return await action();
+    }
+    catch (InvalidOperationException ex)
+    {
+        logger.LogWarning(ex, "Authorization context invalid while {Operation}.", operation);
+        return Results.Unauthorized();
     }
     catch (Exception ex) when (IsDatabaseException(ex))
     {
@@ -407,6 +652,11 @@ static bool IsValidEmployee(Employee employee) =>
     !string.IsNullOrWhiteSpace(employee.Email) &&
     !string.IsNullOrWhiteSpace(employee.Phone) &&
     !string.IsNullOrWhiteSpace(employee.ContactPerson);
+
+static bool IsValidCredentials(string email, string password) =>
+    !string.IsNullOrWhiteSpace(email) &&
+    !string.IsNullOrWhiteSpace(password) &&
+    password.Trim().Length >= 8;
 
 static async Task LogStartupDatabaseStatusAsync(
     IServiceProvider services,

@@ -1,7 +1,25 @@
 ﻿@page "/"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Workit Owner</FluentLabel>
+    <p>Admins register companies and owners. Owners manage customers, employees, and jobs for their company.</p>
 
-Welcome to your new app.
+    <div class="admin-grid">
+        <FluentButton Appearance="Appearance.Accent" Href="/login">Login</FluentButton>
+        <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+    </div>
+</FluentCard>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

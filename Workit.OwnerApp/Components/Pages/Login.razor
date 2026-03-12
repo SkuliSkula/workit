@@ -1,0 +1,51 @@
+@page "/login"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Login</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Admin / Owner Login</FluentLabel>
+    <div class="admin-grid">
+        <FluentTextField @bind-Value="email" Placeholder="Email" />
+        <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
+        <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <FluentLabel>@errorMessage</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private string? errorMessage;
+
+    private async Task LoginAsync()
+    {
+        errorMessage = null;
+        var result = await AuthSession.LoginAsync(new LoginRequest
+        {
+            Email = email.Trim(),
+            Password = password
+        });
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            if (result.Value.Role == WorkitRoles.Employee)
+            {
+                await AuthSession.LogoutAsync();
+                errorMessage = "Employee accounts must use the Employee app.";
+                return;
+            }
+
+            Navigation.NavigateTo("/admin", forceLoad: true);
+            return;
+        }
+
+        errorMessage = result.ErrorMessage ?? "Login failed.";
+    }
+}

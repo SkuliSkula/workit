@@ -1,6 +1,7 @@
 @page "/customers"
-@rendermode InteractiveServer
-@inject HttpClient Http
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@inject ICustomersApi CustomersApi
 
 <PageTitle>Customers</PageTitle>
 
@@ -83,22 +84,28 @@
     {
         loadError = null;
         customers.Clear();
+        var companyResult = await CompanyApi.GetCompanyAsync();
+        company = companyResult.Value;
 
-        try
+        if (!companyResult.IsSuccess)
         {
-            company = await Http.GetFromJsonAsync<Company?>("api/company");
-            if (company is null)
-            {
-                return;
-            }
+            loadError = companyResult.ErrorMessage;
+            return;
+        }
 
-            var loadedCustomers = await Http.GetFromJsonAsync<List<Customer>>($"api/customers?companyId={company.Id}") ?? [];
-            customers.AddRange(loadedCustomers);
-        }
-        catch (Exception)
+        if (company is null)
         {
-            loadError = "Customers could not be loaded right now.";
+            return;
         }
+
+        var customersResult = await CustomersApi.GetCustomersAsync();
+        if (!customersResult.IsSuccess)
+        {
+            loadError = customersResult.ErrorMessage;
+            return;
+        }
+
+        customers.AddRange(customersResult.Value ?? []);
     }
 
     private async Task CreateCustomerAsync()
@@ -108,7 +115,7 @@
             return;
         }
 
-        var response = await Http.PostAsJsonAsync("api/customers", new Customer
+        var result = await CustomersApi.CreateCustomerAsync(new Customer
         {
             CompanyId = company.Id,
             Name = newCustomerName.Trim(),
@@ -118,7 +125,7 @@
             ContactPerson = newCustomerContactPerson.Trim()
         });
 
-        if (response.IsSuccessStatusCode)
+        if (result.IsSuccess)
         {
             newCustomerName = string.Empty;
             newCustomerSsn = string.Empty;
@@ -129,7 +136,7 @@
             return;
         }
 
-        loadError = await response.Content.ReadAsStringAsync();
+        loadError = result.ErrorMessage;
     }
 
     private void BeginEditCustomer(Customer customer)
@@ -153,15 +160,15 @@
             return;
         }
 
-        var response = await Http.PutAsJsonAsync($"api/customers/{editingCustomer.Id}", editingCustomer);
-        if (response.IsSuccessStatusCode)
+        var result = await CustomersApi.UpdateCustomerAsync(editingCustomer);
+        if (result.IsSuccess)
         {
             editingCustomer = null;
             await LoadAsync();
             return;
         }
 
-        loadError = await response.Content.ReadAsStringAsync();
+        loadError = result.ErrorMessage;
     }
 
     private void CancelCustomerEdit()

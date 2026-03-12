@@ -1,5 +1,7 @@
 using Microsoft.FluentUI.AspNetCore.Components;
 using Workit.OwnerApp.Components;
+using Workit.OwnerApp.Services;
+using Workit.Shared.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +14,9 @@ builder.Services.AddFluentUIComponents();
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "https://localhost:7200/";
 builder.Services.AddHttpClient("WorkitApi", client => client.BaseAddress = new Uri(apiBaseUrl));
 builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("WorkitApi"));
+builder.Services.AddWorkitApiClients();
+builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
+builder.Services.AddScoped<AuthSessionService>();
 
 var app = builder.Build();
 

@@ -1,0 +1,64 @@
+@page "/register"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Register</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Register Company</FluentLabel>
+    @if (!canRegister)
+    {
+        <p>Only a system admin can register a company and assign its owner.</p>
+    }
+    else
+    {
+        <div class="admin-grid">
+            <FluentTextField @bind-Value="request.Company.Name" Placeholder="Company name" />
+            <FluentTextField @bind-Value="request.Company.Ssn" Placeholder="SSN" />
+            <FluentTextField @bind-Value="request.Company.Owner" Placeholder="Owner name" />
+            <FluentTextField @bind-Value="request.Company.Email" Placeholder="Company email" />
+            <FluentTextField @bind-Value="request.Company.Phone" Placeholder="Phone" />
+            <FluentTextField @bind-Value="request.Company.Address" Placeholder="Address" />
+            <FluentTextField @bind-Value="request.OwnerEmail" Placeholder="Owner login email" />
+            <FluentTextField @bind-Value="request.OwnerPassword" Placeholder="Owner password" TextFieldType="TextFieldType.Password" />
+            <FluentButton Appearance="Appearance.Accent" @onclick="RegisterAsync">Create Company</FluentButton>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <FluentLabel>@errorMessage</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+    private RegisterCompanyRequest request = new();
+    private string? errorMessage;
+    private bool canRegister;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await AuthSession.GetSessionAsync();
+        canRegister = session?.Role == WorkitRoles.Admin;
+    }
+
+    private async Task RegisterAsync()
+    {
+        if (!canRegister)
+        {
+            errorMessage = "Only a system admin can register a company.";
+            return;
+        }
+
+        errorMessage = null;
+        var result = await AuthSession.RegisterCompanyAsync(request);
+        if (result.IsSuccess)
+        {
+            Navigation.NavigateTo("/register", forceLoad: true);
+            return;
+        }
+
+        errorMessage = result.ErrorMessage ?? "Company registration failed.";
+    }
+}
