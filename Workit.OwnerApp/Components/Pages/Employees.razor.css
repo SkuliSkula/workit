@@ -1,0 +1,36 @@
+.emp-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.emp-sidebar {
+    display: grid;
+    gap: 1rem;
+}
+
+.emp-list {
+    overflow-x: auto;
+}
+
+.emp-form {
+    display: grid;
+    gap: 0.75rem;
+    max-width: 480px;
+}
+
+.emp-field {
+    display: grid;
+    gap: 0.35rem;
+    font-weight: 600;
+    color: #14304b;
+    font-size: 0.9rem;
+}
+
+.emp-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+
+}

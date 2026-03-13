@@ -8,64 +8,113 @@
 <FluentCard Class="admin-card">
     <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
 
-    @if (company is null)
-    {
-        <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
-    }
-    else
-    {
-        <div class="admin-grid">
-            <FluentTextField @bind-Value="newEmployeeName" Placeholder="Employee name" />
-            <FluentTextField @bind-Value="newEmployeeTrade" Placeholder="Trade" />
-            <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="SSN" />
-            <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="Email" />
-            <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Password" TextFieldType="TextFieldType.Password" />
-            <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone" />
-            <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Contact person" />
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
+    <div class="emp-layout">
+        <div class="emp-sidebar">
+            @if (company is null)
+            {
+                <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
+            }
+            else
+            {
+                <div class="emp-form">
+                    <label class="emp-field">
+                        <span>Name</span>
+                        <FluentTextField @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Trade</span>
+                        <FluentTextField @bind-Value="newEmployeeTrade" Placeholder="e.g. Electrician" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>SSN</span>
+                        <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Email</span>
+                        <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Password</span>
+                        <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Phone</span>
+                        <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Contact person</span>
+                        <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                    </label>
+                    <div class="emp-actions">
+                        <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
+                    </div>
+                </div>
+            }
+
+            @if (editingEmployee is not null)
+            {
+                <FluentCard Class="admin-card">
+                    <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
+                    <div class="emp-form">
+                        <label class="emp-field">
+                            <span>Name</span>
+                            <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Trade</span>
+                            <FluentTextField @bind-Value="editingEmployee.Trade" Placeholder="e.g. Electrician" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>SSN</span>
+                            <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Email</span>
+                            <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Phone</span>
+                            <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Contact person</span>
+                            <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                        </label>
+                        <div class="emp-actions">
+                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
+                            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
+                        </div>
+                    </div>
+                </FluentCard>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <FluentLabel>@loadError</FluentLabel>
+            }
         </div>
-    }
 
-    @if (editingEmployee is not null)
-    {
-        <FluentCard Class="admin-card">
-            <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
-            <div class="admin-grid">
-                <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Employee name" />
-                <FluentTextField @bind-Value="editingEmployee.Trade" Placeholder="Trade" />
-                <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="SSN" />
-                <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="Email" />
-                <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone" />
-                <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Contact person" />
-                <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
-            </div>
-        </FluentCard>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(loadError))
-    {
-        <FluentLabel>@loadError</FluentLabel>
-    }
-
-    @if (employees.Count > 0)
-    {
-        <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
-            <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
-            <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
-            <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
-            <PropertyColumn Property="@(x => x.Email)" Title="Email" />
-            <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
-            <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
-            <TemplateColumn Title="Actions">
-                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
-            </TemplateColumn>
-        </FluentDataGrid>
-    }
-    else
-    {
-        <FluentLabel>No employees yet.</FluentLabel>
-    }
+        <div class="emp-list">
+            @if (employees.Count > 0)
+            {
+                <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+                    <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
+                    <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
+                    <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
+                    <PropertyColumn Property="@(x => x.Email)" Title="Email" />
+                    <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
+                    <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
+                    <TemplateColumn Title="Actions">
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            }
+            else
+            {
+                <FluentLabel>No employees yet.</FluentLabel>
+            }
+        </div>
+    </div>
 </FluentCard>
 
 @code {
