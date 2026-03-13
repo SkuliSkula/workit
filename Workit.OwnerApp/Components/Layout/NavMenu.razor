@@ -80,15 +80,21 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        var session = await AuthSession.GetSessionAsync();
+        var nextIsAuthenticated = session is not null;
+        var nextIsAdmin = session?.Role == WorkitRoles.Admin;
+        var nextIsOwner = session?.Role == WorkitRoles.Owner;
+
+        if (nextIsAuthenticated == isAuthenticated &&
+            nextIsAdmin == isAdmin &&
+            nextIsOwner == isOwner)
         {
             return;
         }
 
-        var session = await AuthSession.GetSessionAsync();
-        isAuthenticated = session is not null;
-        isAdmin = session?.Role == WorkitRoles.Admin;
-        isOwner = session?.Role == WorkitRoles.Owner;
+        isAuthenticated = nextIsAuthenticated;
+        isAdmin = nextIsAdmin;
+        isOwner = nextIsOwner;
         StateHasChanged();
     }
 
