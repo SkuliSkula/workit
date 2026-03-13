@@ -258,6 +258,9 @@ orleans.codegen.cs
 Generated_Code/
 
 # Backup & report files from converting an old project file
+
+# Local dev launcher runtime files
+.workit-dev/
 # to a newer Visual Studio version. Backup files are not needed,
 # because we have git ;-)
 _UpgradeReport_Files/

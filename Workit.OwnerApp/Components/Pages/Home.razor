@@ -10,7 +10,48 @@
 
 <PageTitle>Home</PageTitle>
 
-@if (!string.IsNullOrWhiteSpace(loadError))
+@if (showLoginWelcome)
+{
+    <section class="dashboard welcome-shell">
+        <FluentCard Class="dashboard-shell dashboard-hero welcome-hero">
+            <div class="hero-copy">
+                <span class="eyebrow">Workit Owner</span>
+                <h1>Run the month from one screen.</h1>
+                <p>
+                    Review hours by customer, job, and employee, then drill into the details that need action.
+                    Sign in to open your owner dashboard.
+                </p>
+
+                <div class="welcome-points">
+                    <div>
+                        <strong>Monthly totals</strong>
+                        <span>See worked hours, active jobs, and team load immediately.</span>
+                    </div>
+                    <div>
+                        <strong>Fast drill-down</strong>
+                        <span>Slice the month by customer, employee, or job without leaving home.</span>
+                    </div>
+                    <div>
+                        <strong>Operational view</strong>
+                        <span>Track recent entries and daily spikes before they turn into billing issues.</span>
+                    </div>
+                </div>
+            </div>
+
+            <FluentCard Class="welcome-card">
+                <span class="eyebrow">Sign in</span>
+                <FluentLabel Typo="Typography.PaneHeader">Owner and admin login</FluentLabel>
+                <p>Open the login page to sign in and return here with your dashboard ready.</p>
+
+                <div class="welcome-actions">
+                    <a class="welcome-link-button welcome-link-button-primary" href="/login">Login</a>
+                    <a class="welcome-link-button" href="/login">Open full login</a>
+                </div>
+            </FluentCard>
+        </FluentCard>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(loadError))
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
@@ -25,21 +66,6 @@ else if (isLoading)
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Loading monthly dashboard...</FluentLabel>
-    </FluentCard>
-}
-else if (session is null)
-{
-    <FluentCard Class="dashboard-shell dashboard-hero">
-        <div>
-            <span class="eyebrow">Owner workspace</span>
-            <FluentLabel Typo="Typography.PaneHeader">Monthly operations dashboard</FluentLabel>
-            <p>Track labor hours by customer, job, and employee from one monthly view.</p>
-        </div>
-
-        <div class="dashboard-actions">
-            <FluentButton Appearance="Appearance.Accent" Href="/login">Login</FluentButton>
-            <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
-        </div>
     </FluentCard>
 }
 else if (!isOwnerSession)
@@ -347,6 +373,7 @@ else
     private Company? company;
     private bool isLoading = true;
     private string? loadError;
+    private bool showLoginWelcome;
     private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
     private List<Customer> customers = [];
     private List<Employee> employees = [];
@@ -393,11 +420,19 @@ else
     {
         isLoading = true;
         loadError = null;
+        showLoginWelcome = false;
 
         try
         {
             session = await AuthSession.GetSessionAsync();
-            if (session is null || !isOwnerSession)
+            if (session is null)
+            {
+                ResetDashboard();
+                showLoginWelcome = true;
+                return;
+            }
+
+            if (!isOwnerSession)
             {
                 ResetDashboard();
                 return;
@@ -406,6 +441,15 @@ else
             var companyResult = await CompanyApi.GetCompanyAsync();
             if (!companyResult.IsSuccess || companyResult.Value is null)
             {
+                if (IsUnauthorized(companyResult.ErrorMessage))
+                {
+                    await AuthSession.LogoutAsync();
+                    session = null;
+                    ResetDashboard();
+                    showLoginWelcome = true;
+                    return;
+                }
+
                 loadError = companyResult.ErrorMessage ?? "Company could not be loaded.";
                 ResetDashboard();
                 return;
@@ -670,6 +714,11 @@ else
 
     private static Guid? ParseGuid(string? rawValue) =>
         Guid.TryParse(rawValue, out var parsed) ? parsed : null;
+
+    private static bool IsUnauthorized(string? errorMessage) =>
+        !string.IsNullOrWhiteSpace(errorMessage) &&
+        (errorMessage.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase) ||
+         errorMessage.Contains("401", StringComparison.OrdinalIgnoreCase));
 
     private bool IsSelectedCustomer(Guid? id) => selectedCustomerId == id;
     private bool IsSelectedJob(Guid? id) => selectedJobId == id;

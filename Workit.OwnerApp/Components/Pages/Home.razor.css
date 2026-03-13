@@ -4,6 +4,11 @@
     padding: 1rem 0 2rem;
 }
 
+.welcome-shell {
+    min-height: calc(100vh - 5rem);
+    align-content: center;
+}
+
 .dashboard-shell {
     margin: 0;
     padding: 1.25rem;
@@ -21,6 +26,10 @@
     grid-template-columns: 1.3fr 1fr;
     align-items: start;
     gap: 1.5rem;
+}
+
+.welcome-hero {
+    align-items: stretch;
 }
 
 .hero-copy h1 {
@@ -47,6 +56,89 @@
     letter-spacing: 0.16em;
     font-size: 0.72rem;
     font-weight: 700;
+}
+
+.welcome-points {
+    display: grid;
+    gap: 0.9rem;
+    margin-top: 1rem;
+}
+
+.welcome-points > div {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.9rem 1rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.66);
+}
+
+.welcome-points strong {
+    color: #14304b;
+}
+
+.welcome-card {
+    padding: 1.25rem;
+    border-radius: 22px;
+    background: linear-gradient(180deg, #14304b 0%, #1e4668 100%);
+    color: #f5f8fc;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.welcome-card::part(control) {
+    background: linear-gradient(180deg, #14304b 0%, #1e4668 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f5f8fc;
+}
+
+.welcome-card .eyebrow,
+.welcome-card p,
+.welcome-card ::deep label {
+    color: rgba(236, 243, 249, 0.88);
+}
+
+.welcome-form {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.welcome-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.welcome-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.08);
+    color: #f5f8fc;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.welcome-link-button:hover {
+    text-decoration: none;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.welcome-link-button-primary {
+    background: #ffffff;
+    color: #14304b;
+    border-color: #ffffff;
+}
+
+.welcome-link-button-primary:hover {
+    background: #eef4fb;
+}
+
+.welcome-error {
+    margin: 0;
+    color: #ffd2c8;
 }
 
 .hero-controls {

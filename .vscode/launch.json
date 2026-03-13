@@ -16,7 +16,6 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "postDebugTask": "Open Workit Safari",
       "stopAtEntry": false
     },
     {
@@ -62,7 +61,6 @@
         "Workit OwnerApp",
         "Workit EmployeeApp"
       ],
-      "preLaunchTask": "Kill Workit Ports",
       "stopAll": true
     }
   ]
