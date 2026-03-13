@@ -64,10 +64,16 @@
     private bool isAdmin;
     private bool isOwner;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         var session = await AuthSession.GetSessionAsync();
         isAdmin = session?.Role == WorkitRoles.Admin;
         isOwner = session?.Role == WorkitRoles.Owner;
+        StateHasChanged();
     }
 }
