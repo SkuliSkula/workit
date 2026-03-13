@@ -17,7 +17,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
       "preLaunchTask": "Kill Workit Ports",
-      "postDebugTask": "Open Workit Safari",
+      "postDebugTask": "Kill Workit Ports",
       "stopAtEntry": false
     },
     {
@@ -36,6 +36,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
       "preLaunchTask": "Kill Workit Ports",
+      "postDebugTask": "Kill Workit Ports",
       "stopAtEntry": false
     },
     {
@@ -54,6 +55,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
       "preLaunchTask": "Kill Workit Ports",
+      "postDebugTask": "Kill Workit Ports",
       "stopAtEntry": false
     }
   ],
@@ -65,7 +67,7 @@
         "Workit OwnerApp",
         "Workit EmployeeApp"
       ],
-      "preLaunchTask": "Kill Workit Ports",
+      "preLaunchTask": "Open Workit Safari",
       "stopAll": true
     }
   ]

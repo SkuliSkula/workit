@@ -11,6 +11,7 @@
       "label": "Open Workit Safari",
       "type": "shell",
       "command": "osascript -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5100\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5200/swagger\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5300\"}'",
+      "dependsOn": ["Kill Workit Ports"],
       "problemMatcher": []
     }
   ]
