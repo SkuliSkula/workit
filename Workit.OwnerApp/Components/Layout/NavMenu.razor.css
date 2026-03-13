@@ -81,6 +81,12 @@
     color: white;
 }
 
+.nav-item .nav-link-button {
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+}
+
 .nav-scrollable {
     display: none;
 }

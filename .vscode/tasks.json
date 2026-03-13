@@ -1,4 +1,62 @@
 {
   "version": "2.0.0",
-  "tasks": []
+  "tasks": [
+    {
+      "label": "Workit: Up",
+      "type": "shell",
+      "command": "./scripts/dev-stack.zsh up --open",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Workit: Down",
+      "type": "shell",
+      "command": "./scripts/dev-stack.zsh down",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Workit: Restart",
+      "type": "shell",
+      "command": "./scripts/dev-stack.zsh restart --open",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Workit: Kill Processes",
+      "type": "shell",
+      "command": "for p in 5100 5200 5300 7100 7200 7300; do lsof -ti tcp:$p | xargs -r kill; done",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Workit: Open Browser Tabs",
+      "type": "shell",
+      "command": "sleep 4 && open http://localhost:5200/swagger && open http://localhost:5300 && open http://localhost:5100",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Workit: Prepare Debug",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Workit: Kill Processes",
+        "Workit: Open Browser Tabs"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
 }
