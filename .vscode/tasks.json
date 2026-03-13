@@ -8,6 +8,24 @@
       "problemMatcher": []
     },
     {
+      "label": "Kill API Ports",
+      "type": "shell",
+      "command": "for p in 5200 7200; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Kill OwnerApp Ports",
+      "type": "shell",
+      "command": "for p in 5300 7300; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
+      "problemMatcher": []
+    },
+    {
+      "label": "Kill EmployeeApp Ports",
+      "type": "shell",
+      "command": "for p in 5100 7100; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
+      "problemMatcher": []
+    },
+    {
       "label": "Open Workit Safari",
       "type": "shell",
       "command": "osascript -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5100\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5200/swagger\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5300\"}'",

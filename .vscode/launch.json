@@ -16,8 +16,8 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "preLaunchTask": "Kill Workit Ports",
-      "postDebugTask": "Kill Workit Ports",
+      "preLaunchTask": "Kill API Ports",
+      "postDebugTask": "Kill API Ports",
       "stopAtEntry": false
     },
     {
@@ -35,8 +35,8 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "preLaunchTask": "Kill Workit Ports",
-      "postDebugTask": "Kill Workit Ports",
+      "preLaunchTask": "Kill OwnerApp Ports",
+      "postDebugTask": "Kill OwnerApp Ports",
       "stopAtEntry": false
     },
     {
@@ -54,8 +54,8 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "preLaunchTask": "Kill Workit Ports",
-      "postDebugTask": "Kill Workit Ports",
+      "preLaunchTask": "Kill EmployeeApp Ports",
+      "postDebugTask": "Kill EmployeeApp Ports",
       "stopAtEntry": false
     }
   ],
