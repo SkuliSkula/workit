@@ -232,12 +232,9 @@ else
             <div class="day-strip">
                 @foreach (var day in dailyLoads)
                 {
-                    <div class="day-cell">
+                    <div class="day-cell @(day.Hours > 0m ? "day-cell--active" : "day-cell--empty")">
                         <span class="day-number">@day.Day</span>
-                        <div class="day-bar-wrap">
-                            <div class="day-bar" style="@($"height:{day.HeightPercent:0.##}%")"></div>
-                        </div>
-                        <span class="day-hours">@day.Hours.ToString("0.#")</span>
+                        <span class="day-hours">@(day.Hours > 0m ? day.Hours.ToString("0.#") : "–")</span>
                     </div>
                 }
             </div>
@@ -613,16 +610,12 @@ else
         var dailyTotals = filteredEntries
             .GroupBy(x => x.WorkDate)
             .ToDictionary(group => group.Key, group => group.Sum(x => x.Hours));
-        var peakDay = dailyTotals.Count == 0 ? 0m : dailyTotals.Max(x => x.Value);
-
         dailyLoads = Enumerable.Range(0, monthEnd.DayNumber - monthStart.DayNumber + 1)
             .Select(offset =>
             {
                 var day = monthStart.AddDays(offset);
                 var hours = dailyTotals.GetValueOrDefault(day);
-                var rawHeight = peakDay == 0m ? 0m : decimal.Round((decimal)Math.Sqrt((double)(hours / peakDay)) * 100m, 2);
-                var height = hours > 0m && rawHeight < 8m ? 8m : rawHeight;
-                return new DayLoad(day.Day, hours, height);
+                return new DayLoad(day.Day, hours);
             })
             .ToList();
     }
@@ -813,6 +806,6 @@ else
 
     private sealed record AggregateSeed(Guid Id, string Name, decimal Hours, int EntryCount);
     private sealed record AggregateRow(Guid Id, string Name, decimal Hours, int EntryCount, decimal WidthPercent);
-    private sealed record DayLoad(int Day, decimal Hours, decimal HeightPercent);
+    private sealed record DayLoad(int Day, decimal Hours);
     private sealed record RecentEntryRow(DateOnly WorkDate, string EmployeeName, string JobName, string CustomerName, decimal Hours);
 }

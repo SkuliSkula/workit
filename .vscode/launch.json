@@ -16,6 +16,7 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
+      "preLaunchTask": "Kill Workit Ports",
       "postDebugTask": "Open Workit Safari",
       "stopAtEntry": false
     },
@@ -34,6 +35,7 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
+      "preLaunchTask": "Kill Workit Ports",
       "stopAtEntry": false
     },
     {
@@ -51,6 +53,7 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
+      "preLaunchTask": "Kill Workit Ports",
       "stopAtEntry": false
     }
   ],

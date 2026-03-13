@@ -234,33 +234,25 @@
 
 .day-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
-    gap: 0.45rem;
-    align-items: end;
+    grid-template-columns: repeat(auto-fit, minmax(32px, 1fr));
+    gap: 0.3rem;
 }
 
 .day-cell {
     display: grid;
     justify-items: center;
-    gap: 0.35rem;
+    gap: 0.2rem;
+    padding: 0.4rem 0.2rem;
+    border-radius: 10px;
 }
 
-.day-bar-wrap {
-    height: 112px;
-    width: 100%;
-    min-width: 20px;
-    border-radius: 999px;
-    display: flex;
-    align-items: end;
-    padding: 4px;
-    background: linear-gradient(180deg, rgba(20, 48, 75, 0.06), rgba(20, 48, 75, 0.15));
+.day-cell--active {
+    background: rgba(232, 145, 73, 0.12);
 }
 
-.day-bar {
-    width: 100%;
-    min-height: 6px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, #e89149 0%, #d05c37 100%);
+.day-cell--active .day-hours {
+    color: #c4541e;
+    font-weight: 700;
 }
 
 .dashboard-panels {
@@ -394,6 +386,6 @@
     }
 
     .day-strip {
-        grid-template-columns: repeat(auto-fit, minmax(22px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
     }
 }

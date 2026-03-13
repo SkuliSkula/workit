@@ -4,7 +4,7 @@
     {
       "label": "Kill Workit Ports",
       "type": "shell",
-      "command": "for p in 5100 5200 5300 7100 7200 7300; do lsof -ti tcp:$p | xargs -r kill; done",
+      "command": "for p in 5100 5200 5300 7100 7200 7300; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
       "problemMatcher": []
     },
     {
