@@ -1,3 +1,5 @@
+@inject AuthSessionService AuthSession
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Workit Owner</a>
@@ -20,34 +22,52 @@
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="register">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Register
-            </NavLink>
-        </div>
+        @if (isAdmin)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="register">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Register
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Admin
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="admin">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Admin
+                </NavLink>
+            </div>
+        }
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="customers">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Customers
-            </NavLink>
-        </div>
+        @if (isOwner || isAdmin)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="customers">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Customers
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="employees">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Employees
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="employees">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Employees
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="jobs">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Jobs
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="jobs">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Jobs
+                </NavLink>
+            </div>
+        }
     </nav>
 </div>
+
+@code {
+    private bool isAdmin;
+    private bool isOwner;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await AuthSession.GetSessionAsync();
+        isAdmin = session?.Role == WorkitRoles.Admin;
+        isOwner = session?.Role == WorkitRoles.Owner;
+    }
+}

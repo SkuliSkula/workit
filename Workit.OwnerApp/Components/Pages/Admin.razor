@@ -45,6 +45,12 @@
     {
         var session = await AuthSession.GetSessionAsync();
         isAdmin = session?.Role == WorkitRoles.Admin;
+        if (!isAdmin)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
         await LoadCompanyAsync();
     }
 
@@ -53,7 +59,7 @@
         loadError = null;
         var result = await CompanyApi.GetCompanyAsync();
         company = result.Value;
-        loadError = result.IsSuccess || isAdmin ? null : result.ErrorMessage;
+        loadError = result.IsSuccess ? null : result.ErrorMessage;
     }
 
     private async Task LogoutAsync()

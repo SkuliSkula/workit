@@ -41,6 +41,10 @@
     {
         var session = await AuthSession.GetSessionAsync();
         canRegister = session?.Role == WorkitRoles.Admin;
+        if (!canRegister)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
     }
 
     private async Task RegisterAsync()
