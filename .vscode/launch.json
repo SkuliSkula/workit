@@ -16,7 +16,7 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "postDebugTask": "Workit: Kill Processes",
+      "postDebugTask": "Open Workit Safari",
       "stopAtEntry": false
     },
     {
@@ -34,7 +34,6 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "postDebugTask": "Workit: Kill Processes",
       "stopAtEntry": false
     },
     {
@@ -52,19 +51,18 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "postDebugTask": "Workit: Kill Processes",
       "stopAtEntry": false
     }
   ],
   "compounds": [
     {
-      "name": "Workit - Debug All",
+      "name": "Workit - Run All",
       "configurations": [
         "Workit API",
         "Workit OwnerApp",
         "Workit EmployeeApp"
       ],
-      "preLaunchTask": "Workit: Prepare Debug",
+      "preLaunchTask": "Kill Workit Ports",
       "stopAll": true
     }
   ]
