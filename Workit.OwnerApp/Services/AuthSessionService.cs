@@ -26,22 +26,53 @@ public sealed class AuthSessionService(IAuthApi authApi, IJSRuntime jsRuntime)
 
     public async Task LogoutAsync()
     {
-        await jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
-        await jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionStorageKey);
+        try
+        {
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", SessionStorageKey);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSException)
+        {
+        }
     }
 
     public async Task<bool> IsAuthenticatedAsync()
     {
-        var token = await jsRuntime.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-        return !string.IsNullOrWhiteSpace(token);
+        try
+        {
+            var token = await jsRuntime.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            return !string.IsNullOrWhiteSpace(token);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (JSException)
+        {
+            return false;
+        }
     }
 
     public async Task<LoginResponse?> GetSessionAsync()
     {
-        var sessionJson = await jsRuntime.InvokeAsync<string?>("localStorage.getItem", SessionStorageKey);
-        return string.IsNullOrWhiteSpace(sessionJson)
-            ? null
-            : JsonSerializer.Deserialize<LoginResponse>(sessionJson);
+        try
+        {
+            var sessionJson = await jsRuntime.InvokeAsync<string?>("localStorage.getItem", SessionStorageKey);
+            return string.IsNullOrWhiteSpace(sessionJson)
+                ? null
+                : JsonSerializer.Deserialize<LoginResponse>(sessionJson);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (JSException)
+        {
+            return null;
+        }
     }
 
     private async Task SetSessionAsync(LoginResponse session)

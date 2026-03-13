@@ -41,8 +41,13 @@
     private string? loadError;
     private bool isAdmin;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         var session = await AuthSession.GetSessionAsync();
         isAdmin = session?.Role == WorkitRoles.Admin;
         if (!isAdmin)
@@ -52,6 +57,7 @@
         }
 
         await LoadCompanyAsync();
+        StateHasChanged();
     }
 
     private async Task LoadCompanyAsync()

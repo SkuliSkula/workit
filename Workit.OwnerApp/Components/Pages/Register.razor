@@ -37,14 +37,21 @@
     private string? errorMessage;
     private bool canRegister;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         var session = await AuthSession.GetSessionAsync();
         canRegister = session?.Role == WorkitRoles.Admin;
         if (!canRegister)
         {
             Navigation.NavigateTo("/", forceLoad: true);
         }
+
+        StateHasChanged();
     }
 
     private async Task RegisterAsync()

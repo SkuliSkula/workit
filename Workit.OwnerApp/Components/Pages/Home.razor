@@ -411,9 +411,15 @@ else
         .OrderBy(x => x.DisplayName)
         .ToList();
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
         await LoadDashboardAsync();
+        StateHasChanged();
     }
 
     private async Task LoadDashboardAsync()
