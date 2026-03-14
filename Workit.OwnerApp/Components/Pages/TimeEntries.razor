@@ -1,0 +1,280 @@
+@page "/timeentries"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IEmployeesApi EmployeesApi
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
+
+<PageTitle>Time Entries</PageTitle>
+
+@* ── Add Entry ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">Time Entries</FluentLabel>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+    }
+
+    <div class="admin-grid">
+
+        <div>
+            <FluentLabel>Employee</FluentLabel>
+            @if (employees.Count > 0)
+            {
+                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                    @foreach (var emp in employees)
+                    {
+                        <FluentOption TOption="string" Value="@emp.Id.ToString()">
+                            @emp.DisplayName @(string.IsNullOrWhiteSpace(emp.Trade) ? string.Empty : $"({emp.Trade})")
+                        </FluentOption>
+                    }
+                </FluentSelect>
+            }
+            else
+            {
+                <FluentLabel>No employees yet.</FluentLabel>
+            }
+        </div>
+
+        <div>
+            <FluentLabel>Job</FluentLabel>
+            @if (jobs.Count > 0)
+            {
+                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
+                    @foreach (var job in jobs)
+                    {
+                        <FluentOption TOption="string" Value="@job.Id.ToString()">
+                            @job.Code – @job.Name
+                        </FluentOption>
+                    }
+                </FluentSelect>
+            }
+            else
+            {
+                <FluentLabel>No jobs yet.</FluentLabel>
+            }
+        </div>
+
+        <div>
+            <FluentLabel>Date</FluentLabel>
+            <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Hours</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+        </div>
+
+        <div style="grid-column: span 2">
+            <FluentLabel>Notes</FluentLabel>
+            <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
+        </div>
+
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="AddEntryAsync"
+                          Disabled="@(!CanAdd || saving)">
+                @(saving ? "Saving…" : "Add Entry")
+            </FluentButton>
+        </div>
+
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(saveResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Entry Log ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>Entry Log</strong></FluentLabel>
+
+    <div class="admin-grid">
+        <FluentDatePicker @bind-Value="filterFrom" Label="From" />
+        <FluentDatePicker @bind-Value="filterTo"   Label="To" />
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadEntriesAsync" Disabled="@loadingEntries">
+                @(loadingEntries ? "Loading…" : "Load")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (entries.Count > 0)
+    {
+        <FluentDataGrid TGridItem="EntryRow" Items="@entries.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.Date)"         Title="Date"     Format="dd MMM yyyy" />
+            <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
+            <PropertyColumn Property="@(x => x.JobName)"      Title="Job" />
+            <PropertyColumn Property="@(x => x.Hours)"        Title="Hours"    Format="0.##" />
+            <PropertyColumn Property="@(x => x.Notes)"        Title="Notes" />
+        </FluentDataGrid>
+
+        <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
+            Total: <strong>@entries.Sum(e => e.Hours).ToString("0.##") hrs</strong>
+            across @entries.Count entries
+        </FluentLabel>
+    }
+    else if (!loadingEntries && hasLoadedEntries)
+    {
+        <FluentLabel>No entries found for the selected period.</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+
+    // ── Lookup data ───────────────────────────────────────────────────────────
+    private readonly List<Employee> employees = [];
+    private readonly List<Job> jobs = [];
+    private readonly Dictionary<Guid, string> employeeNames = new();
+    private readonly Dictionary<Guid, string> jobNames = new();
+
+    // ── Add-entry form state ──────────────────────────────────────────────────
+    private string? selectedEmployeeId;
+    private string? selectedJobId;
+    private DateTime? workDate = DateTime.Today;
+    private decimal hours = 8m;
+    private string notes = string.Empty;
+    private bool saving;
+    private string? saveResult;
+    private string? loadError;
+
+    private bool CanAdd =>
+        Guid.TryParse(selectedEmployeeId, out _) &&
+        Guid.TryParse(selectedJobId, out _) &&
+        workDate is not null &&
+        hours > 0;
+
+    // ── Entry log state ───────────────────────────────────────────────────────
+    private DateTime? filterFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? filterTo   = DateTime.Today;
+    private bool loadingEntries;
+    private bool hasLoadedEntries;
+    private readonly List<EntryRow> entries = [];
+
+    private sealed class EntryRow
+    {
+        public DateOnly Date         { get; set; }
+        public string  EmployeeName  { get; set; } = string.Empty;
+        public string  JobName       { get; set; } = string.Empty;
+        public decimal Hours         { get; set; }
+        public string  Notes         { get; set; } = string.Empty;
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        var empTask = EmployeesApi.GetEmployeesAsync();
+        var jobTask = JobsApi.GetJobsAsync();
+        await Task.WhenAll(empTask, jobTask);
+
+        var empResult = await empTask;
+        if (empResult.IsSuccess)
+        {
+            employees.AddRange(empResult.Value ?? []);
+            foreach (var e in employees)
+                employeeNames[e.Id] = e.DisplayName;
+            selectedEmployeeId = employees.FirstOrDefault()?.Id.ToString();
+        }
+        else
+        {
+            loadError = empResult.ErrorMessage;
+        }
+
+        var jobResult = await jobTask;
+        if (jobResult.IsSuccess)
+        {
+            jobs.AddRange(jobResult.Value ?? []);
+            foreach (var j in jobs)
+                jobNames[j.Id] = $"{j.Code} – {j.Name}";
+            selectedJobId = jobs.FirstOrDefault()?.Id.ToString();
+        }
+        else
+        {
+            loadError ??= jobResult.ErrorMessage;
+        }
+
+        await LoadEntriesAsync();
+    }
+
+    // ── Add Entry ─────────────────────────────────────────────────────────────
+    private async Task AddEntryAsync()
+    {
+        if (!Guid.TryParse(selectedEmployeeId, out var empId)) return;
+        if (!Guid.TryParse(selectedJobId,      out var jobId)) return;
+        if (workDate is null) return;
+
+        saving     = true;
+        saveResult = null;
+
+        try
+        {
+            var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
+            {
+                EmployeeId = empId,
+                JobId      = jobId,
+                WorkDate   = DateOnly.FromDateTime(workDate.Value),
+                Hours      = hours,
+                Notes      = notes.Trim()
+            });
+
+            if (result.IsSuccess)
+            {
+                saveResult = $"✓ Entry saved ({hours:0.##} hrs)";
+                notes      = string.Empty;
+                hours      = 8m;
+                await LoadEntriesAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // ── Load Entries ──────────────────────────────────────────────────────────
+    private async Task LoadEntriesAsync()
+    {
+        if (filterFrom is null || filterTo is null) return;
+
+        loadingEntries  = true;
+        hasLoadedEntries = false;
+        entries.Clear();
+
+        try
+        {
+            var from = DateOnly.FromDateTime(filterFrom.Value);
+            var to   = DateOnly.FromDateTime(filterTo.Value);
+
+            var result = await TimeEntriesApi.GetTimeEntriesAsync(from, to);
+            if (!result.IsSuccess)
+            {
+                loadError ??= result.ErrorMessage;
+                return;
+            }
+
+            var rows = (result.Value ?? [])
+                .OrderByDescending(e => e.WorkDate)
+                .ThenBy(e => employeeNames.GetValueOrDefault(e.EmployeeId, string.Empty))
+                .Select(e => new EntryRow
+                {
+                    Date         = e.WorkDate,
+                    EmployeeName = employeeNames.GetValueOrDefault(e.EmployeeId, e.EmployeeId.ToString()),
+                    JobName      = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),
+                    Hours        = e.Hours,
+                    Notes        = e.Notes
+                });
+
+            entries.AddRange(rows);
+        }
+        finally
+        {
+            loadingEntries   = false;
+            hasLoadedEntries = true;
+        }
+    }
+}

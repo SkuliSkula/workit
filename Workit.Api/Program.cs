@@ -556,14 +556,26 @@ securedApi.MapPost("/timeentries", async (WorkitDbContext db, HttpContext httpCo
         await ExecuteDbAsync(async () =>
         {
             var userContext = httpContext.User.ToUserContext();
-            if (!string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) ||
-                userContext.EmployeeId is not Guid currentEmployeeId)
+
+            if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal))
+            {
+                // Owner posts on behalf of any employee in their company.
+                entry.CompanyId = userContext.CompanyId;
+                var employeeExists = await db.Employees
+                    .AnyAsync(x => x.Id == entry.EmployeeId && x.CompanyId == userContext.CompanyId, ct);
+                if (!employeeExists)
+                    return Results.BadRequest("Employee not found in this company.");
+            }
+            else if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
+                     userContext.EmployeeId is Guid currentEmployeeId)
+            {
+                entry.CompanyId = userContext.CompanyId;
+                entry.EmployeeId = currentEmployeeId;
+            }
+            else
             {
                 return Results.Forbid();
             }
-
-            entry.CompanyId = userContext.CompanyId;
-            entry.EmployeeId = currentEmployeeId;
 
             db.TimeEntries.Add(entry);
             await db.SaveChangesAsync(ct);
