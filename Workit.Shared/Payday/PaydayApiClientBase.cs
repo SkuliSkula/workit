@@ -26,6 +26,26 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
         }
     }
 
+    protected async Task<ApiResult<TResponse>> PutForJsonAsync<TRequest, TResponse>(string requestUri, TRequest payload, string defaultErrorMessage)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("PaydayApi");
+            using var request = await CreateRequestAsync(HttpMethod.Put, requestUri, payload);
+            using var response = await client.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+
+            var value = await response.Content.ReadFromJsonAsync<TResponse>();
+            return ApiResult<TResponse>.Success(value);
+        }
+        catch (Exception)
+        {
+            return ApiResult<TResponse>.Failure(defaultErrorMessage);
+        }
+    }
+
     protected async Task<ApiResult<TResponse>> PostForJsonAsync<TRequest, TResponse>(string requestUri, TRequest payload, string defaultErrorMessage)
     {
         try
@@ -43,6 +63,25 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
         catch (Exception)
         {
             return ApiResult<TResponse>.Failure(defaultErrorMessage);
+        }
+    }
+
+    protected async Task<ApiResult<bool>> DeleteAsync(string requestUri, string defaultErrorMessage)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("PaydayApi");
+            using var request = await CreateRequestAsync(HttpMethod.Delete, requestUri);
+            using var response = await client.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return ApiResult<bool>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+
+            return ApiResult<bool>.Success(true);
+        }
+        catch (Exception)
+        {
+            return ApiResult<bool>.Failure(defaultErrorMessage);
         }
     }
 

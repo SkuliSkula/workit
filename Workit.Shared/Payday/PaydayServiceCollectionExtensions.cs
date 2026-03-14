@@ -18,6 +18,10 @@ public static class PaydayServiceCollectionExtensions
         services.AddSingleton<IPaydayTokenService, PaydayTokenService>();
         services.AddScoped<IPaydayUsersApi, PaydayUsersApi>();
         services.AddScoped<IPaydayCompaniesApi, PaydayCompaniesApi>();
+        services.AddScoped<IPaydayCustomersApi, PaydayCustomersApi>();
+        services.AddScoped<IPaydayEmployeesApi, PaydayEmployeesApi>();
+        services.AddScoped<IPaydayPensionApi, PaydayPensionApi>();
+        services.AddScoped<IPaydayPayrollApi, PaydayPayrollApi>();
 
         return services;
     }
