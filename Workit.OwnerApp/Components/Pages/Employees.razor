@@ -5,7 +5,7 @@
 
 <PageTitle>Employees</PageTitle>
 
-<FluentCard Class="admin-card">
+<FluentCard Class="admin-card" AreaRestricted="false">
     <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
 
     <div class="emp-layout">
@@ -23,7 +23,12 @@
                     </label>
                     <label class="emp-field">
                         <span>Trade</span>
-                        <FluentTextField @bind-Value="newEmployeeTrade" Placeholder="e.g. Electrician" style="width:100%" />
+                        <FluentSelect TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
+                            @foreach (var trade in Trades)
+                            {
+                                <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                            }
+                        </FluentSelect>
                     </label>
                     <label class="emp-field">
                         <span>SSN</span>
@@ -53,7 +58,7 @@
 
             @if (editingEmployee is not null)
             {
-                <FluentCard Class="admin-card">
+                <FluentCard Class="admin-card" AreaRestricted="false">
                     <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
                     <div class="emp-form">
                         <label class="emp-field">
@@ -62,7 +67,12 @@
                         </label>
                         <label class="emp-field">
                             <span>Trade</span>
-                            <FluentTextField @bind-Value="editingEmployee.Trade" Placeholder="e.g. Electrician" style="width:100%" />
+                            <FluentSelect TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
+                                @foreach (var trade in Trades)
+                                {
+                                    <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                                }
+                            </FluentSelect>
                         </label>
                         <label class="emp-field">
                             <span>SSN</span>
@@ -128,11 +138,13 @@
 </FluentCard>
 
 @code {
+    private static readonly string[] Trades = ["Electrician", "Carpenter", "Plumber", "Painter", "Other"];
+
     private readonly List<Employee> employees = [];
     private Company? company;
     private Employee? editingEmployee;
     private string newEmployeeName = string.Empty;
-    private string newEmployeeTrade = string.Empty;
+    private string newEmployeeTrade = Trades[0];
     private string newEmployeeSsn = string.Empty;
     private string newEmployeeEmail = string.Empty;
     private string newEmployeePassword = string.Empty;
@@ -202,7 +214,7 @@
         if (result.IsSuccess)
         {
             newEmployeeName = string.Empty;
-            newEmployeeTrade = string.Empty;
+            newEmployeeTrade = Trades[0];
             newEmployeeSsn = string.Empty;
             newEmployeeEmail = string.Empty;
             newEmployeePassword = string.Empty;

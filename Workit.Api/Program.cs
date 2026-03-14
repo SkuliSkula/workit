@@ -309,7 +309,7 @@ securedApi.MapPost("/employees", async (
 
             if (!IsValidEmployee(request.Employee))
             {
-                return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
+                return Results.BadRequest("Employee name, SSN, and email are required.");
             }
 
             if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
@@ -368,7 +368,7 @@ securedApi.MapPut("/employees/{id:guid}", async (WorkitDbContext db, HttpContext
 
             if (!IsValidEmployee(employee))
             {
-                return Results.BadRequest("Employee name, trade, SSN, email, phone, and contact person are required.");
+                return Results.BadRequest("Employee name, SSN, and email are required.");
             }
 
             var userContext = httpContext.User.ToUserContext();
@@ -676,11 +676,8 @@ static bool IsValidCustomer(Customer customer) =>
 
 static bool IsValidEmployee(Employee employee) =>
     !string.IsNullOrWhiteSpace(employee.DisplayName) &&
-    !string.IsNullOrWhiteSpace(employee.Trade) &&
     !string.IsNullOrWhiteSpace(employee.Ssn) &&
-    !string.IsNullOrWhiteSpace(employee.Email) &&
-    !string.IsNullOrWhiteSpace(employee.Phone) &&
-    !string.IsNullOrWhiteSpace(employee.ContactPerson);
+    !string.IsNullOrWhiteSpace(employee.Email);
 
 static bool IsValidCredentials(string email, string password) =>
     !string.IsNullOrWhiteSpace(email) &&
