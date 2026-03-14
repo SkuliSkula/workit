@@ -35,3 +35,8 @@ public sealed class CreateEmployeeUserRequest
     public Models.Employee Employee { get; set; } = new();
     public string Password { get; set; } = string.Empty;
 }
+
+public sealed class ResetPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
+}

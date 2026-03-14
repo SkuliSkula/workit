@@ -2,14 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace Workit.Shared.Payday;
 
-// Update these property names to match the actual API response once known.
 internal sealed class PaydayTokenResponse
 {
-    [JsonPropertyName("access_token")]
+    [JsonPropertyName("accessToken")]
     public string? AccessToken { get; set; }
 
-    [JsonPropertyName("token")]
-    public string? Token { get; set; }
-
-    public string? GetToken() => AccessToken ?? Token;
+    public string? GetToken() => AccessToken;
 }

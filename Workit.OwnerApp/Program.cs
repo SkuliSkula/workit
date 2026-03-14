@@ -2,6 +2,7 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using Workit.OwnerApp.Components;
 using Workit.OwnerApp.Services;
 using Workit.Shared.Api;
+using Workit.Shared.Payday;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,8 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().Cre
 builder.Services.AddWorkitApiClients();
 builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
 builder.Services.AddScoped<AuthSessionService>();
+builder.Services.AddPaydayApiClients(opts =>
+    builder.Configuration.GetSection(PaydayOptions.SectionName).Bind(opts));
 
 var app = builder.Build();
 

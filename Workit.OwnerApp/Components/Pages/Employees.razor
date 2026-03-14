@@ -105,7 +105,17 @@
                     <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
                     <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
                     <TemplateColumn Title="Actions">
-                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
+                                          Disabled="@resettingIds.Contains(context.Id)">
+                                @(resettingIds.Contains(context.Id) ? "Resetting…" : "Reset Password")
+                            </FluentButton>
+                            @if (resetPasswords.TryGetValue(context.Id, out var pw))
+                            {
+                                <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">New password: @pw</FluentLabel>
+                            }
+                        </div>
                     </TemplateColumn>
                 </FluentDataGrid>
             }
@@ -129,6 +139,10 @@
     private string newEmployeePhone = string.Empty;
     private string newEmployeeContactPerson = string.Empty;
     private string? loadError;
+
+    // ── Reset Password state ─────────────────────────────────────────────────
+    private readonly HashSet<Guid> resettingIds = [];
+    private readonly Dictionary<Guid, string> resetPasswords = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -237,5 +251,31 @@
     private void CancelEmployeeEdit()
     {
         editingEmployee = null;
+    }
+
+    private async Task ResetEmployeePasswordAsync(Employee employee)
+    {
+        resettingIds.Add(employee.Id);
+        resetPasswords.Remove(employee.Id);
+
+        try
+        {
+            var password = GeneratePassword();
+            var result = await EmployeesApi.ResetPasswordAsync(employee.Id, password);
+            if (result.IsSuccess)
+                resetPasswords[employee.Id] = password;
+            else
+                loadError = result.ErrorMessage;
+        }
+        finally
+        {
+            resettingIds.Remove(employee.Id);
+        }
+    }
+
+    private static string GeneratePassword()
+    {
+        var raw = Guid.NewGuid().ToString("N");
+        return char.ToUpper(raw[0]) + raw[1..9] + "!1";
     }
 }

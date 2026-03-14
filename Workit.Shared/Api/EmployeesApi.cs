@@ -9,6 +9,7 @@ public interface IEmployeesApi
     Task<ApiResult<List<Employee>>> GetEmployeesAsync();
     Task<ApiResult> CreateEmployeeAsync(CreateEmployeeUserRequest request);
     Task<ApiResult> UpdateEmployeeAsync(Employee employee);
+    Task<ApiResult> ResetPasswordAsync(Guid employeeId, string newPassword);
 }
 
 internal sealed class EmployeesApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -30,4 +31,7 @@ internal sealed class EmployeesApi(HttpClient httpClient, IAccessTokenAccessor a
 
     public Task<ApiResult> UpdateEmployeeAsync(Employee employee) =>
         PutAsync($"api/employees/{employee.Id}", employee, "The employee could not be updated right now.");
+
+    public Task<ApiResult> ResetPasswordAsync(Guid employeeId, string newPassword) =>
+        PutAsync($"api/employees/{employeeId}/password", new ResetPasswordRequest { NewPassword = newPassword }, "Password could not be reset right now.");
 }

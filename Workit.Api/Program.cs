@@ -212,7 +212,7 @@ securedApi.MapPost("/customers", async (WorkitDbContext db, HttpContext httpCont
 
             if (!IsValidCustomer(customer))
             {
-                return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
+                return Results.BadRequest("Customer name and SSN are required.");
             }
 
             customer.CompanyId = httpContext.User.ToUserContext().CompanyId;
@@ -245,7 +245,7 @@ securedApi.MapPut("/customers/{id:guid}", async (WorkitDbContext db, HttpContext
 
             if (!IsValidCustomer(customer))
             {
-                return Results.BadRequest("Customer name, SSN, email, phone, and contact person are required.");
+                return Results.BadRequest("Customer name and SSN are required.");
             }
 
             var userContext = httpContext.User.ToUserContext();
@@ -403,6 +403,34 @@ securedApi.MapPut("/employees/{id:guid}", async (WorkitDbContext db, HttpContext
         apiLogger,
         "updating an employee"))
     .WithName("UpdateEmployee");
+
+securedApi.MapPut("/employees/{id:guid}/password", async (WorkitDbContext db, HttpContext httpContext, Guid id, ResetPasswordRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+            {
+                return Results.Forbid();
+            }
+
+            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+            {
+                return Results.BadRequest("Password must be at least 8 characters.");
+            }
+
+            var userContext = httpContext.User.ToUserContext();
+            var appUser = await db.AppUsers.FirstOrDefaultAsync(x => x.EmployeeId == id && x.CompanyId == userContext.CompanyId, ct);
+            if (appUser is null)
+            {
+                return Results.NotFound();
+            }
+
+            appUser.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        },
+        apiLogger,
+        "resetting employee password"))
+    .WithName("ResetEmployeePassword");
 
 securedApi.MapGet("/jobs", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
@@ -644,10 +672,7 @@ static bool IsValidCompany(Company company) =>
 
 static bool IsValidCustomer(Customer customer) =>
     !string.IsNullOrWhiteSpace(customer.Name) &&
-    !string.IsNullOrWhiteSpace(customer.Ssn) &&
-    !string.IsNullOrWhiteSpace(customer.Email) &&
-    !string.IsNullOrWhiteSpace(customer.Phone) &&
-    !string.IsNullOrWhiteSpace(customer.ContactPerson);
+    !string.IsNullOrWhiteSpace(customer.Ssn);
 
 static bool IsValidEmployee(Employee employee) =>
     !string.IsNullOrWhiteSpace(employee.DisplayName) &&

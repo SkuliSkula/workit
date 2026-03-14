@@ -1,0 +1,478 @@
+@page "/payday"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPaydayCompaniesApi PaydayCompaniesApi
+@inject IPaydayUsersApi PaydayUsersApi
+@inject IPaydayCustomersApi PaydayCustomersApi
+@inject IPaydayEmployeesApi PaydayEmployeesApi
+@inject IPaydayPayrollApi PaydayPayrollApi
+@inject ICompanyApi CompanyApi
+@inject ICustomersApi CustomersApi
+@inject IEmployeesApi EmployeesApi
+@inject ITimeEntriesApi TimeEntriesApi
+@inject IJobsApi JobsApi
+
+<PageTitle>Payday</PageTitle>
+
+<FluentCard Class="admin-card">
+    <FluentLabel Typo="Typography.PaneHeader">Payday</FluentLabel>
+
+    @if (isLoading)
+    {
+        <div style="display:flex; align-items:center; gap:0.75rem; margin-top:1rem;">
+            <FluentProgressRing />
+            <FluentLabel>Connecting to Payday…</FluentLabel>
+        </div>
+    }
+    else
+    {
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+    }
+
+    @* ── Company Info ── *@
+    @if (paydayCompany is not null)
+    {
+        <FluentCard Class="admin-card">
+            <FluentLabel Typo="Typography.Body"><strong>Company</strong></FluentLabel>
+            <div class="admin-grid" style="margin-top:0.5rem;">
+                <FluentLabel>@paydayCompany.Name</FluentLabel>
+                <FluentLabel>@paydayCompany.Email</FluentLabel>
+                <FluentLabel>@paydayCompany.Phone</FluentLabel>
+                <FluentLabel>@paydayCompany.Address, @paydayCompany.Zip @paydayCompany.City</FluentLabel>
+                <FluentLabel>SSN: @paydayCompany.Ssn</FluentLabel>
+                <FluentLabel>VAT: @paydayCompany.VatNumber</FluentLabel>
+            </div>
+        </FluentCard>
+    }
+
+    @* ── Payday Users ── *@
+    @if (paydayUsers.Count > 0)
+    {
+        <FluentCard Class="admin-card">
+            <FluentLabel Typo="Typography.Body"><strong>Payday Users</strong></FluentLabel>
+            <FluentDataGrid TGridItem="PaydayUser" Items="@paydayUsers.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+                <PropertyColumn Property="@(x => x.Name)" Title="Name" />
+                <PropertyColumn Property="@(x => x.Email)" Title="Email" />
+                <PropertyColumn Property="@(x => x.Mobile)" Title="Mobile" />
+                <PropertyColumn Property="@(x => x.Language)" Title="Language" />
+            </FluentDataGrid>
+        </FluentCard>
+    }
+
+    @* ── Sync ── *@
+    <FluentCard Class="admin-card">
+        <FluentLabel Typo="Typography.Body"><strong>Sync from Payday</strong></FluentLabel>
+        <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:0.75rem;">
+
+            <div>
+                <FluentButton Appearance="Appearance.Accent" @onclick="SyncCustomersAsync" Disabled="@syncingCustomers">
+                    @(syncingCustomers ? "Syncing customers…" : "Sync Customers")
+                </FluentButton>
+                @if (!string.IsNullOrWhiteSpace(customerSyncResult))
+                {
+                    <div style="margin-top:0.4rem;"><FluentLabel>@customerSyncResult</FluentLabel></div>
+                }
+            </div>
+
+            <div>
+                <FluentButton Appearance="Appearance.Accent" @onclick="SyncEmployeesAsync" Disabled="@syncingEmployees">
+                    @(syncingEmployees ? "Syncing employees…" : "Sync Employees")
+                </FluentButton>
+                @if (!string.IsNullOrWhiteSpace(employeeSyncResult))
+                {
+                    <div style="margin-top:0.4rem;"><FluentLabel>@employeeSyncResult</FluentLabel></div>
+                }
+                @if (createdEmployees.Count > 0)
+                {
+                    <div style="margin-top:0.75rem;">
+                        <FluentLabel Typo="Typography.Body"><strong>New employees created — save these passwords now:</strong></FluentLabel>
+                        <FluentDataGrid TGridItem="CreatedEmployeeRow" Items="@createdEmployees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
+                            <PropertyColumn Property="@(x => x.Name)"     Title="Name" />
+                            <PropertyColumn Property="@(x => x.Email)"    Title="Email" />
+                            <PropertyColumn Property="@(x => x.Password)" Title="Temporary Password" />
+                        </FluentDataGrid>
+                    </div>
+                }
+            </div>
+
+        </div>
+    </FluentCard>
+
+    @* ── Timesheet Upload ── *@
+    <FluentCard Class="admin-card">
+        <FluentLabel Typo="Typography.Body"><strong>Upload Timesheet to Payday</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <FluentDatePicker @bind-Value="timesheetFrom" Label="From" />
+            <FluentDatePicker @bind-Value="timesheetTo" Label="To" />
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadTimesheetPreviewAsync" Disabled="@loadingTimesheet">
+                @(loadingTimesheet ? "Loading…" : "Load Preview")
+            </FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(timesheetError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@timesheetError</FluentLabel>
+        }
+
+        @if (timesheetRows.Count > 0)
+        {
+            <FluentDataGrid TGridItem="TimesheetPreviewRow" Items="@timesheetRows.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.75rem;">
+                <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
+                <PropertyColumn Property="@(x => x.EmployeeSsn)" Title="SSN" />
+                <PropertyColumn Property="@(x => x.JobName)" Title="Job" />
+                <PropertyColumn Property="@(x => x.Hours)" Title="Hours" Format="0.##" />
+            </FluentDataGrid>
+
+            <div style="margin-top:0.75rem; display:flex; align-items:center; gap:1rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="UploadTimesheetAsync" Disabled="@uploadingTimesheet">
+                    @(uploadingTimesheet ? "Uploading…" : $"Upload to Payday ({timesheetRows.Count} lines)")
+                </FluentButton>
+                @if (!string.IsNullOrWhiteSpace(timesheetUploadResult))
+                {
+                    <FluentLabel>@timesheetUploadResult</FluentLabel>
+                }
+            </div>
+        }
+    </FluentCard>
+
+    } @* end else (isLoading) *@
+</FluentCard>
+
+@code {
+
+    // ── Init state ──────────────────────────────────────────────────────────
+    private bool isLoading = true;
+    private PaydayCompany? paydayCompany;
+    private readonly List<PaydayUser> paydayUsers = [];
+    private string? loadError;
+
+    // ── Sync state ──────────────────────────────────────────────────────────
+    private bool syncingCustomers;
+    private bool syncingEmployees;
+    private string? customerSyncResult;
+    private string? employeeSyncResult;
+    private readonly List<CreatedEmployeeRow> createdEmployees = [];
+
+    private sealed class CreatedEmployeeRow
+    {
+        public string Name     { get; set; } = string.Empty;
+        public string Email    { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+
+    // ── Timesheet state ─────────────────────────────────────────────────────
+    private DateTime? timesheetFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? timesheetTo = DateTime.Today;
+    private bool loadingTimesheet;
+    private bool uploadingTimesheet;
+    private string? timesheetError;
+    private string? timesheetUploadResult;
+    private readonly List<TimesheetPreviewRow> timesheetRows = [];
+
+    private sealed class TimesheetPreviewRow
+    {
+        public string EmployeeName { get; set; } = string.Empty;
+        public string EmployeeSsn  { get; set; } = string.Empty;
+        public string JobName      { get; set; } = string.Empty;
+        public double Hours        { get; set; }
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var companyResult = await PaydayCompaniesApi.GetMeAsync();
+            if (companyResult.IsSuccess)
+                paydayCompany = companyResult.Value;
+            else
+                loadError = companyResult.ErrorMessage;
+
+            var usersResult = await PaydayUsersApi.GetAllAsync();
+            if (usersResult.IsSuccess)
+                paydayUsers.AddRange(usersResult.Value ?? []);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    private async Task<List<PaydayCustomer>> FetchAllPaydayCustomersAsync()
+    {
+        var all = new List<PaydayCustomer>();
+        var page = 1;
+        while (true)
+        {
+            var result = await PaydayCustomersApi.GetAllAsync(page, 100);
+            if (!result.IsSuccess || result.Value is null) break;
+            all.AddRange(result.Value.Customers);
+            if (page >= result.Value.Pages) break;
+            page++;
+        }
+        return all;
+    }
+
+    // ── Sync Customers ───────────────────────────────────────────────────────
+    private async Task SyncCustomersAsync()
+    {
+        syncingCustomers = true;
+        customerSyncResult = null;
+
+        try
+        {
+            var companyResult = await CompanyApi.GetCompanyAsync();
+            if (!companyResult.IsSuccess || companyResult.Value is null)
+            {
+                customerSyncResult = $"Could not load company: {companyResult.ErrorMessage}";
+                return;
+            }
+
+            var workitResult = await CustomersApi.GetCustomersAsync();
+            if (!workitResult.IsSuccess)
+            {
+                customerSyncResult = $"Could not load customers: {workitResult.ErrorMessage}";
+                return;
+            }
+
+            var bySsn = (workitResult.Value ?? [])
+                .Where(c => !string.IsNullOrWhiteSpace(c.Ssn) && c.Ssn != "0000000000")
+                .GroupBy(c => c.Ssn!)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var paydayList = await FetchAllPaydayCustomersAsync();
+            int created = 0, updated = 0, errors = 0;
+
+            foreach (var pc in paydayList)
+            {
+                if (string.IsNullOrWhiteSpace(pc.Ssn)) continue;
+
+                if (bySsn.TryGetValue(pc.Ssn, out var existing))
+                {
+                    existing.Name          = pc.Name          ?? existing.Name;
+                    existing.Email         = pc.Email         ?? existing.Email;
+                    existing.Phone         = pc.Phone         ?? existing.Phone;
+                    existing.ContactPerson = pc.Contact       ?? existing.ContactPerson;
+                    var r = await CustomersApi.UpdateCustomerAsync(existing);
+                    if (r.IsSuccess) updated++; else errors++;
+                }
+                else
+                {
+                    var r = await CustomersApi.CreateCustomerAsync(new Customer
+                    {
+                        CompanyId     = companyResult.Value.Id,
+                        Name          = pc.Name    ?? string.Empty,
+                        Ssn           = pc.Ssn,
+                        Email         = pc.Email   ?? string.Empty,
+                        Phone         = pc.Phone   ?? string.Empty,
+                        ContactPerson = pc.Contact ?? string.Empty
+                    });
+                    if (r.IsSuccess) created++; else errors++;
+                }
+            }
+
+            customerSyncResult = $"✓ {created} created, {updated} updated"
+                + (errors > 0 ? $", {errors} errors" : string.Empty);
+        }
+        finally
+        {
+            syncingCustomers = false;
+        }
+    }
+
+    // ── Sync Employees ───────────────────────────────────────────────────────
+    private async Task SyncEmployeesAsync()
+    {
+        syncingEmployees = true;
+        employeeSyncResult = null;
+        createdEmployees.Clear();
+
+        try
+        {
+            var companyResult = await CompanyApi.GetCompanyAsync();
+            if (!companyResult.IsSuccess || companyResult.Value is null)
+            {
+                employeeSyncResult = $"Could not load company: {companyResult.ErrorMessage}";
+                return;
+            }
+
+            var paydayResult = await PaydayEmployeesApi.GetAllAsync();
+            if (!paydayResult.IsSuccess)
+            {
+                employeeSyncResult = $"Could not load Payday employees: {paydayResult.ErrorMessage}";
+                return;
+            }
+
+            var workitResult = await EmployeesApi.GetEmployeesAsync();
+            if (!workitResult.IsSuccess)
+            {
+                employeeSyncResult = $"Could not load employees: {workitResult.ErrorMessage}";
+                return;
+            }
+
+            var bySsn = (workitResult.Value ?? [])
+                .Where(e => !string.IsNullOrWhiteSpace(e.Ssn) && e.Ssn != "0000000000")
+                .GroupBy(e => e.Ssn!)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            int updated = 0, created = 0, skipped = 0, errors = 0;
+
+            foreach (var pe in paydayResult.Value ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(pe.Ssn)) continue;
+
+                if (bySsn.TryGetValue(pe.Ssn, out var existing))
+                {
+                    existing.DisplayName = pe.Name   ?? existing.DisplayName;
+                    existing.Email       = pe.Email  ?? existing.Email;
+                    existing.Phone       = pe.Mobile ?? existing.Phone;
+                    var r = await EmployeesApi.UpdateEmployeeAsync(existing);
+                    if (r.IsSuccess) updated++; else errors++;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(pe.Email))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    var password = GeneratePassword();
+                    var r = await EmployeesApi.CreateEmployeeAsync(new CreateEmployeeUserRequest
+                    {
+                        Employee = new Employee
+                        {
+                            CompanyId     = companyResult.Value.Id,
+                            DisplayName   = pe.Name    ?? pe.Email,
+                            Trade         = "General",
+                            Ssn           = pe.Ssn,
+                            Email         = pe.Email,
+                            Phone         = pe.Mobile  ?? string.Empty,
+                            ContactPerson = pe.Name    ?? pe.Email
+                        },
+                        Password = password
+                    });
+
+                    if (r.IsSuccess)
+                    {
+                        created++;
+                        createdEmployees.Add(new CreatedEmployeeRow
+                        {
+                            Name     = pe.Name ?? pe.Email,
+                            Email    = pe.Email,
+                            Password = password
+                        });
+                    }
+                    else
+                    {
+                        errors++;
+                    }
+                }
+            }
+
+            employeeSyncResult = $"✓ {updated} updated, {created} created"
+                + (skipped > 0 ? $", {skipped} skipped (no email)" : string.Empty)
+                + (errors   > 0 ? $", {errors} errors"             : string.Empty);
+        }
+        finally
+        {
+            syncingEmployees = false;
+        }
+    }
+
+    private static string GeneratePassword()
+    {
+        var raw = Guid.NewGuid().ToString("N"); // 32 lowercase hex chars
+        return char.ToUpper(raw[0]) + raw[1..9] + "!1";
+    }
+
+    // ── Timesheet Preview ────────────────────────────────────────────────────
+    private async Task LoadTimesheetPreviewAsync()
+    {
+        if (timesheetFrom is null || timesheetTo is null) return;
+
+        loadingTimesheet = true;
+        timesheetError = null;
+        timesheetUploadResult = null;
+        timesheetRows.Clear();
+
+        try
+        {
+            var from = DateOnly.FromDateTime(timesheetFrom.Value);
+            var to   = DateOnly.FromDateTime(timesheetTo.Value);
+
+            var entriesResult   = await TimeEntriesApi.GetTimeEntriesAsync(from, to);
+            var employeesResult = await EmployeesApi.GetEmployeesAsync();
+            var jobsResult      = await JobsApi.GetJobsAsync();
+
+            if (!entriesResult.IsSuccess)   { timesheetError = entriesResult.ErrorMessage;   return; }
+            if (!employeesResult.IsSuccess) { timesheetError = employeesResult.ErrorMessage; return; }
+            if (!jobsResult.IsSuccess)      { timesheetError = jobsResult.ErrorMessage;      return; }
+
+            var employeeMap = (employeesResult.Value ?? []).ToDictionary(e => e.Id);
+            var jobMap      = (jobsResult.Value      ?? []).ToDictionary(j => j.Id);
+
+            var rows = (entriesResult.Value ?? [])
+                .GroupBy(e => e.EmployeeId)
+                .SelectMany(empGroup =>
+                {
+                    var emp = employeeMap.GetValueOrDefault(empGroup.Key);
+                    return empGroup.GroupBy(e => e.JobId).Select(jobGroup =>
+                    {
+                        var job = jobMap.GetValueOrDefault(jobGroup.Key);
+                        return new TimesheetPreviewRow
+                        {
+                            EmployeeName = emp?.DisplayName ?? empGroup.Key.ToString(),
+                            EmployeeSsn  = emp?.Ssn         ?? string.Empty,
+                            JobName      = job?.Name        ?? jobGroup.Key.ToString(),
+                            Hours        = (double)jobGroup.Sum(e => e.Hours)
+                        };
+                    });
+                });
+
+            timesheetRows.AddRange(rows);
+
+            if (timesheetRows.Count == 0)
+                timesheetError = "No time entries found for the selected period.";
+        }
+        finally
+        {
+            loadingTimesheet = false;
+        }
+    }
+
+    // ── Upload Timesheet ─────────────────────────────────────────────────────
+    private async Task UploadTimesheetAsync()
+    {
+        uploadingTimesheet = true;
+        timesheetUploadResult = null;
+
+        try
+        {
+            var payload = timesheetRows
+                .GroupBy(r => r.EmployeeSsn)
+                .Select(g => new TimesheetEntry
+                {
+                    Ssn   = g.Key,
+                    Name  = g.First().EmployeeName,
+                    Items = g.Select(r => new TimesheetItem
+                    {
+                        Name     = r.JobName,
+                        Quantity = r.Hours
+                    }).ToList()
+                }).ToList();
+
+            var result = await PaydayPayrollApi.UploadTimesheetAsync(payload);
+
+            timesheetUploadResult = result.IsSuccess
+                ? $"✓ Uploaded successfully ({payload.Count} employees)"
+                : $"Upload failed: {result.ErrorMessage}";
+        }
+        finally
+        {
+            uploadingTimesheet = false;
+        }
+    }
+}
