@@ -64,7 +64,14 @@ h1:focus {
     padding: 1rem;
     display: grid;
     gap: 0.75rem;
-    overflow: visible;
+}
+
+/* FluentCard renders an inner .fluent-card-minimal-style div with contain:content which clips
+   dropdowns and date-picker calendars. AreaRestricted="false" removes it on individual cards,
+   but this override is a safety net for any card we missed. */
+.fluent-card-minimal-style {
+    contain: none !important;
+    overflow: visible !important;
 }
 
 .admin-row {

@@ -6,7 +6,7 @@
 
 <PageTitle>Jobs</PageTitle>
 
-<FluentCard Class="admin-card">
+<FluentCard Class="admin-card" AreaRestricted="false">
     <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
 
     @if (company is null)
@@ -38,7 +38,7 @@
 
     @if (editingJob is not null)
     {
-        <FluentCard Class="admin-card">
+        <FluentCard Class="admin-card" AreaRestricted="false">
             <FluentLabel Typo="Typography.PaneHeader">Edit Job</FluentLabel>
             <div class="admin-grid">
                 <FluentSelect TValue="string" TOption="string" @bind-Value="editingCustomerId">
