@@ -262,6 +262,9 @@ Generated_Code/
 # Local dev runtime files
 .workit-dev/
 
+# Local development secrets (use env vars in production)
+**/appsettings.Development.json
+
 # to a newer Visual Studio version. Backup files are not needed,
 # because we have git ;-)
 _UpgradeReport_Files/
