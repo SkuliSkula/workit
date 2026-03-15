@@ -1,11 +1,14 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Workit.Shared.Api;
 
 namespace Workit.Shared.Payday;
 
 public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, IPaydayTokenService tokenService)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     protected async Task<ApiResult<T>> GetAsync<T>(string requestUri, string defaultErrorMessage)
     {
         try
@@ -17,12 +20,21 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             if (!response.IsSuccessStatusCode)
                 return ApiResult<T>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
 
-            var value = await response.Content.ReadFromJsonAsync<T>();
-            return ApiResult<T>.Success(value);
+            var json = await response.Content.ReadAsStringAsync();
+            try
+            {
+                var value = JsonSerializer.Deserialize<T>(json, JsonOptions);
+                return ApiResult<T>.Success(value);
+            }
+            catch (JsonException ex)
+            {
+                var preview = json.Length > 300 ? json[..300] + "…" : json;
+                return ApiResult<T>.Failure($"Parse error: {ex.Message} | Response: {preview}");
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return ApiResult<T>.Failure(defaultErrorMessage);
+            return ApiResult<T>.Failure($"{defaultErrorMessage} ({ex.Message})");
         }
     }
 
@@ -37,12 +49,21 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             if (!response.IsSuccessStatusCode)
                 return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
 
-            var value = await response.Content.ReadFromJsonAsync<TResponse>();
-            return ApiResult<TResponse>.Success(value);
+            var json = await response.Content.ReadAsStringAsync();
+            try
+            {
+                var value = JsonSerializer.Deserialize<TResponse>(json, JsonOptions);
+                return ApiResult<TResponse>.Success(value);
+            }
+            catch (JsonException ex)
+            {
+                var preview = json.Length > 300 ? json[..300] + "…" : json;
+                return ApiResult<TResponse>.Failure($"Parse error: {ex.Message} | Response: {preview}");
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return ApiResult<TResponse>.Failure(defaultErrorMessage);
+            return ApiResult<TResponse>.Failure($"{defaultErrorMessage} ({ex.Message})");
         }
     }
 
@@ -57,12 +78,21 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             if (!response.IsSuccessStatusCode)
                 return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
 
-            var value = await response.Content.ReadFromJsonAsync<TResponse>();
-            return ApiResult<TResponse>.Success(value);
+            var json = await response.Content.ReadAsStringAsync();
+            try
+            {
+                var value = JsonSerializer.Deserialize<TResponse>(json, JsonOptions);
+                return ApiResult<TResponse>.Success(value);
+            }
+            catch (JsonException ex)
+            {
+                var preview = json.Length > 300 ? json[..300] + "…" : json;
+                return ApiResult<TResponse>.Failure($"Parse error: {ex.Message} | Response: {preview}");
+            }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return ApiResult<TResponse>.Failure(defaultErrorMessage);
+            return ApiResult<TResponse>.Failure($"{defaultErrorMessage} ({ex.Message})");
         }
     }
 
@@ -82,6 +112,26 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
         catch (Exception)
         {
             return ApiResult<bool>.Failure(defaultErrorMessage);
+        }
+    }
+
+    protected async Task<ApiResult<byte[]>> GetBytesAsync(string requestUri, string defaultErrorMessage)
+    {
+        try
+        {
+            var client = httpClientFactory.CreateClient("PaydayApi");
+            using var request = await CreateRequestAsync(HttpMethod.Get, requestUri);
+            using var response = await client.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+                return ApiResult<byte[]>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            return ApiResult<byte[]>.Success(bytes);
+        }
+        catch (Exception)
+        {
+            return ApiResult<byte[]>.Failure(defaultErrorMessage);
         }
     }
 

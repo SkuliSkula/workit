@@ -1,0 +1,799 @@
+@page "/payday/invoices"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPaydayInvoicesApi InvoicesApi
+@inject IPaydayCustomersApi CustomersApi
+@inject IJSRuntime JS
+
+<PageTitle>Payday Invoices</PageTitle>
+
+@* ── Header + filters ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Payday Invoices</FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+            @(showCreateForm ? "✕ Cancel" : "+ New Invoice")
+        </FluentButton>
+    </div>
+
+    <div class="admin-grid" style="margin-top:0.75rem;">
+        <FluentDatePicker @bind-Value="filterFrom" Label="From" />
+        <FluentDatePicker @bind-Value="filterTo"   Label="To" />
+        <div>
+            <FluentLabel>Status</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterStatus" style="width:100%">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                <FluentOption TOption="string" Value="SENT">Sent</FluentOption>
+                <FluentOption TOption="string" Value="PAID">Paid</FluentOption>
+                <FluentOption TOption="string" Value="DRAFT">Draft</FluentOption>
+                <FluentOption TOption="string" Value="CANCELLED">Cancelled</FluentOption>
+                <FluentOption TOption="string" Value="CREDIT">Credit</FluentOption>
+            </FluentSelect>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadInvoicesAsync" Disabled="@isLoading">
+                @(isLoading ? "Loading…" : "Load")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Create form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Invoice</strong></FluentLabel>
+
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Customer <span style="color:red">*</span></FluentLabel>
+                @if (paydayCustomers.Count > 0)
+                {
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="formCustomerId" style="width:100%">
+                        <FluentOption TOption="string" Value="">— Select customer —</FluentOption>
+                        @foreach (var c in paydayCustomers)
+                        {
+                            <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
+                        }
+                    </FluentSelect>
+                }
+                else
+                {
+                    <FluentLabel>Loading customers…</FluentLabel>
+                }
+            </div>
+
+            <div style="grid-column: span 2">
+                <FluentLabel>Description</FluentLabel>
+                <FluentTextField @bind-Value="formDescription" Placeholder="Invoice description (optional)" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Invoice Date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="formInvoiceDate" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Due Date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="formDueDate" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Final Due Date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="formFinalDueDate" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Currency <span style="color:red">*</span></FluentLabel>
+                <FluentSelect TValue="string" TOption="string" @bind-Value="formCurrencyCode" style="width:100%">
+                    <FluentOption TOption="string" Value="ISK">ISK</FluentOption>
+                    <FluentOption TOption="string" Value="EUR">EUR</FluentOption>
+                    <FluentOption TOption="string" Value="USD">USD</FluentOption>
+                    <FluentOption TOption="string" Value="GBP">GBP</FluentOption>
+                    <FluentOption TOption="string" Value="DKK">DKK</FluentOption>
+                </FluentSelect>
+            </div>
+
+            <div>
+                <FluentLabel>Status</FluentLabel>
+                <FluentSelect TValue="string" TOption="string" @bind-Value="formStatus" style="width:100%">
+                    <FluentOption TOption="string" Value="SENT">Send immediately</FluentOption>
+                    <FluentOption TOption="string" Value="DRAFT">Save as draft</FluentOption>
+                </FluentSelect>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:2rem; margin-top:0.5rem; flex-wrap:wrap;">
+            <FluentCheckbox @bind-Value="formSendEmail" Label="Send email to customer" />
+            <FluentCheckbox @bind-Value="formCreateClaim" Label="Create claim in internet bank" />
+        </div>
+
+        @* ── Lines ── *@
+        <div style="margin-top:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <FluentLabel><strong>Lines</strong></FluentLabel>
+                <FluentButton Appearance="Appearance.Outline" @onclick="AddLine">+ Add line</FluentButton>
+            </div>
+
+            @for (var i = 0; i < formLines.Count; i++)
+            {
+                var idx = i;
+                var line = formLines[idx];
+                <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
+                    <div>
+                        <FluentLabel>Description</FluentLabel>
+                        <FluentTextField @bind-Value="line.Description" Placeholder="Description" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>Qty</FluentLabel>
+                        <FluentNumberField TValue="int" @bind-Value="line.Quantity" Min="1" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>Unit price (ex VAT)</FluentLabel>
+                        <FluentNumberField TValue="decimal" @bind-Value="line.UnitPrice" Min="0" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>VAT %</FluentLabel>
+                        <FluentSelect TValue="string" TOption="string"
+                                      Value="@line.VatPercentage.ToString()"
+                                      ValueChanged="@(v => line.VatPercentage = decimal.TryParse(v, out var d) ? d : 24m)"
+                                      style="width:100%">
+                            <FluentOption TOption="string" Value="0">0%</FluentOption>
+                            <FluentOption TOption="string" Value="11">11%</FluentOption>
+                            <FluentOption TOption="string" Value="24">24%</FluentOption>
+                        </FluentSelect>
+                    </div>
+                    <div>
+                        <FluentLabel>Disc %</FluentLabel>
+                        <FluentNumberField TValue="decimal" @bind-Value="line.DiscountPercentage" Min="0" Max="100" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => RemoveLine(idx))"
+                                      Disabled="@(formLines.Count == 1)"
+                                      title="Remove line">✕</FluentButton>
+                    </div>
+                </div>
+            }
+
+            @* Line totals preview *@
+            @if (formLines.Count > 0)
+            {
+                var previewTotal = formLines.Sum(l =>
+                    l.Quantity * l.UnitPrice * (1 - l.DiscountPercentage / 100m) * (1 + l.VatPercentage / 100m));
+                <div style="text-align:right; margin-top:0.4rem; font-size:0.85rem;">
+                    Est. total incl. VAT: <strong>@previewTotal.ToString("N0") @formCurrencyCode</strong>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@formError</FluentLabel>
+        }
+
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateInvoiceAsync"
+                          Disabled="@(!CanCreate || saving)">
+                @(saving ? "Creating…" : "Create Invoice")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Invoice list ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+
+    @if (isLoading)
+    {
+        <div style="display:flex; align-items:center; gap:0.75rem; padding:1rem 0;">
+            <FluentProgressRing />
+            <FluentLabel>Loading invoices…</FluentLabel>
+        </div>
+    }
+    else if (DisplayedInvoices.Count > 0)
+    {
+        <div style="font-size:0.8rem; color:var(--neutral-foreground-hint-rest); margin-bottom:0.4rem;">
+            Showing @DisplayedInvoices.Count of @invoices.Count loaded
+            @(totalInvoices > 0 ? $"(total in Payday: {totalInvoices})" : string.Empty)
+        </div>
+
+        <FluentDataGrid TGridItem="PaydayInvoice" Items="@DisplayedInvoices.AsQueryable()"
+                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+
+            <PropertyColumn Property="@(x => x.Number)"  Title="#" Sortable="true" />
+
+            <TemplateColumn Title="Customer">
+                <FluentLabel>@(context.Customer?.Name ?? "—")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Status">
+                <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                    @context.Status
+                </span>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Invoice Date">
+                <FluentLabel>@context.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Due Date">
+                <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Amount" Align="Align.End">
+                <FluentLabel>@context.AmountIncludingVat.ToString("N0") @context.CurrencyCode</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Actions" Align="Align.End">
+                <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  @onclick="@(() => ToggleDetail(context))"
+                                  title="View details">
+                        @(selectedInvoice?.Id == context.Id ? "▲ Close" : "▼ View")
+                    </FluentButton>
+
+                    @if (context.Status is "SENT" or "DRAFT")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => BeginMarkPaid(context))"
+                                      title="Mark as paid">✓ Paid</FluentButton>
+                    }
+
+                    @if (context.Status is "SENT" or "DRAFT")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => CancelInvoiceAsync(context))"
+                                      Disabled="@(cancelling && cancellingId == context.Id)"
+                                      title="Cancel invoice">Cancel</FluentButton>
+                    }
+
+                    @if (context.Status == "DRAFT")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => DeleteInvoiceAsync(context))"
+                                      title="Delete draft">Delete</FluentButton>
+                    }
+
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  @onclick="@(() => DownloadPdfAsync(context))"
+                                  Disabled="@(downloadingPdfId == context.Id.ToString())"
+                                  title="Download PDF">PDF</FluentButton>
+                </div>
+            </TemplateColumn>
+        </FluentDataGrid>
+
+        @if (invoices.Count < totalInvoices)
+        {
+            <div style="margin-top:0.75rem; display:flex; align-items:center; gap:0.75rem;">
+                <FluentButton Appearance="Appearance.Outline" @onclick="LoadMoreAsync" Disabled="@loadingMore">
+                    @(loadingMore ? "Loading…" : $"Load more ({totalInvoices - invoices.Count} remaining)")
+                </FluentButton>
+            </div>
+        }
+    }
+    else if (!isLoading)
+    {
+        <FluentLabel>No invoices found for the selected period and filters.</FluentLabel>
+    }
+
+    @* ── Action feedback ── *@
+    @if (!string.IsNullOrWhiteSpace(actionResult))
+    {
+        <FluentLabel style="margin-top:0.5rem;">@actionResult</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(actionError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@actionError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Mark Paid panel ── *@
+@if (markPaidInvoice is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Mark Invoice #@markPaidInvoice.Number as Paid</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <FluentDatePicker @bind-Value="markPaidDate" Label="Payment date" />
+            <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmMarkPaidAsync" Disabled="@markingPaid">
+                    @(markingPaid ? "Saving…" : "Confirm")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelMarkPaid">Cancel</FluentButton>
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(markPaidError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.4rem;">@markPaidError</FluentLabel>
+        }
+    </FluentCard>
+}
+
+@* ── Invoice detail ── *@
+@if (selectedInvoice is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <FluentLabel Typo="Typography.Body">
+                <strong>Invoice #@selectedInvoice.Number</strong>
+                <span style="@StatusStyle(selectedInvoice.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                    @selectedInvoice.Status
+                </span>
+            </FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ClearSelected">✕ Close</FluentButton>
+        </div>
+
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Customer</FluentLabel>
+                <FluentLabel><strong>@(selectedInvoice.Customer?.Name ?? "—")</strong></FluentLabel>
+            </div>
+            @if (selectedInvoice.Payor?.Id != selectedInvoice.Customer?.Id && selectedInvoice.Payor is not null)
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Payor</FluentLabel>
+                    <FluentLabel><strong>@selectedInvoice.Payor.Name</strong></FluentLabel>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(selectedInvoice.Description))
+            {
+                <div style="grid-column:span 2">
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Description</FluentLabel>
+                    <FluentLabel>@selectedInvoice.Description</FluentLabel>
+                </div>
+            }
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Invoice date</FluentLabel>
+                <FluentLabel>@selectedInvoice.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </div>
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
+                <FluentLabel>@selectedInvoice.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </div>
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
+                <FluentLabel>@selectedInvoice.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </div>
+            @if (selectedInvoice.PaidDate.HasValue)
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
+                    <FluentLabel>@selectedInvoice.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </div>
+            }
+            @if (selectedInvoice.SentDate.HasValue)
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Sent</FluentLabel>
+                    <FluentLabel>@selectedInvoice.SentDate?.ToString("dd MMM yyyy HH:mm")</FluentLabel>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(selectedInvoice.VatNumber))
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT number</FluentLabel>
+                    <FluentLabel>@selectedInvoice.VatNumber</FluentLabel>
+                </div>
+            }
+        </div>
+
+        @* ── Lines table ── *@
+        @if (selectedInvoice.Lines is { Count: > 0 })
+        {
+            <div style="margin-top:1rem;">
+                <FluentLabel><strong>Lines</strong></FluentLabel>
+                <FluentDataGrid TGridItem="PaydayInvoiceLine" Items="@selectedInvoice.Lines.AsQueryable()"
+                                AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
+                    <PropertyColumn Property="@(x => x.Position)"    Title="#" />
+                    <PropertyColumn Property="@(x => x.Description)" Title="Description" />
+                    <PropertyColumn Property="@(x => x.Comment)"     Title="Comment" />
+                    <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty"  Format="0.##" />
+                    <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
+                        <FluentLabel>@context.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
+                        <FluentLabel>@context.UnitPriceIncludingVat.ToString("N0")</FluentLabel>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
+                    <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
+                </FluentDataGrid>
+            </div>
+        }
+
+        @* ── Totals ── *@
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
+            <div>Amount ex VAT: <strong>@selectedInvoice.AmountExcludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+            <div>VAT: <strong>@selectedInvoice.AmountVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+            <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedInvoice.AmountIncludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(detailError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
+        }
+    </FluentCard>
+}
+
+@code {
+
+    // ── Lookups ───────────────────────────────────────────────────────────────
+    private readonly List<PaydayCustomer> paydayCustomers = [];
+
+    // ── List state ────────────────────────────────────────────────────────────
+    private readonly List<PaydayInvoice> invoices = [];
+    private bool isLoading;
+    private bool loadingMore;
+    private int totalInvoices;
+    private int currentPage = 1;
+    private const int PerPage = 50;
+
+    private DateTime? filterFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? filterTo   = DateTime.Today;
+    private string    filterStatus = string.Empty;
+    private string?   loadError;
+
+    private IList<PaydayInvoice> DisplayedInvoices =>
+        string.IsNullOrWhiteSpace(filterStatus)
+            ? invoices
+            : invoices.Where(i => i.Status == filterStatus).ToList();
+
+    // ── Action feedback ───────────────────────────────────────────────────────
+    private string? actionResult;
+    private string? actionError;
+
+    // ── Create form state ─────────────────────────────────────────────────────
+    private bool    showCreateForm;
+    private string  formCustomerId    = string.Empty;
+    private string  formDescription   = string.Empty;
+    private DateTime? formInvoiceDate = DateTime.Today;
+    private DateTime? formDueDate     = DateTime.Today.AddDays(14);
+    private DateTime? formFinalDueDate = DateTime.Today.AddDays(30);
+    private string  formCurrencyCode  = "ISK";
+    private string  formStatus        = "SENT";
+    private bool    formSendEmail;
+    private bool    formCreateClaim;
+    private bool    saving;
+    private string? formError;
+
+    private readonly List<LineForm> formLines = [new LineForm()];
+
+    private bool CanCreate =>
+        Guid.TryParse(formCustomerId, out _) &&
+        formInvoiceDate is not null &&
+        formDueDate     is not null &&
+        formFinalDueDate is not null &&
+        formLines.All(l => !string.IsNullOrWhiteSpace(l.Description) && l.Quantity > 0 && l.UnitPrice > 0);
+
+    private sealed class LineForm
+    {
+        public string  Description       { get; set; } = string.Empty;
+        public int     Quantity          { get; set; } = 1;
+        public decimal UnitPrice         { get; set; }
+        public decimal VatPercentage     { get; set; } = 24m;
+        public decimal DiscountPercentage { get; set; }
+        public string  Comment           { get; set; } = string.Empty;
+    }
+
+    // ── Mark paid state ───────────────────────────────────────────────────────
+    private PaydayInvoice? markPaidInvoice;
+    private DateTime?      markPaidDate = DateTime.Today;
+    private bool           markingPaid;
+    private string?        markPaidError;
+
+    // ── Cancel / delete state ─────────────────────────────────────────────────
+    private bool  cancelling;
+    private Guid  cancellingId;
+    private string? downloadingPdfId;
+
+    // ── Detail state ──────────────────────────────────────────────────────────
+    private PaydayInvoice? selectedInvoice;
+    private string?        detailError;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        var customersTask = CustomersApi.GetAllAsync(page: 1, perPage: 200);
+        var invoicesTask  = FetchPageAsync(page: 1, append: false);
+        await Task.WhenAll(customersTask, invoicesTask);
+
+        var cr = await customersTask;
+        if (cr.IsSuccess)
+            paydayCustomers.AddRange(cr.Value?.Customers ?? []);
+    }
+
+    // ── Load ──────────────────────────────────────────────────────────────────
+    private async Task LoadInvoicesAsync()
+    {
+        currentPage = 1;
+        await FetchPageAsync(page: 1, append: false);
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        loadingMore = true;
+        try
+        {
+            currentPage++;
+            await FetchPageAsync(page: currentPage, append: true);
+        }
+        finally
+        {
+            loadingMore = false;
+        }
+    }
+
+    private async Task FetchPageAsync(int page, bool append)
+    {
+        if (!append)
+        {
+            isLoading  = true;
+            loadError  = null;
+            invoices.Clear();
+            selectedInvoice = null;
+        }
+
+        try
+        {
+            var from = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : null;
+            var to   = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : null;
+
+            var result = await InvoicesApi.GetAllAsync(
+                page:    page,
+                perPage: PerPage,
+                include: "lines",
+                dateFrom: from,
+                dateTo:   to);
+
+            if (!result.IsSuccess)
+            {
+                loadError = result.ErrorMessage;
+                return;
+            }
+
+            if (result.Value is not null)
+            {
+                invoices.AddRange(result.Value.Invoices);
+                totalInvoices = result.Value.Total;
+            }
+        }
+        finally
+        {
+            if (!append) isLoading = false;
+        }
+    }
+
+    // ── Create ────────────────────────────────────────────────────────────────
+    private void ToggleCreateForm()
+    {
+        showCreateForm = !showCreateForm;
+        formError      = null;
+    }
+
+    private void AddLine()    => formLines.Add(new LineForm());
+    private void RemoveLine(int idx) { if (formLines.Count > 1) formLines.RemoveAt(idx); }
+
+    private async Task CreateInvoiceAsync()
+    {
+        if (!Guid.TryParse(formCustomerId, out var custId)) return;
+        if (formInvoiceDate is null || formDueDate is null || formFinalDueDate is null) return;
+
+        saving    = true;
+        formError = null;
+
+        try
+        {
+            var request = new CreateInvoiceRequest
+            {
+                Customer      = new InvoiceCustomerRef { Id = custId },
+                Description   = string.IsNullOrWhiteSpace(formDescription) ? null : formDescription.Trim(),
+                InvoiceDate   = formInvoiceDate.Value.ToString("yyyy-MM-dd"),
+                DueDate       = formDueDate.Value.ToString("yyyy-MM-dd"),
+                FinalDueDate  = formFinalDueDate.Value.ToString("yyyy-MM-dd"),
+                CurrencyCode  = formCurrencyCode,
+                SendEmail     = formSendEmail  ? true : null,
+                CreateClaim   = formCreateClaim ? true : null,
+                Status        = formStatus == "DRAFT" ? "DRAFT" : null,
+                Lines         = formLines.Select(l => new CreateInvoiceLineRequest
+                {
+                    Description           = l.Description.Trim(),
+                    Comment               = string.IsNullOrWhiteSpace(l.Comment) ? null : l.Comment.Trim(),
+                    Quantity              = l.Quantity,
+                    UnitPriceExcludingVat = l.UnitPrice,
+                    VatPercentage         = l.VatPercentage,
+                    DiscountPercentage    = l.DiscountPercentage
+                }).ToList()
+            };
+
+            var result = await InvoicesApi.CreateAsync(request);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                showCreateForm = false;
+                ResetCreateForm();
+                actionResult = $"✓ Invoice #{result.Value.Number} created.";
+                actionError  = null;
+                await LoadInvoicesAsync();
+            }
+            else
+            {
+                formError = result.ErrorMessage ?? "Invoice could not be created.";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void ResetCreateForm()
+    {
+        formCustomerId     = string.Empty;
+        formDescription    = string.Empty;
+        formInvoiceDate    = DateTime.Today;
+        formDueDate        = DateTime.Today.AddDays(14);
+        formFinalDueDate   = DateTime.Today.AddDays(30);
+        formCurrencyCode   = "ISK";
+        formStatus         = "SENT";
+        formSendEmail      = false;
+        formCreateClaim    = false;
+        formLines.Clear();
+        formLines.Add(new LineForm());
+    }
+
+    // ── Detail ────────────────────────────────────────────────────────────────
+    private async Task ToggleDetail(PaydayInvoice invoice)
+    {
+        if (selectedInvoice?.Id == invoice.Id)
+        {
+            selectedInvoice = null;
+            return;
+        }
+
+        detailError = null;
+        // Reload with payments included for the full detail view
+        var result = await InvoicesApi.GetByIdAsync(invoice.Id.ToString(), "lines,payments");
+        if (result.IsSuccess)
+            selectedInvoice = result.Value;
+        else
+        {
+            detailError     = result.ErrorMessage;
+            selectedInvoice = invoice; // fall back to list data
+        }
+    }
+
+    private void ClearSelected() => selectedInvoice = null;
+
+    // ── Mark Paid ─────────────────────────────────────────────────────────────
+    private void BeginMarkPaid(PaydayInvoice invoice)
+    {
+        markPaidInvoice = invoice;
+        markPaidDate    = DateTime.Today;
+        markPaidError   = null;
+        selectedInvoice = null;
+    }
+
+    private void CancelMarkPaid() => markPaidInvoice = null;
+
+    private async Task ConfirmMarkPaidAsync()
+    {
+        if (markPaidInvoice is null || markPaidDate is null) return;
+
+        markingPaid   = true;
+        markPaidError = null;
+
+        try
+        {
+            var result = await InvoicesApi.UpdateAsync(
+                markPaidInvoice.Id.ToString(),
+                new UpdateInvoiceRequest
+                {
+                    Status   = "PAID",
+                    PaidDate = markPaidDate.Value.ToString("yyyy-MM-dd")
+                });
+
+            if (result.IsSuccess)
+            {
+                actionResult    = $"✓ Invoice #{markPaidInvoice.Number} marked as paid.";
+                actionError     = null;
+                markPaidInvoice = null;
+                await LoadInvoicesAsync();
+            }
+            else
+            {
+                markPaidError = result.ErrorMessage ?? "Could not mark invoice as paid.";
+            }
+        }
+        finally
+        {
+            markingPaid = false;
+        }
+    }
+
+    // ── Cancel ────────────────────────────────────────────────────────────────
+    private async Task CancelInvoiceAsync(PaydayInvoice invoice)
+    {
+        cancelling    = true;
+        cancellingId  = invoice.Id;
+        actionError   = null;
+
+        try
+        {
+            var result = await InvoicesApi.UpdateAsync(
+                invoice.Id.ToString(),
+                new UpdateInvoiceRequest { Status = "CANCELLED" });
+
+            if (result.IsSuccess)
+            {
+                actionResult = $"✓ Invoice #{invoice.Number} cancelled.";
+                if (selectedInvoice?.Id == invoice.Id) selectedInvoice = null;
+                await LoadInvoicesAsync();
+            }
+            else
+            {
+                actionError = result.ErrorMessage ?? "Could not cancel invoice.";
+            }
+        }
+        finally
+        {
+            cancelling   = false;
+            cancellingId = Guid.Empty;
+        }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    private async Task DeleteInvoiceAsync(PaydayInvoice invoice)
+    {
+        actionError = null;
+        var result  = await InvoicesApi.DeleteAsync(invoice.Id.ToString());
+        if (result.IsSuccess)
+        {
+            actionResult = $"✓ Invoice #{invoice.Number} deleted.";
+            if (selectedInvoice?.Id == invoice.Id) selectedInvoice = null;
+            await LoadInvoicesAsync();
+        }
+        else
+        {
+            actionError = result.ErrorMessage ?? "Could not delete invoice.";
+        }
+    }
+
+    // ── PDF Download ──────────────────────────────────────────────────────────
+    private async Task DownloadPdfAsync(PaydayInvoice invoice)
+    {
+        downloadingPdfId = invoice.Id.ToString();
+        actionError      = null;
+
+        try
+        {
+            var result = await InvoicesApi.GetPdfAsync(invoice.Id.ToString());
+            if (result.IsSuccess && result.Value is { Length: > 0 })
+            {
+                var base64   = Convert.ToBase64String(result.Value);
+                var filename = $"invoice-{invoice.Number}.pdf";
+                await JS.InvokeVoidAsync("triggerFileDownload", filename, base64, "application/pdf");
+            }
+            else
+            {
+                actionError = result.ErrorMessage ?? "PDF could not be downloaded.";
+            }
+        }
+        finally
+        {
+            downloadingPdfId = null;
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string StatusStyle(string status) => status switch
+    {
+        "SENT"      => "background:#dbeafe; color:#1d4ed8;",
+        "PAID"      => "background:#dcfce7; color:#15803d;",
+        "DRAFT"     => "background:#f3f4f6; color:#374151;",
+        "CANCELLED" => "background:#fee2e2; color:#b91c1c;",
+        "DELETED"   => "background:#fee2e2; color:#b91c1c;",
+        "CREDIT"    => "background:#fef3c7; color:#92400e;",
+        _           => "background:#f3f4f6; color:#374151;"
+    };
+}
