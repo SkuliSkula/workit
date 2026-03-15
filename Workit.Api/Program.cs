@@ -492,9 +492,10 @@ securedApi.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, HttpContext http
                 return Results.NotFound();
             }
 
-            existing.CustomerId = job.CustomerId;
-            existing.Code = job.Code.Trim();
-            existing.Name = job.Name.Trim();
+            existing.CustomerId  = job.CustomerId;
+            existing.Code        = job.Code.Trim();
+            existing.Name        = job.Name.Trim();
+            existing.BillingType = job.BillingType;
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(existing);

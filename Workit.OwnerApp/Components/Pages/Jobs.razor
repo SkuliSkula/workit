@@ -32,6 +32,13 @@
 
             <FluentTextField @bind-Value="newJobCode" Placeholder="Job code" />
             <FluentTextField @bind-Value="newJobName" Placeholder="Job name" />
+            <FluentSelect TValue="string" TOption="string"
+                          Value="@newBillingType.ToString()"
+                          ValueChanged="@(v => newBillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
+                          Label="Billing type">
+                <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
+                <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
+            </FluentSelect>
             <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync" Disabled="@(!HasSelectedCustomer)">Add Job</FluentButton>
         </div>
     }
@@ -49,6 +56,13 @@
                 </FluentSelect>
                 <FluentTextField @bind-Value="editingJob.Code" Placeholder="Job code" />
                 <FluentTextField @bind-Value="editingJob.Name" Placeholder="Job name" />
+                <FluentSelect TValue="string" TOption="string"
+                              Value="@editingJob.BillingType.ToString()"
+                              ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
+                              Label="Billing type">
+                    <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
+                    <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
+                </FluentSelect>
                 <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save Changes</FluentButton>
                 <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
             </div>
@@ -67,6 +81,11 @@
             <PropertyColumn Property="@(x => x.Name)" Title="Name" />
             <TemplateColumn Title="Customer">
                 <FluentLabel>@customerLookup.GetValueOrDefault(context.CustomerId, context.CustomerId.ToString())</FluentLabel>
+            </TemplateColumn>
+            <TemplateColumn Title="Billing">
+                <span style="@BillingBadgeStyle(context.BillingType) padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                    @(context.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
+                </span>
             </TemplateColumn>
             <TemplateColumn Title="Actions">
                 <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditJob(context))">Edit</FluentButton>
@@ -89,7 +108,12 @@
     private string? editingCustomerId;
     private string newJobCode = string.Empty;
     private string newJobName = string.Empty;
+    private BillingType newBillingType = BillingType.Hourly;
     private string? loadError;
+
+    private static string BillingBadgeStyle(BillingType type) => type == BillingType.Hourly
+        ? "background:#e8f4fd; color:#0078d4;"
+        : "background:#f0f9f0; color:#107c10;";
 
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
     private bool HasEditingCustomer => Guid.TryParse(editingCustomerId, out _);
@@ -156,16 +180,18 @@
 
         var result = await JobsApi.CreateJobAsync(new Job
         {
-            CompanyId = company.Id,
-            CustomerId = customerId,
-            Code = string.IsNullOrWhiteSpace(newJobCode) ? "JOB" : newJobCode.Trim(),
-            Name = newJobName.Trim()
+            CompanyId   = company.Id,
+            CustomerId  = customerId,
+            Code        = string.IsNullOrWhiteSpace(newJobCode) ? "JOB" : newJobCode.Trim(),
+            Name        = newJobName.Trim(),
+            BillingType = newBillingType
         });
 
         if (result.IsSuccess)
         {
-            newJobCode = string.Empty;
-            newJobName = string.Empty;
+            newJobCode    = string.Empty;
+            newJobName    = string.Empty;
+            newBillingType = BillingType.Hourly;
             await LoadAsync();
             return;
         }
@@ -177,11 +203,12 @@
     {
         editingJob = new Job
         {
-            Id = job.Id,
-            CompanyId = job.CompanyId,
-            CustomerId = job.CustomerId,
-            Code = job.Code,
-            Name = job.Name
+            Id          = job.Id,
+            CompanyId   = job.CompanyId,
+            CustomerId  = job.CustomerId,
+            Code        = job.Code,
+            Name        = job.Name,
+            BillingType = job.BillingType
         };
         editingCustomerId = job.CustomerId.ToString();
     }
