@@ -16,30 +16,53 @@
     else
     {
         <div class="admin-grid">
-            @if (customers.Count > 0)
-            {
-                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId">
-                    @foreach (var customer in customers)
-                    {
-                        <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
-                    }
-                </FluentSelect>
-            }
-            else
-            {
-                <FluentLabel>No customers available yet.</FluentLabel>
-            }
+            <div>
+                <FluentLabel>Customer</FluentLabel>
+                @if (customers.Count > 0)
+                {
+                    <FluentSelect TValue="string" TOption="string"
+                                  @bind-Value="selectedCustomerId"
+                                  style="width:100%">
+                        @foreach (var customer in customers)
+                        {
+                            <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+                        }
+                    </FluentSelect>
+                }
+                else
+                {
+                    <FluentLabel>No customers available yet.</FluentLabel>
+                }
+            </div>
 
-            <FluentTextField @bind-Value="newJobCode" Placeholder="Job code" />
-            <FluentTextField @bind-Value="newJobName" Placeholder="Job name" />
-            <FluentSelect TValue="string" TOption="string"
-                          Value="@newBillingType.ToString()"
-                          ValueChanged="@(v => newBillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
-                          Label="Billing type">
-                <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
-                <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
-            </FluentSelect>
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync" Disabled="@(!HasSelectedCustomer)">Add Job</FluentButton>
+            <div>
+                <FluentLabel>Job code</FluentLabel>
+                <FluentTextField @bind-Value="newJobCode"
+                                 Placeholder="e.g. HA-1"
+                                 style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Job name</FluentLabel>
+                <FluentTextField @bind-Value="newJobName"
+                                 Placeholder="e.g. Electrical installation"
+                                 style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Billing type</FluentLabel>
+                <FluentSelect TValue="string" TOption="string"
+                              Value="@newBillingType.ToString()"
+                              ValueChanged="@(v => newBillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
+                              style="width:100%">
+                    <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
+                    <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
+                </FluentSelect>
+            </div>
+
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync"
+                          Disabled="@(!HasSelectedCustomer)"
+                          style="align-self:end;">Add Job</FluentButton>
         </div>
     }
 
@@ -48,23 +71,47 @@
         <FluentCard Class="admin-card" AreaRestricted="false">
             <FluentLabel Typo="Typography.PaneHeader">Edit Job</FluentLabel>
             <div class="admin-grid">
-                <FluentSelect TValue="string" TOption="string" @bind-Value="editingCustomerId">
-                    @foreach (var customer in customers)
-                    {
-                        <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
-                    }
-                </FluentSelect>
-                <FluentTextField @bind-Value="editingJob.Code" Placeholder="Job code" />
-                <FluentTextField @bind-Value="editingJob.Name" Placeholder="Job name" />
-                <FluentSelect TValue="string" TOption="string"
-                              Value="@editingJob.BillingType.ToString()"
-                              ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
-                              Label="Billing type">
-                    <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
-                    <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
-                </FluentSelect>
-                <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save Changes</FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
+                <div>
+                    <FluentLabel>Customer</FluentLabel>
+                    <FluentSelect TValue="string" TOption="string"
+                                  @bind-Value="editingCustomerId"
+                                  style="width:100%">
+                        @foreach (var customer in customers)
+                        {
+                            <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+                        }
+                    </FluentSelect>
+                </div>
+
+                <div>
+                    <FluentLabel>Job code</FluentLabel>
+                    <FluentTextField @bind-Value="editingJob.Code"
+                                     Placeholder="e.g. HA-1"
+                                     style="width:100%" />
+                </div>
+
+                <div>
+                    <FluentLabel>Job name</FluentLabel>
+                    <FluentTextField @bind-Value="editingJob.Name"
+                                     Placeholder="e.g. Electrical installation"
+                                     style="width:100%" />
+                </div>
+
+                <div>
+                    <FluentLabel>Billing type</FluentLabel>
+                    <FluentSelect TValue="string" TOption="string"
+                                  Value="@editingJob.BillingType.ToString()"
+                                  ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
+                                  style="width:100%">
+                        <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
+                        <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
+                    </FluentSelect>
+                </div>
+
+                <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save Changes</FluentButton>
+                    <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
+                </div>
             </div>
         </FluentCard>
     }
