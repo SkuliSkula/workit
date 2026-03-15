@@ -295,7 +295,7 @@
 @if (markPaidInvoice is not null)
 {
     <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>Mark Invoice #@markPaidInvoice.Number as Paid</strong></FluentLabel>
+        <FluentLabel Typo="Typography.Body"><strong>Mark Invoice #@(markPaidInvoice.Number?.ToString() ?? "–") as Paid</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <FluentDatePicker @bind-Value="markPaidDate" Label="Payment date" />
             <div style="display:flex; align-items:flex-end; gap:0.5rem;">
@@ -318,7 +318,7 @@
     <FluentCard Class="admin-card" AreaRestricted="false">
         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
             <FluentLabel Typo="Typography.Body">
-                <strong>Invoice #@selectedInvoice.Number</strong>
+                <strong>Invoice #@(selectedInvoice.Number?.ToString() ?? "–")</strong>
                 <span style="@StatusStyle(selectedInvoice.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
                     @selectedInvoice.Status
                 </span>
@@ -612,7 +612,7 @@
             {
                 showCreateForm = false;
                 ResetCreateForm();
-                actionResult = $"✓ Invoice #{result.Value.Number} created.";
+                actionResult = $"✓ Invoice #{result.Value.Number?.ToString() ?? "–"} created.";
                 actionError  = null;
                 await LoadInvoicesAsync();
             }
@@ -695,7 +695,7 @@
 
             if (result.IsSuccess)
             {
-                actionResult    = $"✓ Invoice #{markPaidInvoice.Number} marked as paid.";
+                actionResult    = $"✓ Invoice #{markPaidInvoice.Number?.ToString() ?? "–"} marked as paid.";
                 actionError     = null;
                 markPaidInvoice = null;
                 await LoadInvoicesAsync();
@@ -726,7 +726,7 @@
 
             if (result.IsSuccess)
             {
-                actionResult = $"✓ Invoice #{invoice.Number} cancelled.";
+                actionResult = $"✓ Invoice #{invoice.Number?.ToString() ?? "–"} cancelled.";
                 if (selectedInvoice?.Id == invoice.Id) selectedInvoice = null;
                 await LoadInvoicesAsync();
             }
@@ -749,7 +749,7 @@
         var result  = await InvoicesApi.DeleteAsync(invoice.Id.ToString());
         if (result.IsSuccess)
         {
-            actionResult = $"✓ Invoice #{invoice.Number} deleted.";
+            actionResult = $"✓ Invoice #{invoice.Number?.ToString() ?? "–"} deleted.";
             if (selectedInvoice?.Id == invoice.Id) selectedInvoice = null;
             await LoadInvoicesAsync();
         }
@@ -771,7 +771,7 @@
             if (result.IsSuccess && result.Value is { Length: > 0 })
             {
                 var base64   = Convert.ToBase64String(result.Value);
-                var filename = $"invoice-{invoice.Number}.pdf";
+                var filename = $"invoice-{invoice.Number?.ToString() ?? invoice.Id.ToString()}.pdf";
                 await JS.InvokeVoidAsync("triggerFileDownload", filename, base64, "application/pdf");
             }
             else

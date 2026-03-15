@@ -7,7 +7,7 @@ public sealed class PaydayInvoice
     public PaydayCustomer? Payor            { get; set; }
     public string?   Description            { get; set; }
     public string?   Reference              { get; set; }
-    public int       Number                 { get; set; }
+    public int?      Number                 { get; set; }
 
     /// <summary>DRAFT | SENT | PAID | CANCELLED | CREDIT | DELETED</summary>
     public string    Status                 { get; set; } = string.Empty;
