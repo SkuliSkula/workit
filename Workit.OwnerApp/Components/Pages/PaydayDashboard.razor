@@ -1,0 +1,453 @@
+@page "/payday/dashboard"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPaydayInvoicesApi InvoicesApi
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Payday Dashboard</PageTitle>
+
+@* ── Header + period selector ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Mælaborð | Payday Dashboard</FluentLabel>
+        <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+            <FluentDatePicker @bind-Value="periodFrom" Label="Frá" />
+            <FluentDatePicker @bind-Value="periodTo"   Label="Til" />
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadDashboardAsync" Disabled="@isLoading">
+                @(isLoading ? "Hleður…" : "Uppfæra")
+            </FluentButton>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+</FluentCard>
+
+@if (isLoading)
+{
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-top:1rem;">
+        <FluentProgressRing />
+        <FluentLabel>Sæki gögn frá Payday…</FluentLabel>
+    </div>
+}
+else
+{
+    @* ── Row 1: Status + Outstanding ── *@
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+
+        @* Status summary *@
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body"><strong>Staða | Samtölur</strong></FluentLabel>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-top:1rem;">
+                <div class="dash-stat">
+                    <div class="dash-stat-label">Heildarupphæð</div>
+                    <div class="dash-stat-value">@FormatAmount(totalAmount)</div>
+                </div>
+                <div class="dash-stat">
+                    <div class="dash-stat-label">Innheimt</div>
+                    <div class="dash-stat-value" style="color:#2e7d32;">@FormatAmount(collectedAmount)</div>
+                </div>
+                <div class="dash-stat">
+                    <div class="dash-stat-label">Óinnheimt</div>
+                    <div class="dash-stat-value" style="color:#f57c00;">@FormatAmount(unpaidAmount)</div>
+                </div>
+                <div class="dash-stat">
+                    <div class="dash-stat-label">Gjaldfallið</div>
+                    <div class="dash-stat-value" style="color:#c62828;">@FormatAmount(overdueAmount)</div>
+                </div>
+            </div>
+            <div style="margin-top:1rem; font-size:0.8rem; color:#888;">
+                @invoices.Count reikningar á tímabilinu
+            </div>
+        </FluentCard>
+
+        @* Outstanding expenses — no API available *@
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body"><strong>Gjöld | Útistandandi</strong></FluentLabel>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-top:1rem;">
+                <div class="dash-stat">
+                    <div class="dash-stat-label">VSK</div>
+                    <div class="dash-stat-value" style="color:#c62828;">@FormatAmount(vatOwed)</div>
+                    <div style="font-size:0.75rem; color:#888; margin-top:0.25rem;">Áætlað (24% VSK)</div>
+                </div>
+                <div class="dash-stat">
+                    <div class="dash-stat-label">Ógreitt samtals</div>
+                    <div class="dash-stat-value" style="color:#f57c00;">@FormatAmount(unpaidAmount)</div>
+                    <div style="font-size:0.75rem; color:#888; margin-top:0.25rem;">@unpaidCount reikningar</div>
+                </div>
+            </div>
+            <div style="margin-top:1rem; font-size:0.8rem; color:#888;">
+                Launagjöld tiltæk ekki í gegnum Payday API
+            </div>
+        </FluentCard>
+    </div>
+
+    @* ── Row 2: Income statement chart ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false" style="margin-top:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body"><strong>Rekstraryfirlit | Tekjur og Gjöld</strong></FluentLabel>
+            <div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
+                <div class="dash-inline-stat">
+                    <span class="dash-inline-label">Tekjur</span>
+                    <span class="dash-inline-value" style="color:#2e7d32;">@FormatAmount(totalAmount)</span>
+                </div>
+                <div class="dash-inline-stat">
+                    <span class="dash-inline-label">Innheimt</span>
+                    <span class="dash-inline-value" style="color:#1565c0;">@FormatAmount(collectedAmount)</span>
+                </div>
+                <div class="dash-inline-stat">
+                    <span class="dash-inline-label">Hlutfall innheimts</span>
+                    <span class="dash-inline-value">@(totalAmount > 0 ? $"{collectedAmount / totalAmount * 100:0.#}%" : "–")</span>
+                </div>
+            </div>
+        </div>
+        <div style="position:relative; height:280px; margin-top:1rem;">
+            <canvas id="incomeChart"></canvas>
+        </div>
+    </FluentCard>
+
+    @* ── Row 3: Invoice overview + Payroll placeholder ── *@
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem;">
+
+        @* Invoice overview stacked bar *@
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body"><strong>Reikningar | Yfirlit</strong></FluentLabel>
+            <div style="position:relative; height:260px; margin-top:1rem;">
+                <canvas id="invoiceChart"></canvas>
+            </div>
+        </FluentCard>
+
+        @* Payroll — no API *@
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body"><strong>Launakeyrslur | Yfirlit</strong></FluentLabel>
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:260px; color:#888; text-align:center; gap:0.5rem; margin-top:1rem;">
+                <span style="font-size:2rem;">📊</span>
+                <FluentLabel>Launagögn tiltæk ekki</FluentLabel>
+                <div style="font-size:0.8rem;">Payday API styður ekki lestur launagagna</div>
+            </div>
+        </FluentCard>
+    </div>
+}
+
+<style>
+    .dash-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+    .dash-stat-label {
+        font-size: 0.78rem;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .dash-stat-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+    .dash-inline-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    .dash-inline-label {
+        font-size: 0.75rem;
+        color: #888;
+    }
+    .dash-inline-value {
+        font-size: 1rem;
+        font-weight: 600;
+    }
+</style>
+
+@code {
+
+    // ── Period ───────────────────────────────────────────────────────────────
+    private DateTime? periodFrom = new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime? periodTo   = DateTime.Today;
+
+    // ── State ────────────────────────────────────────────────────────────────
+    private bool    isLoading = true;
+    private string? loadError;
+
+    // ── Aggregated data ──────────────────────────────────────────────────────
+    private readonly List<PaydayInvoice> invoices = [];
+    private decimal totalAmount;
+    private decimal collectedAmount;
+    private decimal unpaidAmount;
+    private decimal overdueAmount;
+    private decimal vatOwed;
+    private int     unpaidCount;
+
+    private sealed class MonthBucket
+    {
+        public string  Label          { get; set; } = string.Empty;
+        public decimal PaidAmount     { get; set; }
+        public decimal UnpaidAmount   { get; set; }
+        public decimal CancelledAmount { get; set; }
+    }
+
+    private List<MonthBucket> monthlyBuckets = [];
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() =>
+        await LoadDashboardAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!isLoading && monthlyBuckets.Count > 0)
+            await RenderChartsAsync();
+    }
+
+    // ── Load ─────────────────────────────────────────────────────────────────
+    private async Task LoadDashboardAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        invoices.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var from = periodFrom is not null
+                ? periodFrom.Value.ToString("yyyy-MM-dd")
+                : null;
+            var to = periodTo is not null
+                ? periodTo.Value.ToString("yyyy-MM-dd")
+                : null;
+
+            // Paginate through all invoices in the period
+            var page = 1;
+            while (true)
+            {
+                var result = await InvoicesApi.GetAllAsync(
+                    page:          page,
+                    perPage:       100,
+                    include:       null,   // no lines needed for dashboard
+                    dateFrom:      from,
+                    dateTo:        to,
+                    excludeStatus: "DELETED",
+                    order:         "asc",
+                    orderBy:       "invoiceDate");
+
+                if (!result.IsSuccess)
+                {
+                    loadError = result.ErrorMessage;
+                    break;
+                }
+
+                var data = result.Value;
+                if (data is null) break;
+                invoices.AddRange(data.Invoices);
+                if (page >= data.Pages || data.Invoices.Count == 0) break;
+                page++;
+            }
+
+            BuildAggregates();
+            BuildMonthlyBuckets();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Aggregation ───────────────────────────────────────────────────────────
+    private void BuildAggregates()
+    {
+        var today = DateTime.Today;
+        totalAmount     = 0;
+        collectedAmount = 0;
+        unpaidAmount    = 0;
+        overdueAmount   = 0;
+        unpaidCount     = 0;
+
+        foreach (var inv in invoices)
+        {
+            if (inv.Status is "CANCELLED" or "DELETED") continue;
+
+            totalAmount += inv.AmountIncludingVat;
+
+            if (inv.Status == "PAID" || inv.Status == "CREDIT")
+            {
+                collectedAmount += inv.AmountIncludingVat;
+            }
+            else
+            {
+                unpaidAmount += inv.AmountIncludingVat;
+                unpaidCount++;
+
+                if (inv.DueDate.HasValue && inv.DueDate.Value < today)
+                    overdueAmount += inv.AmountIncludingVat;
+            }
+        }
+
+        // Estimate VAT owed on unpaid invoices (approximate — assumes 24% VAT rate applies)
+        vatOwed = invoices
+            .Where(i => i.Status is not ("PAID" or "CANCELLED" or "DELETED" or "CREDIT"))
+            .Sum(i => i.AmountVat);
+    }
+
+    private void BuildMonthlyBuckets()
+    {
+        // Build 12-month buckets spanning the period
+        var from   = periodFrom ?? DateTime.Today.AddMonths(-11);
+        var to     = periodTo   ?? DateTime.Today;
+        var cursor = new DateTime(from.Year, from.Month, 1);
+        var end    = new DateTime(to.Year, to.Month, 1);
+
+        var buckets = new List<MonthBucket>();
+        while (cursor <= end)
+        {
+            buckets.Add(new MonthBucket
+            {
+                Label = cursor.ToString("MMM yy")
+            });
+            cursor = cursor.AddMonths(1);
+        }
+
+        foreach (var inv in invoices)
+        {
+            var date = inv.InvoiceDate ?? inv.Created;
+            if (date is null) continue;
+            var key = new DateTime(date.Value.Year, date.Value.Month, 1);
+            var bucket = buckets.FirstOrDefault(b =>
+                b.Label == key.ToString("MMM yy"));
+            if (bucket is null) continue;
+
+            switch (inv.Status)
+            {
+                case "PAID":
+                case "CREDIT":
+                    bucket.PaidAmount   += inv.AmountIncludingVat;
+                    break;
+                case "CANCELLED":
+                case "DELETED":
+                    bucket.CancelledAmount += inv.AmountIncludingVat;
+                    break;
+                default:
+                    bucket.UnpaidAmount += inv.AmountIncludingVat;
+                    break;
+            }
+        }
+
+        monthlyBuckets = buckets;
+    }
+
+    // ── Charts ────────────────────────────────────────────────────────────────
+    private async Task RenderChartsAsync()
+    {
+        var labels    = monthlyBuckets.Select(b => b.Label).ToArray();
+        var paidData  = monthlyBuckets.Select(b => (double)b.PaidAmount).ToArray();
+        var unpaidArr = monthlyBuckets.Select(b => (double)b.UnpaidAmount).ToArray();
+
+        // Invoice overview — stacked bar
+        await JS.InvokeVoidAsync("createOrUpdateChart", "invoiceChart", new
+        {
+            type = "bar",
+            data = new
+            {
+                labels,
+                datasets = new object[]
+                {
+                    new
+                    {
+                        label           = "Innheimt",
+                        data            = paidData,
+                        backgroundColor = "#4caf50",
+                        stack           = "inv"
+                    },
+                    new
+                    {
+                        label           = "Óinnheimt",
+                        data            = unpaidArr,
+                        backgroundColor = "#ffc107",
+                        stack           = "inv"
+                    }
+                }
+            },
+            options = new
+            {
+                responsive          = true,
+                maintainAspectRatio = false,
+                plugins = new { legend = new { position = "top" } },
+                scales  = new
+                {
+                    x = new { stacked = true },
+                    y = new
+                    {
+                        stacked = true,
+                        ticks   = new { callback = "formatISK" }
+                    }
+                }
+            }
+        });
+
+        // Income statement — bars for total, line for collected
+        var totalArr     = monthlyBuckets.Select(b => (double)(b.PaidAmount + b.UnpaidAmount)).ToArray();
+        var collectedArr = monthlyBuckets.Select(b => (double)b.PaidAmount).ToArray();
+
+        await JS.InvokeVoidAsync("createOrUpdateChart", "incomeChart", new
+        {
+            type = "bar",
+            data = new
+            {
+                labels,
+                datasets = new object[]
+                {
+                    new
+                    {
+                        type            = "bar",
+                        label           = "Reikningar",
+                        data            = totalArr,
+                        backgroundColor = "rgba(76,175,80,0.6)",
+                        borderColor     = "#388e3c",
+                        borderWidth     = 1,
+                        yAxisID         = "y"
+                    },
+                    new
+                    {
+                        type        = "line",
+                        label       = "Innheimt",
+                        data        = collectedArr,
+                        borderColor = "#1565c0",
+                        backgroundColor = "rgba(21,101,192,0.1)",
+                        tension     = 0.3,
+                        fill        = false,
+                        pointRadius = 3,
+                        yAxisID     = "y"
+                    }
+                }
+            },
+            options = new
+            {
+                responsive          = true,
+                maintainAspectRatio = false,
+                plugins = new { legend = new { position = "top" } },
+                scales  = new
+                {
+                    y = new { beginAtZero = true }
+                }
+            }
+        });
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string FormatAmount(decimal amount)
+    {
+        if (amount == 0) return "0 kr.";
+        return $"{amount:N0} kr.".Replace(",", ".");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("destroyChart", "invoiceChart");
+            await JS.InvokeVoidAsync("destroyChart", "incomeChart");
+        }
+        catch { /* ignore if JS runtime disposed */ }
+    }
+}

@@ -19,6 +19,7 @@
     <ReconnectModal />
     <script type="module" src="_content/Microsoft.FluentUI.AspNetCore.Components/Microsoft.FluentUI.AspNetCore.Components.lib.module.js"></script>
     <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         window.triggerFileDownload = function (filename, base64, mimeType) {
             const bytes = atob(base64);
@@ -33,6 +34,23 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        };
+
+        window._chartInstances = {};
+        window.createOrUpdateChart = function (canvasId, config) {
+            if (window._chartInstances[canvasId]) {
+                window._chartInstances[canvasId].destroy();
+                delete window._chartInstances[canvasId];
+            }
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            window._chartInstances[canvasId] = new Chart(canvas, config);
+        };
+        window.destroyChart = function (canvasId) {
+            if (window._chartInstances[canvasId]) {
+                window._chartInstances[canvasId].destroy();
+                delete window._chartInstances[canvasId];
+            }
         };
     </script>
 </body>
