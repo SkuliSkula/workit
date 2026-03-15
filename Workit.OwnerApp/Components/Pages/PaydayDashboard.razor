@@ -102,8 +102,8 @@ else
                 </div>
             </div>
         </div>
-        <div style="position:relative; height:280px; margin-top:1rem;">
-            <canvas id="incomeChart"></canvas>
+        <div style="position:relative; width:100%; height:280px; margin-top:1rem; overflow:hidden;">
+            <canvas id="incomeChart" style="max-width:100%;"></canvas>
         </div>
     </FluentCard>
 
@@ -113,8 +113,8 @@ else
         @* Invoice overview stacked bar *@
         <FluentCard Class="admin-card" AreaRestricted="false">
             <FluentLabel Typo="Typography.Body"><strong>Reikningar | Yfirlit</strong></FluentLabel>
-            <div style="position:relative; height:260px; margin-top:1rem;">
-                <canvas id="invoiceChart"></canvas>
+            <div style="position:relative; width:100%; height:260px; margin-top:1rem; overflow:hidden;">
+                <canvas id="invoiceChart" style="max-width:100%;"></canvas>
             </div>
         </FluentCard>
 
@@ -190,6 +190,7 @@ else
     }
 
     private List<MonthBucket> monthlyBuckets = [];
+    private bool _pendingChartRender;
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync() =>
@@ -197,8 +198,11 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!isLoading && monthlyBuckets.Count > 0)
+        if (_pendingChartRender)
+        {
+            _pendingChartRender = false;
             await RenderChartsAsync();
+        }
     }
 
     // ── Load ─────────────────────────────────────────────────────────────────
@@ -247,6 +251,7 @@ else
 
             BuildAggregates();
             BuildMonthlyBuckets();
+            _pendingChartRender = monthlyBuckets.Count > 0;
         }
         finally
         {
