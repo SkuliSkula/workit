@@ -26,7 +26,9 @@ else if (isLoading)
 }
 else
 {
-    <section class="employee-dashboard">
+    <section class="employee-dashboard"
+             @ontouchstart="OnTouchStart"
+             @ontouchend="OnTouchEnd">
         <FluentCard Class="hours-card employee-shell hero-card">
             @* Identity row *@
             <div class="hero-identity">
@@ -43,12 +45,6 @@ else
                 <span class="hero-month-label">@monthTitle</span>
                 <button class="hero-nav-btn" @onclick="NextMonthAsync">›</button>
                 <span class="hero-worked-days-badge">@workedDays days</span>
-            </div>
-
-            @* Actions *@
-            <div class="hero-actions">
-                <FluentButton Appearance="Appearance.Accent" Href="/hours" style="flex:1">Log Hours</FluentButton>
-                <FluentButton Appearance="Appearance.Outline" Href="/hours" style="flex:1">Open Hours</FluentButton>
             </div>
         </FluentCard>
 
@@ -333,6 +329,28 @@ else
     {
         selectedMonth = selectedMonth.AddMonths(1);
         await LoadDashboardAsync();
+    }
+
+    // ── Swipe-to-change-month ──
+    private double _swipeStartX;
+    private const double SwipeThreshold = 50;
+
+    private void OnTouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length > 0)
+            _swipeStartX = e.Touches[0].ClientX;
+    }
+
+    private async Task OnTouchEnd(TouchEventArgs e)
+    {
+        if (e.ChangedTouches.Length == 0) return;
+        var delta = e.ChangedTouches[0].ClientX - _swipeStartX;
+        if (Math.Abs(delta) < SwipeThreshold) return;
+
+        if (delta < 0)
+            await NextMonthAsync();     // swipe left → next month
+        else
+            await PreviousMonthAsync(); // swipe right → previous month
     }
 
     private async Task OnMonthChangedAsync(ChangeEventArgs args)
