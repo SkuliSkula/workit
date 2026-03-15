@@ -12,7 +12,12 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddFluentUIComponents();
 
 var apiBaseUrl = ResolveApiBaseUrl(builder.Configuration["ApiBaseUrl"], builder.HostEnvironment.BaseAddress);
-builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(apiBaseUrl) });
+builder.Services.AddTransient<NgrokHeaderHandler>();
+builder.Services.AddScoped(_ =>
+{
+    var handler = new NgrokHeaderHandler { InnerHandler = new HttpClientHandler() };
+    return new HttpClient(handler) { BaseAddress = new Uri(apiBaseUrl) };
+});
 builder.Services.AddWorkitApiClients();
 builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
 builder.Services.AddScoped<AuthSessionService>();

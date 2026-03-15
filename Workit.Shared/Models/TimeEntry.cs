@@ -8,5 +8,6 @@ public sealed class TimeEntry
     public Guid EmployeeId { get; set; }
     public DateOnly WorkDate { get; set; }
     public decimal Hours { get; set; }
+    public decimal OvertimeHours { get; set; }
     public string Notes { get; set; } = string.Empty;
 }

@@ -129,6 +129,12 @@ else
                 <span class="kpi-foot">@averageHoursPerWorkedDay.ToString("0.##") avg per worked day</span>
             </FluentCard>
 
+            <FluentCard Class="kpi-card kpi-card--overtime">
+                <span class="kpi-label">Overtime Hours</span>
+                <strong>@totalOvertimeHours.ToString("0.##")</strong>
+                <span class="kpi-foot">@overtimeRatioLabel of total hours</span>
+            </FluentCard>
+
             <FluentCard Class="kpi-card">
                 <span class="kpi-label">Customers Active</span>
                 <strong>@customerSummaries.Count</strong>
@@ -382,7 +388,12 @@ else
     private List<DayLoad> dailyLoads = [];
     private List<RecentEntryRow> recentEntries = [];
     private decimal totalHours;
+    private decimal totalOvertimeHours;
     private decimal averageHoursPerWorkedDay;
+
+    private string overtimeRatioLabel => totalHours == 0m
+        ? "no hours logged"
+        : $"{(totalOvertimeHours / totalHours * 100m):0.#}%";
     private Guid? selectedCustomerId;
     private Guid? selectedJobId;
     private Guid? selectedEmployeeId;
@@ -546,6 +557,7 @@ else
         var filteredEntries = GetFilteredEntries(jobToCustomer);
 
         totalHours = filteredEntries.Sum(x => x.Hours);
+        totalOvertimeHours = filteredEntries.Sum(x => x.OvertimeHours);
         var workedDays = filteredEntries.Select(x => x.WorkDate).Distinct().Count();
         averageHoursPerWorkedDay = workedDays == 0 ? 0m : totalHours / workedDays;
 
@@ -636,6 +648,7 @@ else
         dailyLoads = [];
         recentEntries = [];
         totalHours = 0m;
+        totalOvertimeHours = 0m;
         averageHoursPerWorkedDay = 0m;
     }
 

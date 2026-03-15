@@ -65,6 +65,11 @@
             <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
         </div>
 
+        <div>
+            <FluentLabel>Overtime hours</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
+        </div>
+
         <div style="grid-column: span 2">
             <FluentLabel>Notes</FluentLabel>
             <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
@@ -106,12 +111,14 @@
             <PropertyColumn Property="@(x => x.Date)"         Title="Date"     Format="dd MMM yyyy" />
             <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
             <PropertyColumn Property="@(x => x.JobName)"      Title="Job" />
-            <PropertyColumn Property="@(x => x.Hours)"        Title="Hours"    Format="0.##" />
-            <PropertyColumn Property="@(x => x.Notes)"        Title="Notes" />
+            <PropertyColumn Property="@(x => x.Hours)"         Title="Hours"    Format="0.##" />
+            <PropertyColumn Property="@(x => x.OvertimeHours)" Title="Overtime" Format="0.##" />
+            <PropertyColumn Property="@(x => x.Notes)"         Title="Notes" />
         </FluentDataGrid>
 
         <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
             Total: <strong>@entries.Sum(e => e.Hours).ToString("0.##") hrs</strong>
+            · Overtime: <strong>@entries.Sum(e => e.OvertimeHours).ToString("0.##") hrs</strong>
             across @entries.Count entries
         </FluentLabel>
     }
@@ -134,6 +141,7 @@
     private string? selectedJobId;
     private DateTime? workDate = DateTime.Today;
     private decimal hours = 8m;
+    private decimal overtimeHours = 0m;
     private string notes = string.Empty;
     private bool saving;
     private string? saveResult;
@@ -154,11 +162,12 @@
 
     private sealed class EntryRow
     {
-        public DateOnly Date         { get; set; }
-        public string  EmployeeName  { get; set; } = string.Empty;
-        public string  JobName       { get; set; } = string.Empty;
-        public decimal Hours         { get; set; }
-        public string  Notes         { get; set; } = string.Empty;
+        public DateOnly Date          { get; set; }
+        public string   EmployeeName  { get; set; } = string.Empty;
+        public string   JobName       { get; set; } = string.Empty;
+        public decimal  Hours         { get; set; }
+        public decimal  OvertimeHours { get; set; }
+        public string   Notes         { get; set; } = string.Empty;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -211,18 +220,20 @@
         {
             var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
             {
-                EmployeeId = empId,
-                JobId      = jobId,
-                WorkDate   = DateOnly.FromDateTime(workDate.Value),
-                Hours      = hours,
-                Notes      = notes.Trim()
+                EmployeeId    = empId,
+                JobId         = jobId,
+                WorkDate      = DateOnly.FromDateTime(workDate.Value),
+                Hours         = hours,
+                OvertimeHours = overtimeHours,
+                Notes         = notes.Trim()
             });
 
             if (result.IsSuccess)
             {
-                saveResult = $"✓ Entry saved ({hours:0.##} hrs)";
-                notes      = string.Empty;
-                hours      = 8m;
+                saveResult    = $"✓ Entry saved ({hours:0.##} hrs{(overtimeHours > 0 ? $" + {overtimeHours:0.##} OT" : string.Empty)})";
+                notes         = string.Empty;
+                hours         = 8m;
+                overtimeHours = 0m;
                 await LoadEntriesAsync();
             }
             else
@@ -262,11 +273,12 @@
                 .ThenBy(e => employeeNames.GetValueOrDefault(e.EmployeeId, string.Empty))
                 .Select(e => new EntryRow
                 {
-                    Date         = e.WorkDate,
-                    EmployeeName = employeeNames.GetValueOrDefault(e.EmployeeId, e.EmployeeId.ToString()),
-                    JobName      = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),
-                    Hours        = e.Hours,
-                    Notes        = e.Notes
+                    Date          = e.WorkDate,
+                    EmployeeName  = employeeNames.GetValueOrDefault(e.EmployeeId, e.EmployeeId.ToString()),
+                    JobName       = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),
+                    Hours         = e.Hours,
+                    OvertimeHours = e.OvertimeHours,
+                    Notes         = e.Notes
                 });
 
             entries.AddRange(rows);

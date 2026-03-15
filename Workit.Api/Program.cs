@@ -32,20 +32,23 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowBlazorApps", policy =>
     {
-        policy
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .WithOrigins(
-                "https://localhost:7100",
-                "https://localhost:7300",
-                "https://localhost:7200",
-                "http://localhost:5100",
-                "http://localhost:5300",
-                "http://localhost:5200",
-                "http://192.168.86.26:5100",
-                "http://192.168.86.26:5300",
-                "http://192.168.86.31:5100",
-                "http://192.168.86.31:5300");
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        }
+        else
+        {
+            policy
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .WithOrigins(
+                    "https://localhost:7100",
+                    "https://localhost:7300",
+                    "https://localhost:7200",
+                    "http://localhost:5100",
+                    "http://localhost:5300",
+                    "http://localhost:5200");
+        }
     });
 });
 

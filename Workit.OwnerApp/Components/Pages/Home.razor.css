@@ -220,6 +220,28 @@
     color: #425468 !important;
 }
 
+/* Overtime KPI card — amber accent */
+.kpi-card--overtime {
+    background: #fef3c7 !important;
+}
+
+.kpi-card--overtime::part(control) {
+    background: #fef3c7 !important;
+    border: 1px solid #fcd34d !important;
+}
+
+.kpi-card--overtime strong {
+    color: #92400e !important;
+}
+
+.kpi-card--overtime .kpi-label {
+    color: #78350f !important;
+}
+
+.kpi-card--overtime .kpi-foot {
+    color: #b45309 !important;
+}
+
 .section-head {
     display: flex;
     justify-content: space-between;

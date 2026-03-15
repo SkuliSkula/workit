@@ -51,7 +51,13 @@ else
             <div class="hours-entry-item">
                 <div class="hours-entry-top">
                     <span class="hours-entry-date">@entry.WorkDate.ToString("MMM d, yyyy")</span>
-                    <span class="hours-entry-badge">@entry.Hours h</span>
+                    <div class="hours-entry-badges">
+                        <span class="hours-entry-badge">@entry.Hours h</span>
+                        @if (entry.OvertimeHours > 0)
+                        {
+                            <span class="hours-entry-badge hours-entry-badge-ot">+@entry.OvertimeHours h OT</span>
+                        }
+                    </div>
                 </div>
                 <div class="hours-entry-job">@jobLookup.GetValueOrDefault(entry.JobId, "Unknown job")</div>
                 @if (!string.IsNullOrWhiteSpace(entry.Notes))
@@ -123,8 +129,8 @@ else
             }
         </div>
 
-        @* Date + Hours — side by side *@
-        <div class="sheet-row">
+        @* Date + Hours + Overtime — three columns *@
+        <div class="sheet-row sheet-row-3">
             <div class="sheet-field">
                 <label class="sheet-label">Date</label>
                 <FluentDatePicker @bind-Value="workDate" style="width:100%" />
@@ -132,6 +138,13 @@ else
             <div class="sheet-field">
                 <label class="sheet-label">Hours</label>
                 <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+            </div>
+            <div class="sheet-field">
+                <label class="sheet-label">
+                    Overtime
+                    <span class="sheet-label-hint">optional</span>
+                </label>
+                <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
             </div>
         </div>
 
@@ -183,6 +196,7 @@ else
     private string? saveError;
     private DateTime? workDate = DateTime.Today;
     private decimal hours = 8m;
+    private decimal overtimeHours = 0m;
     private string notes = string.Empty;
     private bool isSheetOpen;
     private bool isSaving;
@@ -249,18 +263,20 @@ else
         {
             var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
             {
-                CompanyId = company.Id,
-                JobId     = jobId,
-                WorkDate  = DateOnly.FromDateTime(workDate.Value.Date),
-                Hours     = hours,
-                Notes     = notes
+                CompanyId     = company.Id,
+                JobId         = jobId,
+                WorkDate      = DateOnly.FromDateTime(workDate.Value.Date),
+                Hours         = hours,
+                OvertimeHours = overtimeHours,
+                Notes         = notes
             });
 
             if (result.IsSuccess)
             {
-                notes       = string.Empty;
-                hours       = 8m;
-                isSheetOpen = false;
+                notes         = string.Empty;
+                hours         = 8m;
+                overtimeHours = 0m;
+                isSheetOpen   = false;
                 await LoadDataAsync();
             }
             else

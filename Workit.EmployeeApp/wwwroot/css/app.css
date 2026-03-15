@@ -576,6 +576,10 @@ code {
     gap: 0.75rem;
 }
 
+.sheet-row-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
 .sheet-field {
     display: flex;
     flex-direction: column;
@@ -1124,6 +1128,14 @@ code {
     letter-spacing: 0.06em;
 }
 
+.hours-entry-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .hours-entry-badge {
     background: linear-gradient(135deg, #0b5bd3, #1a7aff);
     color: #fff;
@@ -1132,6 +1144,12 @@ code {
     padding: 0.2rem 0.65rem;
     border-radius: 999px;
     box-shadow: 0 2px 6px rgba(11, 91, 211, 0.3);
+    white-space: nowrap;
+}
+
+.hours-entry-badge-ot {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
 }
 
 .hours-entry-job {
