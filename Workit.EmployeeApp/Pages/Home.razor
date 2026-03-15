@@ -8,84 +8,47 @@
 
 <PageTitle>Home</PageTitle>
 
-@if (session is null)
-{
-    <FluentCard Class="hours-card employee-shell">
-        <span class="employee-eyebrow">Employee access</span>
-        <FluentLabel Typo="Typography.PaneHeader">Monthly view for your hours</FluentLabel>
-        <p>Sign in to see your hours, worked days, top jobs, and this month’s activity.</p>
-
-        <div class="hours-grid">
-            <div>
-                <FluentLabel>Email</FluentLabel>
-                <FluentTextField @bind-Value="email" Placeholder="Email" />
-            </div>
-            <div>
-                <FluentLabel>Password</FluentLabel>
-                <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
-            </div>
-        </div>
-
-        <div class="hours-actions">
-            <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(errorMessage))
-        {
-            <p>@errorMessage</p>
-        }
-    </FluentCard>
-}
-else if (!string.IsNullOrWhiteSpace(loadError))
+@if (!string.IsNullOrWhiteSpace(loadError))
 {
     <FluentCard Class="hours-card employee-shell">
         <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
         <p>@loadError</p>
         <div class="hours-actions">
             <FluentButton Appearance="Appearance.Accent" @onclick="LoadDashboardAsync">Retry</FluentButton>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
         </div>
     </FluentCard>
 }
 else if (isLoading)
 {
     <FluentCard Class="hours-card employee-shell">
-        <FluentLabel Typo="Typography.PaneHeader">Loading your month...</FluentLabel>
+        <FluentLabel Typo="Typography.PaneHeader">Loading your month…</FluentLabel>
     </FluentCard>
 }
 else
 {
     <section class="employee-dashboard">
-        <FluentCard Class="hours-card employee-shell employee-hero">
-            <div>
-                <span class="employee-eyebrow">Monthly view</span>
-                <h1>@employeeName</h1>
-                <p>@(company?.Name ?? "Your company")</p>
+        <FluentCard Class="hours-card employee-shell hero-card">
+            @* Identity row *@
+            <div class="hero-identity">
+                <div class="hero-avatar">@employeeInitials</div>
+                <div class="hero-identity-text">
+                    <div class="hero-name">@employeeName</div>
+                    <div class="hero-company">@(company?.Name ?? "Your company")</div>
+                </div>
             </div>
 
-            <div class="employee-hero-controls">
-                <div class="month-toolbar">
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="PreviousMonthAsync">Previous</FluentButton>
-                    <input class="month-picker" type="month" value="@selectedMonthValue" @onchange="OnMonthChangedAsync" />
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="NextMonthAsync">Next</FluentButton>
-                </div>
+            @* Month navigation *@
+            <div class="hero-month-nav">
+                <button class="hero-nav-btn" @onclick="PreviousMonthAsync">‹</button>
+                <span class="hero-month-label">@monthTitle</span>
+                <button class="hero-nav-btn" @onclick="NextMonthAsync">›</button>
+                <span class="hero-worked-days-badge">@workedDays days</span>
+            </div>
 
-                <div class="employee-hero-meta">
-                    <div>
-                        <span class="meta-label">Month</span>
-                        <strong>@monthTitle</strong>
-                    </div>
-                    <div>
-                        <span class="meta-label">Worked days</span>
-                        <strong>@workedDays</strong>
-                    </div>
-                </div>
-
-                <div class="hours-actions employee-actions">
-                    <FluentButton Appearance="Appearance.Accent" Href="/hours">Log Hours</FluentButton>
-                    <FluentButton Appearance="Appearance.Outline" Href="/hours">Open Hours</FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
-                </div>
+            @* Actions *@
+            <div class="hero-actions">
+                <FluentButton Appearance="Appearance.Accent" Href="/hours" style="flex:1">Log Hours</FluentButton>
+                <FluentButton Appearance="Appearance.Outline" Href="/hours" style="flex:1">Open Hours</FluentButton>
             </div>
         </FluentCard>
 
@@ -199,9 +162,6 @@ else
     private sealed record DayLoad(int Day, decimal Hours, decimal HeightPercent);
     private sealed record RecentEntryRow(DateOnly WorkDate, string JobName, decimal Hours);
 
-    private string email = string.Empty;
-    private string password = string.Empty;
-    private string? errorMessage;
     private string? loadError;
     private bool isLoading;
     private LoginResponse? session;
@@ -223,40 +183,32 @@ else
     private string topJobLabel => jobSummaries.Count == 0 ? "No jobs this month" : $"{jobSummaries[0].Name} leads";
     private string latestEntryLabel => recentEntries.Count == 0 ? "No entries yet" : $"Latest {recentEntries[0].WorkDate:yyyy-MM-dd}";
 
+    private string employeeInitials
+    {
+        get
+        {
+            var name = employee?.DisplayName?.Trim() ?? session?.Email ?? "?";
+            var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length switch
+            {
+                0 => "?",
+                1 => parts[0][..Math.Min(2, parts[0].Length)].ToUpper(),
+                _ => $"{parts[0][0]}{parts[^1][0]}".ToUpper()
+            };
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         session = await AuthSession.GetSessionAsync();
 
-        if (session is not null && string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        if (session is null || !string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
         {
-            await LoadDashboardAsync();
-        }
-    }
-
-    private async Task LoginAsync()
-    {
-        errorMessage = null;
-        var result = await AuthSession.LoginAsync(new LoginRequest
-        {
-            Email = email.Trim(),
-            Password = password
-        });
-
-        if (result.IsSuccess && result.Value is not null)
-        {
-            if (result.Value.Role != WorkitRoles.Employee)
-            {
-                await AuthSession.LogoutAsync();
-                errorMessage = "Only employee accounts can use the Employee app.";
-                return;
-            }
-
-            session = result.Value;
-            await LoadDashboardAsync();
+            Navigation.NavigateTo("/login");
             return;
         }
 
-        errorMessage = result.ErrorMessage ?? "Login failed.";
+        await LoadDashboardAsync();
     }
 
     private async Task LoadDashboardAsync()
@@ -397,17 +349,4 @@ else
 
     private DateOnly GetMonthEnd() => GetMonthStart().AddMonths(1).AddDays(-1);
 
-    private async Task LogoutAsync()
-    {
-        await AuthSession.LogoutAsync();
-        session = null;
-        company = null;
-        employee = null;
-        entries.Clear();
-        jobs.Clear();
-        jobSummaries.Clear();
-        dailyLoads.Clear();
-        recentEntries.Clear();
-        Navigation.NavigateTo("/");
-    }
 }

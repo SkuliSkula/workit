@@ -1,4 +1,6 @@
 @page "/hours"
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
 @inject ICompanyApi CompanyApi
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
@@ -6,166 +8,203 @@
 
 <PageTitle>Hours</PageTitle>
 
-<FluentCard Class="hours-card hours-summary">
+@* ── Summary header ── *@
+<div class="hours-header employee-shell hours-card">
     <div>
-        <FluentLabel>Company</FluentLabel>
-        @if (company is null)
-        {
-            <p>No company has been set up yet.</p>
-        }
-        else
-        {
-            <p>@company.Name</p>
-        }
+        <span class="employee-eyebrow">Last 30 days</span>
+        <div class="hours-header-total">
+            @totalRecentHours.ToString("0.#")<span class="hours-header-unit"> hrs</span>
+        </div>
+        <div class="hours-header-company">@(company?.Name ?? string.Empty)</div>
     </div>
-
-    <div class="hours-actions">
-        <FluentButton Appearance="Appearance.Accent" @onclick="OpenSheet" Disabled="@(!CanCreateEntries)">
-            <FluentIcon Value="new Size20.Add()" />
-            <span class="button-label">New Entry</span>
-        </FluentButton>
+    <div class="hours-header-stats">
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@entries.Count</span>
+            <span class="hours-header-stat-lbl">entries</span>
+        </div>
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@uniqueJobCount</span>
+            <span class="hours-header-stat-lbl">jobs</span>
+        </div>
     </div>
-</FluentCard>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(loadError))
 {
-    <FluentCard Class="hours-card">
-        <p>@loadError</p>
-    </FluentCard>
+    <div class="hours-error-banner">@loadError</div>
 }
 
-<FluentCard Class="hours-card">
-    <FluentLabel Typo="Typography.PaneHeader">Recent Entries</FluentLabel>
-
-    @if (entries.Count == 0)
-    {
-        <p>No entries yet.</p>
-    }
-    else
-    {
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Employee</th>
-                    <th>Job</th>
-                    <th>Hours</th>
-                    <th>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var entry in entries)
+@* ── Entry list ── *@
+@if (entries.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-empty">
+        <FluentIcon Value="new Size48.Clock()" />
+        <strong>No entries yet</strong>
+        <span>Tap the + button to log your first hours.</span>
+    </div>
+}
+else
+{
+    <div class="hours-entry-list">
+        @foreach (var entry in entries.OrderByDescending(e => e.WorkDate).ThenByDescending(e => e.Hours))
+        {
+            <div class="hours-entry-item">
+                <div class="hours-entry-top">
+                    <span class="hours-entry-date">@entry.WorkDate.ToString("MMM d, yyyy")</span>
+                    <span class="hours-entry-badge">@entry.Hours h</span>
+                </div>
+                <div class="hours-entry-job">@jobLookup.GetValueOrDefault(entry.JobId, "Unknown job")</div>
+                @if (!string.IsNullOrWhiteSpace(entry.Notes))
                 {
-                    <tr>
-                        <td>@entry.WorkDate</td>
-                        <td>@employeeLookup.GetValueOrDefault(entry.EmployeeId, entry.EmployeeId.ToString())</td>
-                        <td>@jobLookup.GetValueOrDefault(entry.JobId, entry.JobId.ToString())</td>
-                        <td>@entry.Hours</td>
-                        <td>@entry.Notes</td>
-                    </tr>
+                    <div class="hours-entry-notes">@entry.Notes</div>
                 }
-            </tbody>
-        </table>
-    }
-</FluentCard>
+            </div>
+        }
+    </div>
+}
 
+@* ── Floating action button ── *@
+<button class="hours-fab"
+        @onclick="OpenSheet"
+        disabled="@(!CanCreateEntries)"
+        aria-label="Log new hours">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28"
+         fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="4" x2="12" y2="20" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+    </svg>
+</button>
+
+@* ── Bottom sheet backdrop ── *@
 <div class="sheet-backdrop @(isSheetOpen ? "show" : string.Empty)" @onclick="CloseSheet"></div>
 
+@* ── Bottom sheet drawer ── *@
 <section class="sheet @(isSheetOpen ? "show" : string.Empty)">
     <div class="sheet-handle"></div>
+
     <div class="sheet-header">
-        <h2>New time entry</h2>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="CloseSheet">
-            <FluentIcon Value="new Size20.Dismiss()" />
-        </FluentButton>
+        <div class="sheet-header-left">
+            <div class="sheet-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                </svg>
+            </div>
+            <h2>Log hours</h2>
+        </div>
+        <button class="sheet-close-btn" @onclick="CloseSheet" aria-label="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </button>
     </div>
 
-    <div class="hours-grid sheet-content">
-        <div>
-            <FluentLabel>Employee</FluentLabel>
-            @if (employees.Count > 0)
-            {
-                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId">
-                    @foreach (var employee in employees)
-                    {
-                        <FluentOption TOption="string" Value="@employee.Id.ToString()">
-                            @employee.DisplayName (@employee.Trade)
-                        </FluentOption>
-                    }
-                </FluentSelect>
-            }
-            else
-            {
-                <p>No employees available.</p>
-            }
-        </div>
-
-        <div>
-            <FluentLabel>Job</FluentLabel>
+    <div class="sheet-form">
+        @* Job — full width *@
+        <div class="sheet-field sheet-field-full">
+            <label class="sheet-label">Job</label>
             @if (jobs.Count > 0)
             {
-                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId">
+                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
                     @foreach (var job in jobs)
                     {
                         <FluentOption TOption="string" Value="@job.Id.ToString()">
-                            @job.Code - @job.Name
+                            @job.Code – @job.Name
                         </FluentOption>
                     }
                 </FluentSelect>
             }
             else
             {
-                <p>No jobs available.</p>
+                <span class="sheet-no-jobs">No jobs available.</span>
             }
         </div>
 
-        <div>
-            <FluentLabel>Date</FluentLabel>
-            <FluentDatePicker @bind-Value="workDate" />
+        @* Date + Hours — side by side *@
+        <div class="sheet-row">
+            <div class="sheet-field">
+                <label class="sheet-label">Date</label>
+                <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+            </div>
+            <div class="sheet-field">
+                <label class="sheet-label">Hours</label>
+                <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+            </div>
         </div>
 
-        <div>
-            <FluentLabel>Hours</FluentLabel>
-            <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" />
-        </div>
-
-        <div class="hours-notes">
-            <FluentLabel>Notes</FluentLabel>
-            <FluentTextField @bind-Value="notes" Placeholder="Optional notes" />
+        @* Notes — full width *@
+        <div class="sheet-field sheet-field-full">
+            <label class="sheet-label">Notes <span class="sheet-label-hint">optional</span></label>
+            <FluentTextField @bind-Value="notes" Placeholder="e.g. Installed windows on 2nd floor" style="width:100%" />
         </div>
     </div>
 
-    <div class="hours-actions sheet-actions">
-        <FluentButton Appearance="Appearance.Accent" @onclick="SaveEntryAsync" Disabled="@(!CanCreateEntries)">Save Hours</FluentButton>
-    </div>
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <div class="hours-error-banner">@saveError</div>
+    }
+
+    <button class="sheet-save-btn"
+            @onclick="SaveEntryAsync"
+            disabled="@(!CanCreateEntries || isSaving)">
+        @if (isSaving)
+        {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 class="sheet-save-spinner">
+                <path d="M12 2a10 10 0 1 0 10 10" />
+            </svg>
+            <span>Saving…</span>
+        }
+        else
+        {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span>Save hours</span>
+        }
+    </button>
 </section>
 
 @code {
-    private readonly List<Employee> employees = [];
     private readonly List<Job> jobs = [];
     private readonly List<TimeEntry> entries = [];
-
-    private readonly Dictionary<Guid, string> employeeLookup = new();
     private readonly Dictionary<Guid, string> jobLookup = new();
 
     private Company? company;
-    private string? selectedEmployeeId;
     private string? selectedJobId;
     private string? loadError;
+    private string? saveError;
     private DateTime? workDate = DateTime.Today;
     private decimal hours = 8m;
     private string notes = string.Empty;
     private bool isSheetOpen;
+    private bool isSaving;
+
+    private decimal totalRecentHours => entries.Sum(e => e.Hours);
+    private int uniqueJobCount => entries.Select(e => e.JobId).Distinct().Count();
 
     private bool CanCreateEntries =>
         company is not null &&
-        Guid.TryParse(selectedEmployeeId, out _) &&
         Guid.TryParse(selectedJobId, out _);
 
     protected override async Task OnInitializedAsync()
     {
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null || !string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
         await LoadCompanyAsync();
-        await LoadCompanyDataAsync();
+        await LoadDataAsync();
     }
 
     private async Task LoadCompanyAsync()
@@ -175,104 +214,66 @@
         loadError = result.IsSuccess ? null : result.ErrorMessage;
     }
 
-    private async Task LoadCompanyDataAsync()
+    private async Task LoadDataAsync()
     {
-        employees.Clear();
         jobs.Clear();
         entries.Clear();
-        employeeLookup.Clear();
         jobLookup.Clear();
-        selectedEmployeeId = null;
         selectedJobId = null;
 
-        if (company is null)
-        {
-            return;
-        }
-
-        var employeesResult = await EmployeesApi.GetEmployeesAsync();
-        if (!employeesResult.IsSuccess)
-        {
-            loadError ??= employeesResult.ErrorMessage;
-            return;
-        }
-
-        employees.AddRange(employeesResult.Value ?? []);
-
-        foreach (var employee in employees)
-        {
-            employeeLookup[employee.Id] = employee.DisplayName;
-        }
-
-        selectedEmployeeId = employees.FirstOrDefault()?.Id.ToString();
+        if (company is null) return;
 
         var jobsResult = await JobsApi.GetJobsAsync();
-        if (!jobsResult.IsSuccess)
-        {
-            loadError ??= jobsResult.ErrorMessage;
-            return;
-        }
+        if (!jobsResult.IsSuccess) { loadError ??= jobsResult.ErrorMessage; return; }
 
         jobs.AddRange(jobsResult.Value ?? []);
-
-        foreach (var job in jobs)
-        {
-            jobLookup[job.Id] = $"{job.Code} - {job.Name}";
-        }
-
+        foreach (var job in jobs) jobLookup[job.Id] = $"{job.Code} – {job.Name}";
         selectedJobId = jobs.FirstOrDefault()?.Id.ToString();
 
         var from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
         var entriesResult = await TimeEntriesApi.GetTimeEntriesAsync(from);
-        if (!entriesResult.IsSuccess)
-        {
-            loadError ??= entriesResult.ErrorMessage;
-            return;
-        }
+        if (!entriesResult.IsSuccess) { loadError ??= entriesResult.ErrorMessage; return; }
 
         entries.AddRange(entriesResult.Value ?? []);
     }
 
     private async Task SaveEntryAsync()
     {
-        if (company is null ||
-            !Guid.TryParse(selectedEmployeeId, out var employeeId) ||
-            !Guid.TryParse(selectedJobId, out var jobId) ||
-            workDate is null)
-        {
+        if (company is null || !Guid.TryParse(selectedJobId, out var jobId) || workDate is null)
             return;
-        }
 
-        var entry = new TimeEntry
-        {
-            CompanyId = company.Id,
-            EmployeeId = employeeId,
-            JobId = jobId,
-            WorkDate = DateOnly.FromDateTime(workDate.Value.Date),
-            Hours = hours,
-            Notes = notes
-        };
+        saveError = null;
+        isSaving  = true;
 
-        var result = await TimeEntriesApi.CreateTimeEntryAsync(entry);
-        if (result.IsSuccess)
+        try
         {
-            notes = string.Empty;
-            isSheetOpen = false;
-            await LoadCompanyDataAsync();
+            var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
+            {
+                CompanyId = company.Id,
+                JobId     = jobId,
+                WorkDate  = DateOnly.FromDateTime(workDate.Value.Date),
+                Hours     = hours,
+                Notes     = notes
+            });
+
+            if (result.IsSuccess)
+            {
+                notes       = string.Empty;
+                hours       = 8m;
+                isSheetOpen = false;
+                await LoadDataAsync();
+            }
+            else
+            {
+                saveError = result.ErrorMessage ?? "Could not save entry.";
+            }
         }
-        else
+        finally
         {
-            loadError = result.ErrorMessage;
+            isSaving = false;
         }
     }
 
-    private void OpenSheet()
-    {
-        isSheetOpen = true;
-    }
-
-    private void CloseSheet()
-    {
-        isSheetOpen = false;
-    }
+    private void OpenSheet()  => isSheetOpen = true;
+    private void CloseSheet() => isSheetOpen = false;
 }

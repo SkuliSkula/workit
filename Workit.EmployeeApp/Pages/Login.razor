@@ -1,0 +1,113 @@
+@page "/login"
+@layout LoginLayout
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in — Workit</PageTitle>
+
+@* ── Brand hero ── *@
+<div class="login-hero">
+    <img src="icon-192.png" class="login-logo-img" alt="Workit" />
+    <h1>Workit</h1>
+    <p>Employee app</p>
+</div>
+
+@* ── Form card ── *@
+<div class="login-form-area">
+    <p class="login-form-title">Sign in to continue</p>
+
+    <div class="login-field">
+        <label class="login-label" for="login-email">Email</label>
+        <input id="login-email"
+               type="email"
+               class="login-input"
+               placeholder="your@email.com"
+               autocomplete="email"
+               @bind="email"
+               @bind:event="oninput"
+               @onkeydown="OnKeyDownAsync" />
+    </div>
+
+    <div class="login-field">
+        <label class="login-label" for="login-password">Password</label>
+        <input id="login-password"
+               type="password"
+               class="login-input"
+               placeholder="••••••••"
+               autocomplete="current-password"
+               @bind="password"
+               @bind:event="oninput"
+               @onkeydown="OnKeyDownAsync" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="login-error" role="alert">@errorMessage</div>
+    }
+
+    <button class="login-btn" @onclick="LoginAsync" disabled="@isLoading">
+        @(isLoading ? "Signing in…" : "Sign in")
+    </button>
+</div>
+
+@code {
+    private string email    = string.Empty;
+    private string password = string.Empty;
+    private string? errorMessage;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Already logged in → go straight to home
+        var session = await AuthSession.GetSessionAsync();
+        if (session is not null && string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LoginAsync();
+    }
+
+    private async Task LoginAsync()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Please enter your email and password.";
+            return;
+        }
+
+        isLoading = true;
+        try
+        {
+            var result = await AuthSession.LoginAsync(new LoginRequest
+            {
+                Email    = email.Trim(),
+                Password = password
+            });
+
+            if (result.IsSuccess && result.Value is not null)
+            {
+                if (!string.Equals(result.Value.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+                {
+                    await AuthSession.LogoutAsync();
+                    errorMessage = "Only employee accounts can use the Employee app.";
+                    return;
+                }
+
+                Navigation.NavigateTo("/");
+                return;
+            }
+
+            errorMessage = result.ErrorMessage ?? "Login failed. Please check your credentials.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

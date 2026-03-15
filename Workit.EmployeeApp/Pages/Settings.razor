@@ -1,0 +1,149 @@
+@page "/settings"
+@inject AuthSessionService AuthSession
+@inject IEmployeesApi EmployeesApi
+@inject ICompanyApi CompanyApi
+@inject NavigationManager Navigation
+
+<PageTitle>Settings</PageTitle>
+
+@if (session is null || isLoading)
+{
+    <div class="settings-loading">
+        <FluentProgressRing />
+    </div>
+}
+else
+{
+    @* ── Profile header ── *@
+    <div class="settings-profile">
+        <div class="settings-avatar">@initials</div>
+        <div class="settings-profile-info">
+            <h2 class="settings-name">@(employee?.DisplayName ?? session.Email)</h2>
+            <p class="settings-email">@session.Email</p>
+        </div>
+    </div>
+
+    @* ── Info rows ── *@
+    <FluentCard Class="hours-card settings-card">
+        @if (!string.IsNullOrWhiteSpace(employee?.Trade))
+        {
+            <div class="settings-row">
+                <span class="settings-row-label">Trade</span>
+                <span class="settings-row-value">@employee.Trade</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(employee?.Phone))
+        {
+            <div class="settings-row">
+                <span class="settings-row-label">Phone</span>
+                <span class="settings-row-value">@employee.Phone</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(employee?.ContactPerson))
+        {
+            <div class="settings-row">
+                <span class="settings-row-label">Emergency contact</span>
+                <span class="settings-row-value">@employee.ContactPerson</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(company?.Name))
+        {
+            <div class="settings-row">
+                <span class="settings-row-label">Company</span>
+                <span class="settings-row-value">@company.Name</span>
+            </div>
+        }
+
+        <div class="settings-row">
+            <span class="settings-row-label">Role</span>
+            <span class="settings-row-value settings-role-badge">@session.Role</span>
+        </div>
+    </FluentCard>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentCard Class="hours-card">
+            <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+        </FluentCard>
+    }
+
+    @* ── Sign out ── *@
+    <div class="settings-signout">
+        <button class="settings-signout-btn" @onclick="LogoutAsync">
+            <FluentIcon Value="new Size20.SignOut()" />
+            <span>Sign out</span>
+        </button>
+    </div>
+}
+
+@code {
+    private LoginResponse? session;
+    private Employee? employee;
+    private Company? company;
+    private string? loadError;
+    private bool isLoading = true;
+
+    private string initials => GetInitials(employee?.DisplayName ?? session?.Email ?? "?");
+
+    protected override async Task OnInitializedAsync()
+    {
+        session = await AuthSession.GetSessionAsync();
+
+        if (session is null || !string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadProfileAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            var employeesResult = await EmployeesApi.GetEmployeesAsync();
+            if (employeesResult.IsSuccess)
+            {
+                employee = employeesResult.Value?.FirstOrDefault();
+            }
+            else
+            {
+                loadError = employeesResult.ErrorMessage;
+            }
+
+            var companyResult = await CompanyApi.GetCompanyAsync();
+            if (companyResult.IsSuccess)
+            {
+                company = companyResult.Value;
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LogoutAsync()
+    {
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    private static string GetInitials(string name)
+    {
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..Math.Min(2, parts[0].Length)].ToUpper(),
+            _ => $"{parts[0][0]}{parts[^1][0]}".ToUpper()
+        };
+    }
+}
