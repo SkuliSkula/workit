@@ -40,6 +40,27 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
         return await SendForJsonAsync<TRequest, TResponse>(HttpMethod.Post, requestUri, payload, defaultErrorMessage);
     }
 
+    protected async Task<ApiResult<TResponse>> PutForJsonAsync<TRequest, TResponse>(string requestUri, TRequest payload, string defaultErrorMessage)
+    {
+        return await SendForJsonAsync<TRequest, TResponse>(HttpMethod.Put, requestUri, payload, defaultErrorMessage);
+    }
+
+    protected async Task<ApiResult> DeleteAsync(string requestUri, string defaultErrorMessage)
+    {
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Delete, requestUri);
+            using var response = await httpClient.SendAsync(request);
+            return response.IsSuccessStatusCode
+                ? ApiResult.Success()
+                : ApiResult.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+        }
+        catch (Exception)
+        {
+            return ApiResult.Failure(defaultErrorMessage);
+        }
+    }
+
     private async Task<ApiResult> SendAsync<T>(HttpMethod method, string requestUri, T payload, string defaultErrorMessage)
     {
         try

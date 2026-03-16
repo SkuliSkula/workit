@@ -1,0 +1,376 @@
+@page "/tools"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IToolsApi ToolsApi
+@inject IEmployeesApi EmployeesApi
+
+<PageTitle>Tools</PageTitle>
+
+@* ── Add Tool ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">Tools</FluentLabel>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+    }
+
+    <div class="admin-grid">
+        <div>
+            <FluentLabel>Name</FluentLabel>
+            <FluentTextField @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Serial number</FluentLabel>
+            <FluentTextField @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
+        </div>
+
+        <div style="grid-column: span 2">
+            <FluentLabel>Description</FluentLabel>
+            <FluentTextField @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
+        </div>
+
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateToolAsync"
+                          Disabled="@(string.IsNullOrWhiteSpace(newName) || saving)">
+                @(saving ? "Saving…" : "Add Tool")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(saveResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Edit panel ── *@
+@if (editingTool is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.PaneHeader">Edit Tool</FluentLabel>
+        <div class="admin-grid">
+            <div>
+                <FluentLabel>Name</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.Name" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Serial number</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.SerialNumber" style="width:100%" />
+            </div>
+
+            <div style="grid-column: span 2">
+                <FluentLabel>Description</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.Description" style="width:100%" />
+            </div>
+
+            <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveToolAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(editingTool.Name) || saving)">
+                    @(saving ? "Saving…" : "Save Changes")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit">Cancel</FluentButton>
+            </div>
+        </div>
+    </FluentCard>
+}
+
+@* ── Tool list ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>Tool Inventory</strong></FluentLabel>
+
+    @if (tools.Count > 0)
+    {
+        <FluentDataGrid TGridItem="ToolRow" Items="@tools.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.Name)"         Title="Name" />
+            <PropertyColumn Property="@(x => x.SerialNumber)" Title="Serial #" />
+            <PropertyColumn Property="@(x => x.Description)"  Title="Description" />
+            <PropertyColumn Property="@(x => x.CreatedAt)"   Title="Added"       Format="dd MMM yyyy" />
+            <TemplateColumn Title="Status">
+                @{
+                    var statusStyle = context.IsAssigned
+                        ? "background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;"
+                        : "background:#d1fae5; color:#065f46; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;";
+                }
+                <span style="@statusStyle">@(context.IsAssigned ? "In use" : "Available")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context.Tool))">Edit</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--error);"
+                              Disabled="@context.IsAssigned"
+                              @onclick="@(() => DeleteToolAsync(context.Tool))">Delete</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No tools yet.</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Assignment Overview ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>Current Tool Assignments</strong></FluentLabel>
+
+    @if (currentAssignments.Count > 0)
+    {
+        <FluentDataGrid TGridItem="AssignmentRow" Items="@currentAssignments.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.ToolName)"      Title="Tool" />
+            <PropertyColumn Property="@(x => x.EmployeeName)"  Title="Employee" />
+            <PropertyColumn Property="@(x => x.AssignedSince)" Title="Assigned since" />
+            <PropertyColumn Property="@(x => x.Duration)"      Title="Duration" />
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--warning);"
+                              @onclick="@(() => ReturnToolAsync(context.Assignment))">Return</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No tools are currently assigned.</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    private readonly List<ToolRow> tools = [];
+    private readonly List<AssignmentRow> currentAssignments = [];
+    private readonly Dictionary<Guid, string> employeeNames = new();
+    private readonly Dictionary<Guid, string> toolNames = new();
+
+    private string newName        = string.Empty;
+    private string newSerial      = string.Empty;
+    private string newDescription = string.Empty;
+    private bool   saving;
+    private string? saveResult;
+    private string? loadError;
+
+    private Tool? editingTool;
+
+    // ── View models ───────────────────────────────────────────────────────────
+    private sealed class ToolRow
+    {
+        public Tool   Tool         { get; set; } = null!;
+        public string Name         => Tool.Name;
+        public string SerialNumber => Tool.SerialNumber;
+        public string Description  => Tool.Description;
+        public DateTimeOffset CreatedAt => Tool.CreatedAt;
+        public bool   IsAssigned   { get; set; }
+    }
+
+    private sealed class AssignmentRow
+    {
+        public ToolAssignment Assignment    { get; set; } = null!;
+        public string         ToolName     { get; set; } = string.Empty;
+        public string         EmployeeName { get; set; } = string.Empty;
+        public string         AssignedSince => Assignment.AssignedAt.LocalDateTime.ToString("dd MMM yyyy HH:mm");
+        public string         Duration      => FormatDuration(DateTimeOffset.UtcNow - Assignment.AssignedAt);
+
+        private static string FormatDuration(TimeSpan span)
+        {
+            if (span.TotalDays >= 1)
+                return $"{(int)span.TotalDays}d {span.Hours}h";
+            if (span.TotalHours >= 1)
+                return $"{(int)span.TotalHours}h {span.Minutes}m";
+            return $"{span.Minutes}m";
+        }
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loadError = null;
+        tools.Clear();
+        currentAssignments.Clear();
+        employeeNames.Clear();
+        toolNames.Clear();
+
+        var empTask  = EmployeesApi.GetEmployeesAsync();
+        var toolTask = ToolsApi.GetToolsAsync();
+        await Task.WhenAll(empTask, toolTask);
+
+        var empResult = await empTask;
+        if (empResult.IsSuccess)
+        {
+            foreach (var e in empResult.Value ?? [])
+                employeeNames[e.Id] = e.DisplayName;
+        }
+
+        var toolResult = await toolTask;
+        if (!toolResult.IsSuccess)
+        {
+            loadError = toolResult.ErrorMessage;
+            return;
+        }
+
+        foreach (var t in toolResult.Value ?? [])
+            toolNames[t.Id] = t.Name;
+
+        var assignResult = await ToolsApi.GetToolAssignmentsAsync();
+        if (!assignResult.IsSuccess)
+        {
+            loadError = assignResult.ErrorMessage;
+            return;
+        }
+
+        var allAssignments = assignResult.Value ?? [];
+        var assignedToolIds = allAssignments
+            .Where(a => a.ReturnedAt == null)
+            .Select(a => a.ToolId)
+            .ToHashSet();
+
+        foreach (var t in toolResult.Value ?? [])
+        {
+            tools.Add(new ToolRow { Tool = t, IsAssigned = assignedToolIds.Contains(t.Id) });
+        }
+
+        foreach (var a in allAssignments.Where(x => x.ReturnedAt == null).OrderBy(x => x.AssignedAt))
+        {
+            currentAssignments.Add(new AssignmentRow
+            {
+                Assignment   = a,
+                ToolName     = toolNames.GetValueOrDefault(a.ToolId, a.ToolId.ToString()),
+                EmployeeName = employeeNames.GetValueOrDefault(a.EmployeeId, a.EmployeeId.ToString())
+            });
+        }
+    }
+
+    // ── Create ────────────────────────────────────────────────────────────────
+    private async Task CreateToolAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+
+        saving     = true;
+        saveResult = null;
+
+        try
+        {
+            var result = await ToolsApi.CreateToolAsync(new Tool
+            {
+                Name         = newName.Trim(),
+                SerialNumber = newSerial.Trim(),
+                Description  = newDescription.Trim()
+            });
+
+            if (result.IsSuccess)
+            {
+                saveResult    = $"✓ Tool '{result.Value!.Name}' added.";
+                newName        = string.Empty;
+                newSerial      = string.Empty;
+                newDescription = string.Empty;
+                await LoadAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // ── Edit ──────────────────────────────────────────────────────────────────
+    private void BeginEdit(Tool tool)
+    {
+        editingTool = new Tool
+        {
+            Id           = tool.Id,
+            CompanyId    = tool.CompanyId,
+            Name         = tool.Name,
+            SerialNumber = tool.SerialNumber,
+            Description  = tool.Description
+        };
+        saveResult = null;
+    }
+
+    private async Task SaveToolAsync()
+    {
+        if (editingTool is null || string.IsNullOrWhiteSpace(editingTool.Name)) return;
+
+        saving = true;
+        try
+        {
+            var result = await ToolsApi.UpdateToolAsync(editingTool.Id, editingTool);
+            if (result.IsSuccess)
+            {
+                saveResult  = $"✓ Tool '{result.Value!.Name}' updated.";
+                editingTool = null;
+                await LoadAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingTool = null;
+        saveResult  = null;
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    private async Task DeleteToolAsync(Tool tool)
+    {
+        saving = true;
+        try
+        {
+            var result = await ToolsApi.DeleteToolAsync(tool.Id);
+            if (result.IsSuccess)
+            {
+                saveResult = $"✓ Tool '{tool.Name}' deleted.";
+                await LoadAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // ── Return ────────────────────────────────────────────────────────────────
+    private async Task ReturnToolAsync(ToolAssignment assignment)
+    {
+        saving = true;
+        try
+        {
+            var result = await ToolsApi.ReturnToolAsync(assignment.ToolId);
+            if (result.IsSuccess)
+            {
+                var name = toolNames.GetValueOrDefault(assignment.ToolId, "Tool");
+                saveResult = $"✓ '{name}' marked as returned.";
+                await LoadAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

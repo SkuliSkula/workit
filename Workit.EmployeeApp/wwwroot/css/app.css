@@ -1211,3 +1211,150 @@ code {
         left: calc(50% + 430px / 2 - 56px - 1.25rem);
     }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Tools page
+═══════════════════════════════════════════════════════════ */
+
+.tools-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.tools-header-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 0.15rem;
+}
+
+.tools-section-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    padding: 0.75rem 1rem 0.25rem;
+}
+
+.tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 0.75rem 0.75rem;
+}
+
+.tools-item {
+    background: #fff;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+.tools-item--mine {
+    border-left: 4px solid #f59e0b;
+}
+
+.tools-item--inuse {
+    opacity: 0.7;
+}
+
+.tools-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.tools-item-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.tools-item-serial {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
+.tools-item-desc {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.tools-item-since {
+    font-size: 0.75rem;
+    color: #f59e0b;
+    font-weight: 500;
+}
+
+.tools-item-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #ef4444;
+    background: #fee2e2;
+    padding: 2px 10px;
+    border-radius: 20px;
+    flex-shrink: 0;
+}
+
+.tools-take-btn {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #0b5bd3 0%, #1a7aff 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+}
+
+.tools-take-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.tools-return-btn {
+    flex-shrink: 0;
+    background: #fff;
+    color: #f59e0b;
+    border: 1.5px solid #f59e0b;
+    border-radius: 8px;
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.15s;
+}
+
+.tools-return-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.tools-result-banner {
+    margin: 0.5rem 0.75rem;
+    border-radius: 10px;
+    padding: 0.65rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.tools-result--ok {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.tools-result--error {
+    background: #fee2e2;
+    color: #991b1b;
+}

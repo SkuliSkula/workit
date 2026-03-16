@@ -11,6 +11,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
+    public DbSet<Tool> Tools => Set<Tool>();
+    public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +22,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<Employee>().ToTable("Employees");
         modelBuilder.Entity<Job>().ToTable("Jobs");
         modelBuilder.Entity<TimeEntry>().ToTable("TimeEntries");
+        modelBuilder.Entity<Tool>().ToTable("Tools");
+        modelBuilder.Entity<ToolAssignment>().ToTable("ToolAssignments");
 
         modelBuilder.Entity<AppUser>()
             .HasIndex(x => x.Email)
@@ -44,5 +48,14 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
 
         modelBuilder.Entity<TimeEntry>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId, x.WorkDate });
+
+        modelBuilder.Entity<Tool>()
+            .HasIndex(x => new { x.CompanyId, x.Name });
+
+        modelBuilder.Entity<ToolAssignment>()
+            .HasIndex(x => new { x.CompanyId, x.ToolId });
+
+        modelBuilder.Entity<ToolAssignment>()
+            .HasIndex(x => new { x.CompanyId, x.EmployeeId });
     }
 }

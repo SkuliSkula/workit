@@ -1,0 +1,282 @@
+@page "/tools"
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+@inject IToolsApi ToolsApi
+
+<PageTitle>Tools</PageTitle>
+
+@* ── Header ── *@
+<div class="tools-header employee-shell hours-card">
+    <div>
+        <span class="employee-eyebrow">Company tools</span>
+        <div class="tools-header-title">Tool Tracker</div>
+    </div>
+    <div class="tools-header-stats">
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@myTools.Count</span>
+            <span class="hours-header-stat-lbl">with me</span>
+        </div>
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@availableTools.Count</span>
+            <span class="hours-header-stat-lbl">available</span>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-error-banner">@loadError</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(actionResult))
+{
+    <div class="tools-result-banner @(actionError ? "tools-result--error" : "tools-result--ok")">
+        @actionResult
+    </div>
+}
+
+@* ── My tools ── *@
+@if (myTools.Count > 0)
+{
+    <div class="tools-section-label">Currently with me</div>
+    <div class="tools-list">
+        @foreach (var row in myTools)
+        {
+            <div class="tools-item tools-item--mine">
+                <div class="tools-item-info">
+                    <strong class="tools-item-name">@row.Tool.Name</strong>
+                    @if (!string.IsNullOrWhiteSpace(row.Tool.SerialNumber))
+                    {
+                        <span class="tools-item-serial">#@row.Tool.SerialNumber</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(row.Tool.Description))
+                    {
+                        <span class="tools-item-desc">@row.Tool.Description</span>
+                    }
+                    <span class="tools-item-since">Since @row.AssignedSince · @row.Duration</span>
+                </div>
+                <button class="tools-return-btn" @onclick="@(() => ReturnToolAsync(row))" disabled="@saving">
+                    Return
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@* ── Available tools ── *@
+@if (availableTools.Count > 0)
+{
+    <div class="tools-section-label">Available</div>
+    <div class="tools-list">
+        @foreach (var tool in availableTools)
+        {
+            <div class="tools-item">
+                <div class="tools-item-info">
+                    <strong class="tools-item-name">@tool.Name</strong>
+                    @if (!string.IsNullOrWhiteSpace(tool.SerialNumber))
+                    {
+                        <span class="tools-item-serial">#@tool.SerialNumber</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(tool.Description))
+                    {
+                        <span class="tools-item-desc">@tool.Description</span>
+                    }
+                </div>
+                <button class="tools-take-btn" @onclick="@(() => AssignToolAsync(tool))" disabled="@saving">
+                    Take
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@if (!isLoading && myTools.Count == 0 && availableTools.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48"
+             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <strong>No tools yet</strong>
+        <span>The owner will add tools to the system.</span>
+    </div>
+}
+
+@if (inUseTools.Count > 0)
+{
+    <div class="tools-section-label">In use by others</div>
+    <div class="tools-list">
+        @foreach (var row in inUseTools)
+        {
+            <div class="tools-item tools-item--inuse">
+                <div class="tools-item-info">
+                    <strong class="tools-item-name">@row.Tool.Name</strong>
+                    @if (!string.IsNullOrWhiteSpace(row.Tool.SerialNumber))
+                    {
+                        <span class="tools-item-serial">#@row.Tool.SerialNumber</span>
+                    }
+                    <span class="tools-item-since">With @row.HolderName · @row.Duration</span>
+                </div>
+                <span class="tools-item-badge">In use</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+
+    private readonly List<MyToolRow>    myTools       = [];
+    private readonly List<Tool>         availableTools = [];
+    private readonly List<OtherToolRow> inUseTools     = [];
+
+    private bool    isLoading = true;
+    private bool    saving;
+    private string? loadError;
+    private string? actionResult;
+    private bool    actionError;
+
+    private Guid currentEmployeeId;
+
+    private sealed class MyToolRow
+    {
+        public Tool           Tool        { get; set; } = null!;
+        public ToolAssignment Assignment  { get; set; } = null!;
+        public string AssignedSince => Assignment.AssignedAt.LocalDateTime.ToString("dd MMM");
+        public string Duration      => FormatDuration(DateTimeOffset.UtcNow - Assignment.AssignedAt);
+
+        private static string FormatDuration(TimeSpan span)
+        {
+            if (span.TotalDays >= 1)  return $"{(int)span.TotalDays}d";
+            if (span.TotalHours >= 1) return $"{(int)span.TotalHours}h";
+            return $"{span.Minutes}m";
+        }
+    }
+
+    private sealed class OtherToolRow
+    {
+        public Tool   Tool       { get; set; } = null!;
+        public string HolderName { get; set; } = string.Empty;
+        public string Duration   => string.Empty; // simplified
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        if (session.EmployeeId is Guid empId)
+            currentEmployeeId = empId;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        myTools.Clear();
+        availableTools.Clear();
+        inUseTools.Clear();
+
+        try
+        {
+            var toolsTask       = ToolsApi.GetToolsAsync();
+            var assignmentsTask = ToolsApi.GetToolAssignmentsAsync();
+            await Task.WhenAll(toolsTask, assignmentsTask);
+
+            var toolResult = await toolsTask;
+            if (!toolResult.IsSuccess)
+            {
+                loadError = toolResult.ErrorMessage;
+                return;
+            }
+
+            var assignResult = await assignmentsTask;
+            // Assignments endpoint is owner-only; employees get 403 — that's fine.
+            var allAssignments = assignResult.IsSuccess ? assignResult.Value ?? [] : [];
+
+            var activeAssignments = allAssignments
+                .Where(a => a.ReturnedAt == null)
+                .ToDictionary(a => a.ToolId);
+
+            foreach (var tool in toolResult.Value ?? [])
+            {
+                if (activeAssignments.TryGetValue(tool.Id, out var assignment))
+                {
+                    if (assignment.EmployeeId == currentEmployeeId)
+                    {
+                        myTools.Add(new MyToolRow { Tool = tool, Assignment = assignment });
+                    }
+                    else
+                    {
+                        inUseTools.Add(new OtherToolRow { Tool = tool, HolderName = "a colleague" });
+                    }
+                }
+                else
+                {
+                    availableTools.Add(tool);
+                }
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AssignToolAsync(Tool tool)
+    {
+        saving      = true;
+        actionResult = null;
+
+        try
+        {
+            var result = await ToolsApi.AssignToolAsync(tool.Id);
+            if (result.IsSuccess)
+            {
+                actionError  = false;
+                actionResult = $"✓ {tool.Name} is now with you.";
+                await LoadAsync();
+            }
+            else
+            {
+                actionError  = true;
+                actionResult = result.ErrorMessage ?? "Could not assign tool.";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task ReturnToolAsync(MyToolRow row)
+    {
+        saving      = true;
+        actionResult = null;
+
+        try
+        {
+            var result = await ToolsApi.ReturnToolAsync(row.Tool.Id);
+            if (result.IsSuccess)
+            {
+                actionError  = false;
+                actionResult = $"✓ {row.Tool.Name} returned.";
+                await LoadAsync();
+            }
+            else
+            {
+                actionError  = true;
+                actionResult = result.ErrorMessage ?? "Could not return tool.";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}
