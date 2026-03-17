@@ -7,7 +7,7 @@ RUN dotnet restore "Workit.OwnerApp/Workit.OwnerApp.csproj"
 
 COPY . .
 WORKDIR "/src/Workit.OwnerApp"
-RUN dotnet publish "Workit.OwnerApp.csproj" -c Release -o /app/publish --no-restore
+RUN dotnet publish "Workit.OwnerApp.csproj" -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

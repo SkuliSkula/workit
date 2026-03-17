@@ -7,7 +7,7 @@ RUN dotnet restore "Workit.Api/Workit.Api.csproj"
 
 COPY . .
 WORKDIR "/src/Workit.Api"
-RUN dotnet publish "Workit.Api.csproj" -c Release -o /app/publish --no-restore
+RUN dotnet publish "Workit.Api.csproj" -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

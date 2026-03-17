@@ -7,7 +7,7 @@ RUN dotnet restore "Workit.EmployeeApp/Workit.EmployeeApp.csproj"
 
 COPY . .
 WORKDIR "/src/Workit.EmployeeApp"
-RUN dotnet publish "Workit.EmployeeApp.csproj" -c Release -o /app/publish --no-restore
+RUN dotnet publish "Workit.EmployeeApp.csproj" -c Release -o /app/publish
 
 # Replace appsettings.json with a runtime-injectable template
 RUN echo '{"ApiBaseUrl":"__API_BASE_URL__"}' > /app/publish/wwwroot/appsettings.json
