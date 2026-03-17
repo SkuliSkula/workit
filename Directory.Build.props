@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Workaround for .NET SDK 10.0.201 regression (MSB3552):
+    The default **/*.resx glob is passed literally to an MSBuild task when no
+    .resx files exist, causing a build failure. None of these projects use
+    resource files, so disabling the default embedded-resource items is safe.
+  -->
+  <PropertyGroup>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+</Project>
