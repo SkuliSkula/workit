@@ -1,0 +1,104 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  workit-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-workit}
+      POSTGRES_USER: ${POSTGRES_USER:-workit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - workit-db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-workit} -d ${POSTGRES_DB:-workit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API ─────────────────────────────────────────────────────────────────────
+  workit-api:
+    build:
+      context: ..
+      dockerfile: Workit.Api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      workit-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__WorkitDb: "Host=workit-db;Port=5432;Database=${POSTGRES_DB:-workit};Username=${POSTGRES_USER:-workit};Password=${POSTGRES_PASSWORD}"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__Issuer: Workit.Api
+      Jwt__Audience: Workit.Apps
+      AdminSeed__Email: ${ADMIN_EMAIL}
+      AdminSeed__Password: ${ADMIN_PASSWORD}
+    networks:
+      - internal
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.workit-api.rule=Host(`api.workit.is`)"
+      - "traefik.http.routers.workit-api.entrypoints=websecure"
+      - "traefik.http.routers.workit-api.tls.certresolver=cloudflare"
+      - "traefik.http.services.workit-api.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy"
+
+  # ── Owner App (Blazor Server) ───────────────────────────────────────────────
+  workit-owner:
+    build:
+      context: ..
+      dockerfile: Workit.OwnerApp/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - workit-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      # Internal Docker DNS — avoids a public roundtrip for server→API calls
+      ApiBaseUrl: "http://workit-api:8080/"
+      Payday__ClientId: ${PAYDAY_CLIENT_ID:-}
+      Payday__ClientSecret: ${PAYDAY_CLIENT_SECRET:-}
+    networks:
+      - internal
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.workit-owner.rule=Host(`admin.workit.is`)"
+      - "traefik.http.routers.workit-owner.entrypoints=websecure"
+      - "traefik.http.routers.workit-owner.tls.certresolver=cloudflare"
+      - "traefik.http.services.workit-owner.loadbalancer.server.port=8080"
+      - "traefik.docker.network=proxy"
+
+  # ── Employee App (Blazor WASM via nginx) ────────────────────────────────────
+  workit-employee:
+    build:
+      context: ..
+      dockerfile: Workit.EmployeeApp/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Injected into appsettings.json at container startup by docker-entrypoint.sh
+      API_BASE_URL: "https://api.workit.is/"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.workit-employee.rule=Host(`app.workit.is`)"
+      - "traefik.http.routers.workit-employee.entrypoints=websecure"
+      - "traefik.http.routers.workit-employee.tls.certresolver=cloudflare"
+      - "traefik.http.services.workit-employee.loadbalancer.server.port=80"
+      - "traefik.docker.network=proxy"
+
+networks:
+  proxy:
+    external: true   # Traefik's existing network
+  internal:
+    internal: true   # Database-only network, not exposed to Traefik
+
+volumes:
+  workit-db-data:

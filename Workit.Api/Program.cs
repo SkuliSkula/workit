@@ -42,6 +42,8 @@ builder.Services.AddCors(options =>
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .WithOrigins(
+                    "https://admin.workit.is",
+                    "https://app.workit.is",
                     "https://localhost:7100",
                     "https://localhost:7300",
                     "https://localhost:7200",
@@ -1006,7 +1008,7 @@ if (!isDesignTime)
     await LogStartupDatabaseStatusAsync(app.Services, apiLogger);
 }
 
-if (app.Environment.IsDevelopment() && !isDesignTime)
+if (!isDesignTime)
 {
     var skipSeed = builder.Configuration.GetValue<bool>("SkipDatabaseSeed");
     if (!skipSeed)
