@@ -511,6 +511,7 @@ securedApi.MapGet("/timeentries", async (
         WorkitDbContext db,
         HttpContext httpContext,
         Guid? employeeId,
+        Guid? jobId,
         DateOnly? from,
         DateOnly? to,
         CancellationToken ct) =>
@@ -537,6 +538,11 @@ securedApi.MapGet("/timeentries", async (
         else
         {
             return Results.Forbid();
+        }
+
+        if (jobId is not null)
+        {
+            query = query.Where(x => x.JobId == jobId.Value);
         }
 
         if (from is not null)

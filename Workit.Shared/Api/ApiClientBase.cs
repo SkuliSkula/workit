@@ -19,9 +19,13 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
             var value = await response.Content.ReadFromJsonAsync<T>();
             return ApiResult<T>.Success(value);
         }
-        catch (Exception)
+        catch (HttpRequestException ex)
         {
-            return ApiResult<T>.Failure(defaultErrorMessage);
+            return ApiResult<T>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<T>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
         }
     }
 
@@ -55,9 +59,13 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
                 ? ApiResult.Success()
                 : ApiResult.Failure(await ReadErrorAsync(response, defaultErrorMessage));
         }
-        catch (Exception)
+        catch (HttpRequestException ex)
         {
-            return ApiResult.Failure(defaultErrorMessage);
+            return ApiResult.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
         }
     }
 
@@ -74,9 +82,13 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
 
             return ApiResult.Failure(await ReadErrorAsync(response, defaultErrorMessage));
         }
-        catch (Exception)
+        catch (HttpRequestException ex)
         {
-            return ApiResult.Failure(defaultErrorMessage);
+            return ApiResult.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
         }
     }
 
@@ -94,9 +106,13 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
             var value = await response.Content.ReadFromJsonAsync<TResponse>();
             return ApiResult<TResponse>.Success(value);
         }
-        catch (Exception)
+        catch (HttpRequestException ex)
         {
-            return ApiResult<TResponse>.Failure(defaultErrorMessage);
+            return ApiResult<TResponse>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<TResponse>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
         }
     }
 

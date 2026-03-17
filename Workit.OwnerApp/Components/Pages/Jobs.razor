@@ -3,9 +3,13 @@
 @inject ICompanyApi CompanyApi
 @inject ICustomersApi CustomersApi
 @inject IJobsApi JobsApi
+@inject IEmployeesApi EmployeesApi
+@inject ITimeEntriesApi TimeEntriesApi
+@inject IMaterialsApi MaterialsApi
 
 <PageTitle>Jobs</PageTitle>
 
+@* ── Add Job ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
 
@@ -20,35 +24,23 @@
                 <FluentLabel>Customer</FluentLabel>
                 @if (customers.Count > 0)
                 {
-                    <FluentSelect TValue="string" TOption="string"
-                                  @bind-Value="selectedCustomerId"
-                                  style="width:100%">
-                        @foreach (var customer in customers)
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId" style="width:100%">
+                        @foreach (var c in customers)
                         {
-                            <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
+                            <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
                         }
                     </FluentSelect>
                 }
-                else
-                {
-                    <FluentLabel>No customers available yet.</FluentLabel>
-                }
+                else { <FluentLabel>No customers available yet.</FluentLabel> }
             </div>
-
             <div>
                 <FluentLabel>Job code</FluentLabel>
-                <FluentTextField @bind-Value="newJobCode"
-                                 Placeholder="e.g. HA-1"
-                                 style="width:100%" />
+                <FluentTextField @bind-Value="newJobCode" Placeholder="e.g. HA-1" style="width:100%" />
             </div>
-
             <div>
                 <FluentLabel>Job name</FluentLabel>
-                <FluentTextField @bind-Value="newJobName"
-                                 Placeholder="e.g. Electrical installation"
-                                 style="width:100%" />
+                <FluentTextField @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
             </div>
-
             <div>
                 <FluentLabel>Billing type</FluentLabel>
                 <FluentSelect TValue="string" TOption="string"
@@ -59,171 +51,399 @@
                     <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
                 </FluentSelect>
             </div>
-
             <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync"
-                          Disabled="@(!HasSelectedCustomer)"
-                          style="align-self:end;">Add Job</FluentButton>
+                          Disabled="@(!HasSelectedCustomer)" style="align-self:end;">Add Job</FluentButton>
         </div>
-    }
-
-    @if (editingJob is not null)
-    {
-        <FluentCard Class="admin-card" AreaRestricted="false">
-            <FluentLabel Typo="Typography.PaneHeader">Edit Job</FluentLabel>
-            <div class="admin-grid">
-                <div>
-                    <FluentLabel>Customer</FluentLabel>
-                    <FluentSelect TValue="string" TOption="string"
-                                  @bind-Value="editingCustomerId"
-                                  style="width:100%">
-                        @foreach (var customer in customers)
-                        {
-                            <FluentOption TOption="string" Value="@customer.Id.ToString()">@customer.Name</FluentOption>
-                        }
-                    </FluentSelect>
-                </div>
-
-                <div>
-                    <FluentLabel>Job code</FluentLabel>
-                    <FluentTextField @bind-Value="editingJob.Code"
-                                     Placeholder="e.g. HA-1"
-                                     style="width:100%" />
-                </div>
-
-                <div>
-                    <FluentLabel>Job name</FluentLabel>
-                    <FluentTextField @bind-Value="editingJob.Name"
-                                     Placeholder="e.g. Electrical installation"
-                                     style="width:100%" />
-                </div>
-
-                <div>
-                    <FluentLabel>Billing type</FluentLabel>
-                    <FluentSelect TValue="string" TOption="string"
-                                  Value="@editingJob.BillingType.ToString()"
-                                  ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
-                                  style="width:100%">
-                        <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
-                        <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
-                    </FluentSelect>
-                </div>
-
-                <div style="display:flex; align-items:flex-end; gap:0.5rem;">
-                    <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save Changes</FluentButton>
-                    <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
-                </div>
-            </div>
-        </FluentCard>
     }
 
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <FluentLabel>@loadError</FluentLabel>
-    }
-
-    @if (jobs.Count > 0)
-    {
-        <FluentDataGrid TGridItem="Job" Items="@jobs.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
-            <PropertyColumn Property="@(x => x.Code)" Title="Code" />
-            <PropertyColumn Property="@(x => x.Name)" Title="Name" />
-            <TemplateColumn Title="Customer">
-                <FluentLabel>@customerLookup.GetValueOrDefault(context.CustomerId, context.CustomerId.ToString())</FluentLabel>
-            </TemplateColumn>
-            <TemplateColumn Title="Billing">
-                <span style="@BillingBadgeStyle(context.BillingType) padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;">
-                    @(context.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
-                </span>
-            </TemplateColumn>
-            <TemplateColumn Title="Actions">
-                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditJob(context))">Edit</FluentButton>
-            </TemplateColumn>
-        </FluentDataGrid>
-    }
-    else
-    {
-        <FluentLabel>No jobs yet.</FluentLabel>
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
 </FluentCard>
 
-@code {
-    private readonly List<Customer> customers = [];
-    private readonly List<Job> jobs = [];
-    private readonly Dictionary<Guid, string> customerLookup = new();
-    private Company? company;
-    private Job? editingJob;
-    private string? selectedCustomerId;
-    private string? editingCustomerId;
-    private string newJobCode = string.Empty;
-    private string newJobName = string.Empty;
-    private BillingType newBillingType = BillingType.Hourly;
-    private string? loadError;
+@* ── Job accordion list ── *@
+@if (jobs.Count > 0)
+{
+    <div class="jobs-panel">
+        <div class="jobs-panel-header">
+            <span class="jobs-panel-title">All jobs</span>
+            <span class="jobs-count">@jobs.Count</span>
+        </div>
+        @foreach (var job in jobs)
+        {
+            var isExpanded = expandedJobId == job.Id;
+            var isEditing  = editingJob?.Id == job.Id;
+            var details    = jobDetails.GetValueOrDefault(job.Id);
 
-    private static string BillingBadgeStyle(BillingType type) => type == BillingType.Hourly
-        ? "background:#e8f4fd; color:#0078d4;"
-        : "background:#f0f9f0; color:#107c10;";
+            <div class="job-card @(isExpanded ? "job-card--open" : "")">
+
+                @* ── Always-visible header ── *@
+                <button class="job-card-header" @onclick="@(() => ToggleJobAsync(job))">
+                    <svg class="job-chevron @(isExpanded ? "job-chevron--open" : "")" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <span class="job-code">@job.Code</span>
+                    <span class="job-name">@job.Name</span>
+                    <span class="job-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</span>
+                    <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
+                        @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
+                    </span>
+                </button>
+
+                @* ── Expanded detail ── *@
+                @if (isExpanded)
+                {
+                    @if (details is null)
+                    {
+                        <div class="job-loading">Loading details…</div>
+                    }
+                    else
+                    {
+                        <div class="job-detail">
+
+                            @* KPI bar *@
+                            <div class="job-kpis">
+                                <div class="job-kpi">
+                                    <span class="job-kpi-val">@details.TotalHours.ToString("0.#")</span>
+                                    <span class="job-kpi-lbl">hours</span>
+                                </div>
+                                @if (details.TotalOvertimeHours > 0)
+                                {
+                                    <div class="job-kpi job-kpi--ot">
+                                        <span class="job-kpi-val">@details.TotalOvertimeHours.ToString("0.#")</span>
+                                        <span class="job-kpi-lbl">OT hours</span>
+                                    </div>
+                                }
+                                <div class="job-kpi">
+                                    <span class="job-kpi-val">@details.WorkerCount</span>
+                                    <span class="job-kpi-lbl">worker@(details.WorkerCount == 1 ? "" : "s")</span>
+                                </div>
+                                <div class="job-kpi">
+                                    <span class="job-kpi-val">@details.EntryCount</span>
+                                    <span class="job-kpi-lbl">time entr@(details.EntryCount == 1 ? "y" : "ies")</span>
+                                </div>
+                                @if (details.MaterialCostExVat > 0)
+                                {
+                                    <div class="job-kpi job-kpi--materials">
+                                        <span class="job-kpi-val">@details.MaterialCostExVat.ToString("N0") kr.</span>
+                                        <span class="job-kpi-lbl">materials (ex. VAT)</span>
+                                    </div>
+                                }
+                            </div>
+
+                            @* Workforce *@
+                            <div class="job-section-title">
+                                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                                </svg>
+                                Workforce
+                            </div>
+
+                            @if (details.ByEmployee.Count > 0)
+                            {
+                                <div class="job-rows">
+                                    @foreach (var row in details.ByEmployee.OrderByDescending(r => r.Hours))
+                                    {
+                                        <div class="job-row">
+                                            <span class="job-row-name">@row.EmployeeName</span>
+                                            <span class="job-row-meta">
+                                                <strong>@row.Hours.ToString("0.#") h</strong>
+                                                @if (row.OvertimeHours > 0)
+                                                {
+                                                    <span class="job-row-ot"> + @row.OvertimeHours.ToString("0.#") OT</span>
+                                                }
+                                                <span class="job-row-dim"> · @row.EntryCount entr@(row.EntryCount == 1 ? "y" : "ies")</span>
+                                                @if (row.LastDate.HasValue)
+                                                {
+                                                    <span class="job-row-dim"> · last @row.LastDate.Value.ToString("dd MMM yyyy")</span>
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="job-empty-note">No hours logged on this job yet.</p>
+                            }
+
+                            @* Materials *@
+                            <div class="job-section-title">
+                                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                    <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z"/>
+                                    <path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                </svg>
+                                Materials used
+                            </div>
+
+                            @if (details.ByMaterial.Count > 0)
+                            {
+                                <div class="job-rows">
+                                    @foreach (var row in details.ByMaterial.OrderByDescending(r => r.TotalCostExVat))
+                                    {
+                                        <div class="job-row">
+                                            <span class="job-row-name">@row.MaterialName</span>
+                                            <span class="job-row-meta">
+                                                <strong>@row.TotalQty.ToString("0.##") @row.Unit</strong>
+                                                @if (row.TotalCostExVat > 0)
+                                                {
+                                                    <span class="job-row-dim"> · @row.TotalCostExVat.ToString("N0") kr. ex. VAT
+                                                        (@row.TotalCostInclVat.ToString("N0") kr. incl.)</span>
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="job-material-total">
+                                    Total: <strong>@details.MaterialCostExVat.ToString("N0") kr.</strong> ex. VAT
+                                    <span style="color:#9ca3af;font-weight:400;margin:0 0.2rem">·</span>
+                                    <strong>@details.MaterialCostInclVat.ToString("N0") kr.</strong> incl. VAT
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="job-empty-note">No materials logged on this job yet.</p>
+                            }
+
+                            @* Edit inline *@
+                            @if (isEditing && editingJob is not null)
+                            {
+                                <div class="job-edit-form">
+                                    <div class="job-section-title">
+                                        <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                                        </svg>
+                                        Edit job
+                                    </div>
+                                    <div class="admin-grid" style="margin-top:0.5rem;">
+                                        <div>
+                                            <FluentLabel>Customer</FluentLabel>
+                                            <FluentSelect TValue="string" TOption="string" @bind-Value="editingCustomerId" style="width:100%">
+                                                @foreach (var c in customers)
+                                                {
+                                                    <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        </div>
+                                        <div>
+                                            <FluentLabel>Job code</FluentLabel>
+                                            <FluentTextField @bind-Value="editingJob.Code" style="width:100%" />
+                                        </div>
+                                        <div>
+                                            <FluentLabel>Job name</FluentLabel>
+                                            <FluentTextField @bind-Value="editingJob.Name" style="width:100%" />
+                                        </div>
+                                        <div>
+                                            <FluentLabel>Billing type</FluentLabel>
+                                            <FluentSelect TValue="string" TOption="string"
+                                                          Value="@editingJob.BillingType.ToString()"
+                                                          ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
+                                                          style="width:100%">
+                                                <FluentOption TOption="string" Value="Hourly">Hourly</FluentOption>
+                                                <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
+                                            </FluentSelect>
+                                        </div>
+                                        <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save changes</FluentButton>
+                                            <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="job-actions">
+                                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => BeginEditJob(job))">Edit job</FluentButton>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+}
+else if (company is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel>No jobs yet. Add the first one above.</FluentLabel>
+    </FluentCard>
+}
+
+@code {
+    // ── Lookup data ────────────────────────────────────────────────────────────
+    private readonly List<Customer> customers = [];
+    private readonly List<Job>      jobs      = [];
+    private readonly List<Employee> employees = [];
+    private readonly List<Material> materials = [];
+    private readonly Dictionary<Guid, string>   customerLookup = new();
+    private readonly Dictionary<Guid, string>   employeeLookup = new();
+    private readonly Dictionary<Guid, Material> materialLookup = new();
+
+    // ── Per-job detail cache ───────────────────────────────────────────────────
+    private readonly Dictionary<Guid, JobDetail> jobDetails = new();
+
+    private Company? company;
+    private Guid?    expandedJobId;
+    private Job?     editingJob;
+    private string?  editingCustomerId;
+    private string?  selectedCustomerId;
+    private string   newJobCode     = string.Empty;
+    private string   newJobName     = string.Empty;
+    private BillingType newBillingType = BillingType.Hourly;
+    private string?  loadError;
 
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
-    private bool HasEditingCustomer => Guid.TryParse(editingCustomerId, out _);
+    private bool HasEditingCustomer  => Guid.TryParse(editingCustomerId,  out _);
 
-    protected override async Task OnInitializedAsync()
+    // ── View models ────────────────────────────────────────────────────────────
+    private sealed class JobDetail
     {
-        await LoadAsync();
+        public decimal TotalHours           { get; set; }
+        public decimal TotalOvertimeHours   { get; set; }
+        public decimal MaterialCostExVat    { get; set; }
+        public decimal MaterialCostInclVat  { get; set; }
+        public int     WorkerCount          { get; set; }
+        public int     EntryCount           { get; set; }
+        public List<EmployeeRow>  ByEmployee { get; set; } = [];
+        public List<MaterialRow>  ByMaterial { get; set; } = [];
     }
+
+    private sealed class EmployeeRow
+    {
+        public string    EmployeeName  { get; set; } = string.Empty;
+        public decimal   Hours         { get; set; }
+        public decimal   OvertimeHours { get; set; }
+        public int       EntryCount    { get; set; }
+        public DateOnly? LastDate      { get; set; }
+    }
+
+    private sealed class MaterialRow
+    {
+        public string  MaterialName      { get; set; } = string.Empty;
+        public string  Unit              { get; set; } = string.Empty;
+        public decimal TotalQty          { get; set; }
+        public decimal TotalCostExVat    { get; set; }
+        public decimal TotalCostInclVat  { get; set; }
+    }
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
         loadError = null;
-        customers.Clear();
-        jobs.Clear();
-        customerLookup.Clear();
-        selectedCustomerId = null;
+        customers.Clear(); jobs.Clear(); employees.Clear(); materials.Clear();
+        customerLookup.Clear(); employeeLookup.Clear(); materialLookup.Clear();
+        jobDetails.Clear(); expandedJobId = null; editingJob = null;
+
         var companyResult = await CompanyApi.GetCompanyAsync();
         company = companyResult.Value;
+        if (!companyResult.IsSuccess || company is null) { loadError = companyResult.ErrorMessage; return; }
 
-        if (!companyResult.IsSuccess)
-        {
-            loadError = companyResult.ErrorMessage;
-            return;
-        }
+        var custTask = CustomersApi.GetCustomersAsync();
+        var jobTask  = JobsApi.GetJobsAsync();
+        var empTask  = EmployeesApi.GetEmployeesAsync();
+        var matTask  = MaterialsApi.GetMaterialsAsync();
+        await Task.WhenAll(custTask, jobTask, empTask, matTask);
 
-        if (company is null)
-        {
-            return;
-        }
+        var custR = await custTask;
+        var jobR  = await jobTask;
+        var empR  = await empTask;
+        var matR  = await matTask;
 
-        var customersResult = await CustomersApi.GetCustomersAsync();
-        if (!customersResult.IsSuccess)
-        {
-            loadError = customersResult.ErrorMessage;
-            return;
-        }
+        if (!custR.IsSuccess) { loadError = custR.ErrorMessage; return; }
+        if (!jobR.IsSuccess)  { loadError = jobR.ErrorMessage;  return; }
 
-        customers.AddRange(customersResult.Value ?? []);
+        customers.AddRange(custR.Value ?? []);
         selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
+        foreach (var c in customers) customerLookup[c.Id] = c.Name;
 
-        foreach (var customer in customers)
-        {
-            customerLookup[customer.Id] = customer.Name;
-        }
+        jobs.AddRange(jobR.Value ?? []);
 
-        var jobsResult = await JobsApi.GetJobsAsync();
-        if (!jobsResult.IsSuccess)
-        {
-            loadError = jobsResult.ErrorMessage;
-            return;
-        }
+        employees.AddRange(empR.Value ?? []);
+        foreach (var e in employees) employeeLookup[e.Id] = e.DisplayName;
 
-        jobs.AddRange(jobsResult.Value ?? []);
+        materials.AddRange(matR.Value ?? []);
+        foreach (var m in materials) materialLookup[m.Id] = m;
     }
 
-    private async Task CreateJobAsync()
+    // ── Accordion ──────────────────────────────────────────────────────────────
+    private async Task ToggleJobAsync(Job job)
     {
-        if (company is null ||
-            !Guid.TryParse(selectedCustomerId, out var customerId) ||
-            string.IsNullOrWhiteSpace(newJobName))
+        if (expandedJobId == job.Id)
         {
+            expandedJobId = null;
+            editingJob    = null;
             return;
         }
+
+        expandedJobId = job.Id;
+        editingJob    = null;
+
+        if (!jobDetails.ContainsKey(job.Id))
+            await LoadJobDetailAsync(job.Id);
+    }
+
+    private async Task LoadJobDetailAsync(Guid jobId)
+    {
+        var entriesTask = TimeEntriesApi.GetTimeEntriesAsync(jobId: jobId);
+        var usageTask   = MaterialsApi.GetMaterialUsageAsync(jobId: jobId);
+        await Task.WhenAll(entriesTask, usageTask);
+
+        var entries = (await entriesTask).Value ?? [];
+        var usages  = (await usageTask).Value   ?? [];
+
+        var byEmp = entries
+            .GroupBy(e => e.EmployeeId)
+            .Select(g => new EmployeeRow
+            {
+                EmployeeName  = employeeLookup.GetValueOrDefault(g.Key, g.Key.ToString()[..8]),
+                Hours         = g.Sum(e => e.Hours),
+                OvertimeHours = g.Sum(e => e.OvertimeHours),
+                EntryCount    = g.Count(),
+                LastDate      = g.Max(e => e.WorkDate)
+            })
+            .ToList();
+
+        var byMat = usages
+            .GroupBy(u => u.MaterialId)
+            .Select(g =>
+            {
+                var mat      = materialLookup.GetValueOrDefault(g.Key);
+                var qty      = g.Sum(u => u.Quantity);
+                var costEx   = mat is not null ? qty * mat.UnitPrice : 0m;
+                var costIncl = mat is not null ? costEx * (1 + mat.VatRate / 100m) : 0m;
+                return new MaterialRow
+                {
+                    MaterialName     = mat?.Name ?? g.Key.ToString()[..8],
+                    Unit             = mat?.Unit ?? string.Empty,
+                    TotalQty         = qty,
+                    TotalCostExVat   = costEx,
+                    TotalCostInclVat = costIncl
+                };
+            })
+            .ToList();
+
+        jobDetails[jobId] = new JobDetail
+        {
+            TotalHours          = entries.Sum(e => e.Hours),
+            TotalOvertimeHours  = entries.Sum(e => e.OvertimeHours),
+            WorkerCount         = byEmp.Count,
+            EntryCount          = entries.Count,
+            MaterialCostExVat   = byMat.Sum(m => m.TotalCostExVat),
+            MaterialCostInclVat = byMat.Sum(m => m.TotalCostInclVat),
+            ByEmployee          = byEmp,
+            ByMaterial          = byMat
+        };
+    }
+
+    // ── CRUD ───────────────────────────────────────────────────────────────────
+    private async Task CreateJobAsync()
+    {
+        if (company is null || !Guid.TryParse(selectedCustomerId, out var customerId) || string.IsNullOrWhiteSpace(newJobName))
+            return;
 
         var result = await JobsApi.CreateJobAsync(new Job
         {
@@ -234,56 +454,24 @@
             BillingType = newBillingType
         });
 
-        if (result.IsSuccess)
-        {
-            newJobCode    = string.Empty;
-            newJobName    = string.Empty;
-            newBillingType = BillingType.Hourly;
-            await LoadAsync();
-            return;
-        }
-
-        loadError = result.ErrorMessage;
+        if (result.IsSuccess) { newJobCode = string.Empty; newJobName = string.Empty; newBillingType = BillingType.Hourly; await LoadAsync(); }
+        else { loadError = result.ErrorMessage; }
     }
 
     private void BeginEditJob(Job job)
     {
-        editingJob = new Job
-        {
-            Id          = job.Id,
-            CompanyId   = job.CompanyId,
-            CustomerId  = job.CustomerId,
-            Code        = job.Code,
-            Name        = job.Name,
-            BillingType = job.BillingType
-        };
+        editingJob = new Job { Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, Code = job.Code, Name = job.Name, BillingType = job.BillingType };
         editingCustomerId = job.CustomerId.ToString();
     }
 
     private async Task SaveJobAsync()
     {
-        if (editingJob is null || !Guid.TryParse(editingCustomerId, out var customerId))
-        {
-            return;
-        }
-
+        if (editingJob is null || !Guid.TryParse(editingCustomerId, out var customerId)) return;
         editingJob.CustomerId = customerId;
-
         var result = await JobsApi.UpdateJobAsync(editingJob);
-        if (result.IsSuccess)
-        {
-            editingJob = null;
-            editingCustomerId = null;
-            await LoadAsync();
-            return;
-        }
-
-        loadError = result.ErrorMessage;
+        if (result.IsSuccess) { editingJob = null; editingCustomerId = null; await LoadAsync(); }
+        else { loadError = result.ErrorMessage; }
     }
 
-    private void CancelJobEdit()
-    {
-        editingJob = null;
-        editingCustomerId = null;
-    }
+    private void CancelJobEdit() { editingJob = null; editingCustomerId = null; }
 }
