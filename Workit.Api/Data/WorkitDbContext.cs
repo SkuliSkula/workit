@@ -13,6 +13,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<TimeEntry> TimeEntries => Set<TimeEntry>();
     public DbSet<Tool> Tools => Set<Tool>();
     public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
+    public DbSet<Material> Materials => Set<Material>();
+    public DbSet<MaterialUsage> MaterialUsages => Set<MaterialUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +26,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<TimeEntry>().ToTable("TimeEntries");
         modelBuilder.Entity<Tool>().ToTable("Tools");
         modelBuilder.Entity<ToolAssignment>().ToTable("ToolAssignments");
+        modelBuilder.Entity<Material>().ToTable("Materials");
+        modelBuilder.Entity<MaterialUsage>().ToTable("MaterialUsages");
 
         modelBuilder.Entity<AppUser>()
             .HasIndex(x => x.Email)
@@ -56,6 +60,18 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.ToolId });
 
         modelBuilder.Entity<ToolAssignment>()
+            .HasIndex(x => new { x.CompanyId, x.EmployeeId });
+
+        modelBuilder.Entity<Material>()
+            .HasIndex(x => new { x.CompanyId, x.Category });
+
+        modelBuilder.Entity<Material>()
+            .HasIndex(x => new { x.CompanyId, x.ProductCode });
+
+        modelBuilder.Entity<MaterialUsage>()
+            .HasIndex(x => new { x.CompanyId, x.MaterialId });
+
+        modelBuilder.Entity<MaterialUsage>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId });
     }
 }

@@ -1,0 +1,278 @@
+@page "/materials"
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+@inject IMaterialsApi MaterialsApi
+@inject IJobsApi JobsApi
+
+<PageTitle>Materials</PageTitle>
+
+@* ── Header ── *@
+<div class="tools-header employee-shell hours-card">
+    <div>
+        <span class="employee-eyebrow">Company catalog</span>
+        <div class="tools-header-title">Materials</div>
+    </div>
+    <div class="tools-header-stats">
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@filteredMaterials.Count</span>
+            <span class="hours-header-stat-lbl">items</span>
+        </div>
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@activeCategory</span>
+            <span class="hours-header-stat-lbl">category</span>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-error-banner">@loadError</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(actionResult))
+{
+    <div class="tools-result-banner @(actionError ? "tools-result--error" : "tools-result--ok")">
+        @actionResult
+    </div>
+}
+
+@* ── Category pills ── *@
+<div class="materials-cat-scroll">
+    <button class="materials-cat-pill @(selectedCategory == null ? "active" : "")"
+            @onclick="@(() => SelectCategory(null))">All</button>
+    @foreach (var cat in usedCategories)
+    {
+        <button class="materials-cat-pill @(selectedCategory == cat ? "active" : "")"
+                @onclick="@(() => SelectCategory(cat))">@cat</button>
+    }
+</div>
+
+@* ── Material list ── *@
+@if (filteredMaterials.Count > 0)
+{
+    <div class="tools-list">
+        @foreach (var mat in filteredMaterials)
+        {
+            <div class="tools-item materials-item">
+                <div class="tools-item-info">
+                    <strong class="tools-item-name">@mat.Name</strong>
+                    @if (!string.IsNullOrWhiteSpace(mat.ProductCode))
+                    {
+                        <span class="tools-item-serial">@mat.ProductCode</span>
+                    }
+                    <span class="tools-item-desc">
+                        @mat.Category · @mat.Unit
+                        @if (mat.UnitPrice > 0)
+                        {
+                            <span> · @mat.UnitPrice.ToString("N0") kr. (@mat.VatRate.ToString("0.#")% VAT)</span>
+                        }
+                    </span>
+                    @{
+                        var stockColor = mat.Quantity <= 0 ? "#dc2626"
+                                       : mat.Quantity < 10 ? "#d97706"
+                                       : "#059669";
+                    }
+                    <span class="tools-item-since" style="color:@stockColor; font-weight:600;">
+                        Stock: @mat.Quantity.ToString("0.##") @mat.Unit
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(mat.Description))
+                    {
+                        <span class="tools-item-desc" style="font-style:italic">@mat.Description</span>
+                    }
+                </div>
+                <button class="tools-take-btn" @onclick="@(() => OpenLogSheet(mat))">
+                    Log use
+                </button>
+            </div>
+        }
+    </div>
+}
+else if (!isLoading && string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-empty">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="48" height="48"
+             fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+        </svg>
+        <strong>No materials yet</strong>
+        <span>The owner will add materials to the catalog.</span>
+    </div>
+}
+
+@* ── Log usage bottom sheet ── *@
+@if (sheetMaterial is not null)
+{
+    <div class="hours-sheet-backdrop" @onclick="CloseSheet"></div>
+    <div class="hours-sheet">
+        <div class="hours-sheet-handle"></div>
+        <div class="hours-sheet-title">Log material use</div>
+
+        <div class="hours-sheet-material-info">
+            <strong>@sheetMaterial.Name</strong>
+            @if (!string.IsNullOrWhiteSpace(sheetMaterial.ProductCode))
+            {
+                <span class="tools-item-serial" style="margin-left:0.4rem">@sheetMaterial.ProductCode</span>
+            }
+        </div>
+
+        <div class="hours-field">
+            <label class="hours-field-label">Quantity (@sheetMaterial.Unit)</label>
+            <input class="hours-field-input" type="number" min="0.01" step="0.01"
+                   @bind="sheetQuantity" @bind:event="oninput" placeholder="1" />
+        </div>
+
+        @if (jobs.Count > 0)
+        {
+            <div class="hours-field">
+                <label class="hours-field-label">Job (optional)</label>
+                <select class="hours-field-input" @bind="sheetJobId">
+                    <option value="">— no job —</option>
+                    @foreach (var job in jobs)
+                    {
+                        <option value="@job.Id">@job.Code — @job.Name</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <div class="hours-field">
+            <label class="hours-field-label">Notes (optional)</label>
+            <input class="hours-field-input" type="text" @bind="sheetNotes" placeholder="Any notes…" />
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(sheetError))
+        {
+            <div class="hours-sheet-error">@sheetError</div>
+        }
+
+        @if (sheetMaterial.UnitPrice > 0 && sheetQuantity > 0)
+        {
+            <div class="materials-price-preview">
+                <span>@sheetQuantity @sheetMaterial.Unit × @sheetMaterial.UnitPrice.ToString("N0") kr.</span>
+                <strong>= @((sheetQuantity * sheetMaterial.UnitPrice).ToString("N0")) kr. ex. VAT</strong>
+                <span>(@((sheetQuantity * sheetMaterial.UnitPrice * (1 + sheetMaterial.VatRate / 100m)).ToString("N0")) kr. incl. VAT)</span>
+            </div>
+        }
+
+        <button class="hours-sheet-save-btn" @onclick="LogUsageAsync"
+                disabled="@(isSaving || sheetQuantity <= 0)">
+            @(isSaving ? "Saving…" : "Log usage")
+        </button>
+    </div>
+}
+
+@code {
+    private List<Material> allMaterials      = [];
+    private List<Material> filteredMaterials = [];
+    private List<string>   usedCategories    = [];
+    private List<Job>      jobs              = [];
+
+    private string? selectedCategory;
+    private string  activeCategory   = "All";
+    private bool    isLoading        = true;
+    private bool    isSaving;
+    private string  loadError        = string.Empty;
+    private string  actionResult     = string.Empty;
+    private bool    actionError;
+
+    // sheet state
+    private Material? sheetMaterial;
+    private decimal   sheetQuantity  = 1m;
+    private string    sheetJobId     = string.Empty;
+    private string    sheetNotes     = string.Empty;
+    private string    sheetError     = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await Task.WhenAll(LoadMaterialsAsync(), LoadJobsAsync());
+    }
+
+    private async Task LoadMaterialsAsync()
+    {
+        isLoading = true;
+        loadError = string.Empty;
+
+        var result = await MaterialsApi.GetMaterialsAsync(activeOnly: true);
+        if (result.IsSuccess)
+        {
+            allMaterials   = result.Value!;
+            usedCategories = [.. allMaterials.Select(m => m.Category).Distinct().OrderBy(c => c)];
+            ApplyFilter();
+        }
+        else
+        {
+            loadError = result.ErrorMessage ?? "Could not load materials.";
+        }
+
+        isLoading = false;
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        var result = await JobsApi.GetJobsAsync();
+        if (result.IsSuccess) jobs = result.Value ?? [];
+    }
+
+    private void SelectCategory(string? cat)
+    {
+        selectedCategory = cat;
+        activeCategory   = cat ?? "All";
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        filteredMaterials = selectedCategory is null
+            ? [.. allMaterials]
+            : [.. allMaterials.Where(m => m.Category == selectedCategory)];
+    }
+
+    // ── Sheet ──────────────────────────────────────────────────────────────────
+    private void OpenLogSheet(Material mat)
+    {
+        sheetMaterial  = mat;
+        sheetQuantity  = 1m;
+        sheetJobId     = string.Empty;
+        sheetNotes     = string.Empty;
+        sheetError     = string.Empty;
+        actionResult   = string.Empty;
+    }
+
+    private void CloseSheet() => sheetMaterial = null;
+
+    private async Task LogUsageAsync()
+    {
+        if (sheetMaterial is null || sheetQuantity <= 0) return;
+        isSaving   = true;
+        sheetError = string.Empty;
+
+        var usage = new MaterialUsage
+        {
+            MaterialId = sheetMaterial.Id,
+            Quantity   = sheetQuantity,
+            JobId      = Guid.TryParse(sheetJobId, out var jid) ? jid : null,
+            Notes      = sheetNotes.Trim()
+        };
+
+        var result = await MaterialsApi.LogMaterialUsageAsync(usage);
+        if (result.IsSuccess)
+        {
+            actionError  = false;
+            actionResult = $"✓ {sheetQuantity} {sheetMaterial.Unit} of {sheetMaterial.Name} logged.";
+            sheetMaterial = null;
+        }
+        else
+        {
+            sheetError = result.ErrorMessage ?? "Could not log material usage.";
+        }
+
+        isSaving = false;
+    }
+}

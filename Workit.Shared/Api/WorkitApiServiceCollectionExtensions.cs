@@ -14,6 +14,7 @@ public static class WorkitApiServiceCollectionExtensions
         services.AddScoped<IJobsApi, JobsApi>();
         services.AddScoped<ITimeEntriesApi, TimeEntriesApi>();
         services.AddScoped<IToolsApi, ToolsApi>();
+        services.AddScoped<IMaterialsApi, MaterialsApi>();
 
         return services;
     }

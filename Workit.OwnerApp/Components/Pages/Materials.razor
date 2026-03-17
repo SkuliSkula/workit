@@ -1,0 +1,351 @@
+@page "/materials"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IMaterialsApi MaterialsApi
+
+<PageTitle>Materials</PageTitle>
+
+@* ── Add / Edit form ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">@(editingMaterial is not null ? "Edit Material" : "Materials")</FluentLabel>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+    }
+
+    <div class="admin-grid">
+        <div>
+            <FluentLabel>Name *</FluentLabel>
+            <FluentTextField @bind-Value="formName" Placeholder="e.g. N1XE-U 5G 16 Cu 1kV Aflstrengur" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Product code</FluentLabel>
+            <FluentTextField @bind-Value="formCode" Placeholder="e.g. N1XECU015G016" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Category *</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="formCategory" style="width:100%">
+                @foreach (var cat in Categories)
+                {
+                    <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Unit</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="formUnit" style="width:100%">
+                @foreach (var u in Units)
+                {
+                    <FluentOption TOption="string" Value="@u">@u</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Unit price (ex. VAT)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formUnitPrice" Min="0" Step="0.01" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>VAT rate (%)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formVatRate" Min="0" Max="100" Step="0.5" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Quantity in stock</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
+                               Placeholder="e.g. 500 (metres of cable)" />
+        </div>
+
+        <div style="grid-column: span 2">
+            <FluentLabel>Description</FluentLabel>
+            <FluentTextField @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
+        </div>
+
+        <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+            @if (editingMaterial is not null)
+            {
+                <FluentButton Appearance="Appearance.Accent" @onclick="UpdateMaterialAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
+                    @(saving ? "Saving…" : "Save changes")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" @onclick="CancelEdit">Cancel</FluentButton>
+            }
+            else
+            {
+                <FluentButton Appearance="Appearance.Accent" @onclick="CreateMaterialAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
+                    @(saving ? "Saving…" : "Add material")
+                </FluentButton>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(saveResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Category filter + grid ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+        <FluentLabel Typo="Typography.Body"><strong>Catalog</strong></FluentLabel>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+            <FluentLabel>Category:</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterCategory"
+                          @bind-Value:after="ApplyFilter" style="min-width:180px">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                @foreach (var cat in Categories)
+                {
+                    <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+        <FluentLabel style="margin-left:auto; color: var(--neutral-foreground-rest)">
+            @filteredMaterials.Count material@(filteredMaterials.Count == 1 ? "" : "s")
+        </FluentLabel>
+    </div>
+
+    @if (filteredMaterials.Count > 0)
+    {
+        <FluentDataGrid TGridItem="Material" Items="@filteredMaterials.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.25rem;">
+            <PropertyColumn Property="@(x => x.Category)"    Title="Category" />
+            <PropertyColumn Property="@(x => x.Name)"        Title="Name" />
+            <PropertyColumn Property="@(x => x.ProductCode)" Title="Code" />
+            <PropertyColumn Property="@(x => x.Unit)"        Title="Unit" />
+            <TemplateColumn Title="Price (ex. VAT)">
+                <span>@context.UnitPrice.ToString("N0") kr.</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Price (incl. VAT)">
+                <span>@((context.UnitPrice * (1 + context.VatRate / 100m)).ToString("N0")) kr.</span>
+            </TemplateColumn>
+            <PropertyColumn Property="@(x => x.VatRate)"     Title="VAT %" Format="0.#" />
+            <TemplateColumn Title="In stock">
+                @{
+                    var stockStyle = context.Quantity <= 0
+                        ? "color:#dc2626; font-weight:600;"
+                        : context.Quantity < 10
+                            ? "color:#d97706; font-weight:600;"
+                            : "color:#059669; font-weight:600;";
+                }
+                <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Status">
+                @{
+                    var statusStyle = context.IsActive
+                        ? "background:#d1fae5; color:#065f46; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;"
+                        : "background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;";
+                }
+                <span style="@statusStyle">@(context.IsActive ? "Active" : "Inactive")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context))">Edit</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--error);"
+                              @onclick="@(() => DeleteMaterialAsync(context))">Delete</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No materials yet. Add the first one above.</FluentLabel>
+    }
+</FluentCard>
+
+@code {
+    // ── Static lists ───────────────────────────────────────────────────────────
+    private static readonly string[] Categories =
+    [
+        "Rafstrengir",
+        "Lagnaefni",
+        "Lagnaleiðir",
+        "Töflubúnaður",
+        "Stýribúnaður",
+        "Fjarskiptabúnaður",
+        "Hitabúnaður",
+        "Lýsing",
+        "Rofa- og tenglaefni",
+        "Verkfæri",
+        "Tengibúnaður",
+        "Veitubúnaður",
+        "Hleðsla rafbíla",
+        "Dyrasímar",
+        "Snjalllausnir",
+        "Brunavarnir",
+        "Annað"
+    ];
+
+    private static readonly string[] Units = ["stk.", "m.", "pk.", "rúll.", "box", "kg", "ltr."];
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    private List<Material> allMaterials     = [];
+    private List<Material> filteredMaterials = [];
+    private Material?      editingMaterial;
+
+    private string  filterCategory  = string.Empty;
+    private string  loadError       = string.Empty;
+    private string  saveResult      = string.Empty;
+    private bool    saving;
+
+    // ── Form fields ────────────────────────────────────────────────────────────
+    private string  formName        = string.Empty;
+    private string  formCode        = string.Empty;
+    private string  formCategory    = Categories[0];
+    private string  formUnit        = "stk.";
+    private decimal formUnitPrice;
+    private decimal formVatRate     = 24.0m;
+    private decimal formQuantity;
+    private string  formDescription = string.Empty;
+    private bool    formIsActive    = true;
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loadError = string.Empty;
+        var result = await MaterialsApi.GetMaterialsAsync();
+        if (result.IsSuccess)
+        {
+            allMaterials = result.Value!;
+            ApplyFilter();
+        }
+        else
+        {
+            loadError = result.ErrorMessage ?? "Could not load materials.";
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        filteredMaterials = string.IsNullOrWhiteSpace(filterCategory)
+            ? [.. allMaterials]
+            : [.. allMaterials.Where(m => m.Category == filterCategory)];
+    }
+
+    // ── CRUD ───────────────────────────────────────────────────────────────────
+    private async Task CreateMaterialAsync()
+    {
+        saving     = true;
+        saveResult = string.Empty;
+
+        var material = new Material
+        {
+            Name        = formName,
+            ProductCode = formCode,
+            Category    = formCategory,
+            Unit        = formUnit,
+            UnitPrice   = formUnitPrice,
+            VatRate     = formVatRate,
+            Quantity    = formQuantity,
+            Description = formDescription,
+            IsActive    = true
+        };
+
+        var result = await MaterialsApi.CreateMaterialAsync(material);
+        if (result.IsSuccess)
+        {
+            saveResult = $"✓ {result.Value!.Name} added to catalog.";
+            ResetForm();
+            await LoadAsync();
+        }
+        else
+        {
+            saveResult = result.ErrorMessage ?? "Could not save material.";
+        }
+
+        saving = false;
+    }
+
+    private void BeginEdit(Material m)
+    {
+        editingMaterial = m;
+        formName        = m.Name;
+        formCode        = m.ProductCode;
+        formCategory    = m.Category;
+        formUnit        = m.Unit;
+        formUnitPrice   = m.UnitPrice;
+        formVatRate     = m.VatRate;
+        formQuantity    = m.Quantity;
+        formDescription = m.Description;
+        formIsActive    = m.IsActive;
+        saveResult      = string.Empty;
+    }
+
+    private async Task UpdateMaterialAsync()
+    {
+        if (editingMaterial is null) return;
+        saving     = true;
+        saveResult = string.Empty;
+
+        var updated = new Material
+        {
+            Id          = editingMaterial.Id,
+            CompanyId   = editingMaterial.CompanyId,
+            CreatedAt   = editingMaterial.CreatedAt,
+            Name        = formName,
+            ProductCode = formCode,
+            Category    = formCategory,
+            Unit        = formUnit,
+            UnitPrice   = formUnitPrice,
+            VatRate     = formVatRate,
+            Quantity    = formQuantity,
+            Description = formDescription,
+            IsActive    = formIsActive
+        };
+
+        var result = await MaterialsApi.UpdateMaterialAsync(updated.Id, updated);
+        if (result.IsSuccess)
+        {
+            saveResult = $"✓ {result.Value!.Name} updated.";
+            editingMaterial = null;
+            ResetForm();
+            await LoadAsync();
+        }
+        else
+        {
+            saveResult = result.ErrorMessage ?? "Could not update material.";
+        }
+
+        saving = false;
+    }
+
+    private async Task DeleteMaterialAsync(Material m)
+    {
+        saveResult = string.Empty;
+        var result = await MaterialsApi.DeleteMaterialAsync(m.Id);
+        if (result.IsSuccess)
+        {
+            saveResult = $"✓ {m.Name} removed.";
+            await LoadAsync();
+        }
+        else
+        {
+            saveResult = result.ErrorMessage ?? "Could not delete material.";
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editingMaterial = null;
+        ResetForm();
+    }
+
+    private void ResetForm()
+    {
+        formName        = string.Empty;
+        formCode        = string.Empty;
+        formCategory    = Categories[0];
+        formUnit        = "stk.";
+        formUnitPrice   = 0m;
+        formVatRate     = 24.0m;
+        formQuantity    = 0m;
+        formDescription = string.Empty;
+        formIsActive    = true;
+    }
+}
