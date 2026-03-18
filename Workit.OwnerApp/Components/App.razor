@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <base href="/" />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
@@ -21,6 +21,10 @@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
+        window.copyToClipboard = function (text) {
+            return navigator.clipboard.writeText(text);
+        };
+
         window.triggerFileDownload = function (filename, base64, mimeType) {
             const bytes = atob(base64);
             const arr = new Uint8Array(bytes.length);
