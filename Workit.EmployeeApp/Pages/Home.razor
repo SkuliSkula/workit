@@ -1,4 +1,4 @@
-@page "/"
+@page "/dashboard"
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
 @inject ICompanyApi CompanyApi
@@ -6,7 +6,7 @@
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard</PageTitle>
 
 @if (!string.IsNullOrWhiteSpace(loadError))
 {
