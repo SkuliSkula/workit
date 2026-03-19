@@ -45,8 +45,26 @@
         </div>
 
         <div>
-            <FluentLabel>Unit price (ex. VAT)</FluentLabel>
+            <FluentLabel>Purchase price (ex. VAT)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formPurchasePrice" Min="0" Step="0.01" style="width:100%"
+                               @bind-Value:after="RecalcSalePrice" Placeholder="What you pay the vendor" />
+        </div>
+
+        <div>
+            <FluentLabel>Markup factor</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formMarkupFactor" Min="1" Step="0.05" style="width:100%"
+                               @bind-Value:after="RecalcSalePrice" Placeholder="e.g. 1.5 = 50% markup" />
+        </div>
+
+        <div>
+            <FluentLabel>Sale price (ex. VAT)</FluentLabel>
             <FluentNumberField TValue="decimal" @bind-Value="formUnitPrice" Min="0" Step="0.01" style="width:100%" />
+            @if (formPurchasePrice > 0 && formMarkupFactor > 0)
+            {
+                <span style="font-size:0.82rem; color:#60758b; margin-top:0.2rem; display:block;">
+                    Auto-calc: @((formPurchasePrice * formMarkupFactor).ToString("N0")) kr.
+                </span>
+            }
         </div>
 
         <div>
@@ -118,7 +136,13 @@
             <PropertyColumn Property="@(x => x.Name)"        Title="Name" />
             <PropertyColumn Property="@(x => x.ProductCode)" Title="Code" />
             <PropertyColumn Property="@(x => x.Unit)"        Title="Unit" />
-            <TemplateColumn Title="Price (ex. VAT)">
+            <TemplateColumn Title="Purchase">
+                <span>@(context.PurchasePrice > 0 ? $"{context.PurchasePrice:N0} kr." : "—")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Markup">
+                <span>@(context.MarkupFactor != 1m ? $"{context.MarkupFactor:0.##}×" : "—")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Sale price (ex. VAT)">
                 <span>@context.UnitPrice.ToString("N0") kr.</span>
             </TemplateColumn>
             <TemplateColumn Title="Price (incl. VAT)">
@@ -193,15 +217,23 @@
     private bool    saving;
 
     // ── Form fields ────────────────────────────────────────────────────────────
-    private string  formName        = string.Empty;
-    private string  formCode        = string.Empty;
-    private string  formCategory    = Categories[0];
-    private string  formUnit        = "stk.";
+    private string  formName          = string.Empty;
+    private string  formCode          = string.Empty;
+    private string  formCategory      = Categories[0];
+    private string  formUnit          = "stk.";
+    private decimal formPurchasePrice;
+    private decimal formMarkupFactor  = 1.5m;
     private decimal formUnitPrice;
-    private decimal formVatRate     = 24.0m;
+    private decimal formVatRate       = 24.0m;
     private decimal formQuantity;
-    private string  formDescription = string.Empty;
-    private bool    formIsActive    = true;
+    private string  formDescription   = string.Empty;
+    private bool    formIsActive      = true;
+
+    private void RecalcSalePrice()
+    {
+        if (formPurchasePrice > 0 && formMarkupFactor >= 1m)
+            formUnitPrice = Math.Round(formPurchasePrice * formMarkupFactor, 0);
+    }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync() => await LoadAsync();
@@ -236,15 +268,17 @@
 
         var material = new Material
         {
-            Name        = formName,
-            ProductCode = formCode,
-            Category    = formCategory,
-            Unit        = formUnit,
-            UnitPrice   = formUnitPrice,
-            VatRate     = formVatRate,
-            Quantity    = formQuantity,
-            Description = formDescription,
-            IsActive    = true
+            Name          = formName,
+            ProductCode   = formCode,
+            Category      = formCategory,
+            Unit          = formUnit,
+            PurchasePrice = formPurchasePrice,
+            MarkupFactor  = formMarkupFactor,
+            UnitPrice     = formUnitPrice,
+            VatRate       = formVatRate,
+            Quantity      = formQuantity,
+            Description   = formDescription,
+            IsActive      = true
         };
 
         var result = await MaterialsApi.CreateMaterialAsync(material);
@@ -264,17 +298,19 @@
 
     private void BeginEdit(Material m)
     {
-        editingMaterial = m;
-        formName        = m.Name;
-        formCode        = m.ProductCode;
-        formCategory    = m.Category;
-        formUnit        = m.Unit;
-        formUnitPrice   = m.UnitPrice;
-        formVatRate     = m.VatRate;
-        formQuantity    = m.Quantity;
-        formDescription = m.Description;
-        formIsActive    = m.IsActive;
-        saveResult      = string.Empty;
+        editingMaterial   = m;
+        formName          = m.Name;
+        formCode          = m.ProductCode;
+        formCategory      = m.Category;
+        formUnit          = m.Unit;
+        formPurchasePrice = m.PurchasePrice;
+        formMarkupFactor  = m.MarkupFactor > 0 ? m.MarkupFactor : 1.5m;
+        formUnitPrice     = m.UnitPrice;
+        formVatRate       = m.VatRate;
+        formQuantity      = m.Quantity;
+        formDescription   = m.Description;
+        formIsActive      = m.IsActive;
+        saveResult        = string.Empty;
     }
 
     private async Task UpdateMaterialAsync()
@@ -285,18 +321,20 @@
 
         var updated = new Material
         {
-            Id          = editingMaterial.Id,
-            CompanyId   = editingMaterial.CompanyId,
-            CreatedAt   = editingMaterial.CreatedAt,
-            Name        = formName,
-            ProductCode = formCode,
-            Category    = formCategory,
-            Unit        = formUnit,
-            UnitPrice   = formUnitPrice,
-            VatRate     = formVatRate,
-            Quantity    = formQuantity,
-            Description = formDescription,
-            IsActive    = formIsActive
+            Id            = editingMaterial.Id,
+            CompanyId     = editingMaterial.CompanyId,
+            CreatedAt     = editingMaterial.CreatedAt,
+            Name          = formName,
+            ProductCode   = formCode,
+            Category      = formCategory,
+            Unit          = formUnit,
+            PurchasePrice = formPurchasePrice,
+            MarkupFactor  = formMarkupFactor,
+            UnitPrice     = formUnitPrice,
+            VatRate       = formVatRate,
+            Quantity      = formQuantity,
+            Description   = formDescription,
+            IsActive      = formIsActive
         };
 
         var result = await MaterialsApi.UpdateMaterialAsync(updated.Id, updated);
@@ -338,14 +376,16 @@
 
     private void ResetForm()
     {
-        formName        = string.Empty;
-        formCode        = string.Empty;
-        formCategory    = Categories[0];
-        formUnit        = "stk.";
-        formUnitPrice   = 0m;
-        formVatRate     = 24.0m;
-        formQuantity    = 0m;
-        formDescription = string.Empty;
-        formIsActive    = true;
+        formName          = string.Empty;
+        formCode          = string.Empty;
+        formCategory      = Categories[0];
+        formUnit          = "stk.";
+        formPurchasePrice = 0m;
+        formMarkupFactor  = 1.5m;
+        formUnitPrice     = 0m;
+        formVatRate       = 24.0m;
+        formQuantity      = 0m;
+        formDescription   = string.Empty;
+        formIsActive      = true;
     }
 }

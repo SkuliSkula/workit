@@ -1,0 +1,336 @@
+@page "/invoices"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IInvoicesApi InvoicesApi
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+@using Workit.Shared.Models
+
+<PageTitle>Invoices</PageTitle>
+
+<section class="inv-page">
+
+    @* ── Email Connection Card ────────────────────────────────────────────── *@
+    <div class="inv-shell">
+        <div class="inv-header">
+            <span class="inv-eyebrow">Email connection</span>
+            <h1 class="inv-title">Vendor Invoice Inbox</h1>
+            <p class="inv-subtitle">
+                Connect an IMAP mailbox so Workit can scan for PDF invoices and import materials automatically.
+            </p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(settingsError))
+        {
+            <div class="inv-alert inv-alert--error">@settingsError</div>
+        }
+
+        <div class="inv-form-grid">
+            <label class="inv-field inv-field--wide">
+                <span class="inv-label">IMAP host</span>
+                <input class="inv-input" type="text" @bind="emailSettings.ImapHost" placeholder="e.g. imap.gmail.com" />
+            </label>
+
+            <label class="inv-field">
+                <span class="inv-label">Port</span>
+                <input class="inv-input" type="number" @bind="emailSettings.ImapPort" />
+            </label>
+
+            <label class="inv-field inv-field--check">
+                <input type="checkbox" @bind="emailSettings.UseSsl" />
+                <span class="inv-label">Use SSL</span>
+            </label>
+
+            <label class="inv-field inv-field--wide">
+                <span class="inv-label">Username / email</span>
+                <input class="inv-input" type="email" @bind="emailSettings.Username" placeholder="invoices@yourcompany.is" />
+            </label>
+
+            <label class="inv-field inv-field--wide">
+                <span class="inv-label">Password</span>
+                <input class="inv-input" type="password" @bind="emailSettings.Password" placeholder="App password or IMAP password" />
+            </label>
+
+            <label class="inv-field">
+                <span class="inv-label">Folder</span>
+                <input class="inv-input" type="text" @bind="emailSettings.InvoiceFolder" placeholder="INBOX" />
+            </label>
+        </div>
+
+        <div class="inv-form-actions">
+            <button class="inv-btn inv-btn--primary" @onclick="SaveSettingsAsync" disabled="@savingSettings">
+                @(savingSettings ? "Saving…" : "Save settings")
+            </button>
+
+            <button class="inv-btn inv-btn--outline" @onclick="TestConnectionAsync" disabled="@testingConnection">
+                @if (testingConnection)
+                {
+                    <span class="inv-spinner"></span><span>Testing…</span>
+                }
+                else
+                {
+                    <span>Test connection</span>
+                }
+            </button>
+
+            @if (testResult is not null)
+            {
+                <span class="inv-test-result @(testSuccess ? "inv-test-result--ok" : "inv-test-result--err")">
+                    @(testSuccess ? "✓" : "✗") @testResult
+                </span>
+            }
+        </div>
+
+        @* Auto-scan toggle *@
+        <div class="inv-autoscan-row">
+            <div class="inv-autoscan-copy">
+                <strong>Auto-scan</strong>
+                <span>Automatically check the mailbox every hour for new invoices</span>
+            </div>
+            <button type="button"
+                    class="inv-toggle @(emailSettings.AutoScanEnabled ? "inv-toggle--on" : "")"
+                    @onclick="ToggleAutoScanAsync"
+                    aria-label="Toggle auto-scan">
+                <span class="inv-toggle-thumb"></span>
+            </button>
+        </div>
+
+        @if (emailSettings.LastScannedAt.HasValue)
+        {
+            <p class="inv-last-scanned">
+                Last scanned: @emailSettings.LastScannedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </p>
+        }
+    </div>
+
+    @* ── Invoice List Card ────────────────────────────────────────────────── *@
+    <div class="inv-shell">
+        <div class="inv-header">
+            <span class="inv-eyebrow">Invoice history</span>
+            <div class="inv-header-row">
+                <h2 class="inv-title">Imported Invoices</h2>
+                <button class="inv-btn inv-btn--primary" @onclick="ScanNowAsync" disabled="@scanning">
+                    @if (scanning)
+                    {
+                        <span class="inv-spinner"></span><span>Scanning…</span>
+                    }
+                    else
+                    {
+                        <svg class="inv-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+                            <path d="M3.5 10a6.5 6.5 0 1 1 .7 3M3.5 14v-4H7" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span>Scan now</span>
+                    }
+                </button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(scanMessage))
+            {
+                <div class="inv-alert @(scanSuccess ? "inv-alert--ok" : "inv-alert--error")">@scanMessage</div>
+            }
+        </div>
+
+        @if (loadingInvoices)
+        {
+            <p class="inv-muted">Loading invoices…</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(invoicesError))
+        {
+            <div class="inv-alert inv-alert--error">@invoicesError</div>
+        }
+        else if (invoices.Count == 0)
+        {
+            <div class="inv-empty">
+                <svg viewBox="0 0 48 48" fill="none" stroke="#60758b" stroke-width="1.5">
+                    <rect x="10" y="6" width="28" height="36" rx="4"/>
+                    <path d="M16 16h16M16 22h16M16 28h10" stroke-linecap="round"/>
+                </svg>
+                <p>No invoices yet. Click <strong>Scan now</strong> or wait for the next auto-scan.</p>
+            </div>
+        }
+        else
+        {
+            <div class="inv-count-badge">@invoices.Count invoice@(invoices.Count == 1 ? "" : "s")</div>
+
+            @foreach (var invoice in invoices)
+            {
+                var isOpen = expandedInvoiceId == invoice.Id;
+
+                <div class="inv-card @(isOpen ? "inv-card--open" : "")">
+                    <button type="button" class="inv-card-header" @onclick="@(() => ToggleInvoice(invoice.Id))">
+                        <div class="inv-card-meta">
+                            <strong class="inv-vendor">@invoice.VendorName</strong>
+                            <span class="inv-nr">@invoice.InvoiceNumber</span>
+                        </div>
+                        <div class="inv-card-right">
+                            <span class="inv-date">@invoice.InvoiceDate.ToString("yyyy-MM-dd")</span>
+                            <span class="inv-total">@invoice.TotalInclVat.ToString("N0") kr.</span>
+                            <svg class="inv-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                    </button>
+
+                    @if (isOpen)
+                    {
+                        <div class="inv-card-body">
+                            <div class="inv-card-totals">
+                                <div class="inv-total-row">
+                                    <span>Subtotal (ex. VAT)</span>
+                                    <strong>@invoice.SubtotalExVat.ToString("N0") kr.</strong>
+                                </div>
+                                <div class="inv-total-row">
+                                    <span>VAT</span>
+                                    <strong>@invoice.VatAmount.ToString("N0") kr.</strong>
+                                </div>
+                                <div class="inv-total-row inv-total-row--grand">
+                                    <span>Total incl. VAT</span>
+                                    <strong>@invoice.TotalInclVat.ToString("N0") kr.</strong>
+                                </div>
+                            </div>
+
+                            @if (invoice.LineItems.Count > 0)
+                            {
+                                <div class="inv-items-table">
+                                    <div class="inv-items-head">Code</div>
+                                    <div class="inv-items-head">Description</div>
+                                    <div class="inv-items-head inv-right">Qty</div>
+                                    <div class="inv-items-head">Unit</div>
+                                    <div class="inv-items-head inv-right">List price</div>
+                                    <div class="inv-items-head inv-right">Discount</div>
+                                    <div class="inv-items-head inv-right">Purchase price</div>
+                                    <div class="inv-items-head">Status</div>
+
+                                    @foreach (var item in invoice.LineItems)
+                                    {
+                                        <div class="inv-cell inv-cell--code">@item.ProductCode</div>
+                                        <div class="inv-cell">@item.Description</div>
+                                        <div class="inv-cell inv-right">@item.Quantity.ToString("0.##")</div>
+                                        <div class="inv-cell">@item.Unit</div>
+                                        <div class="inv-cell inv-right">@item.ListPrice.ToString("N0")</div>
+                                        <div class="inv-cell inv-right">@(item.DiscountPercent > 0 ? $"{item.DiscountPercent:0.#}%" : "—")</div>
+                                        <div class="inv-cell inv-right inv-price">@item.PurchasePrice.ToString("N0") kr.</div>
+                                        <div class="inv-cell">
+                                            @if (item.IsImported)
+                                            {
+                                                <span class="inv-badge inv-badge--imported">Imported</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="inv-badge inv-badge--pending">Pending</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="inv-muted">No line items parsed for this invoice.</p>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(invoice.VendorEmail))
+                            {
+                                <p class="inv-vendor-email">From: @invoice.VendorEmail</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    private EmailSettings emailSettings = new();
+    private List<VendorInvoice> invoices = [];
+    private Guid? expandedInvoiceId;
+
+    private bool savingSettings;
+    private bool testingConnection;
+    private bool scanning;
+    private bool loadingInvoices = true;
+
+    private string? settingsError;
+    private string? testResult;
+    private bool testSuccess;
+    private string? scanMessage;
+    private bool scanSuccess;
+    private string? invoicesError;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await Task.WhenAll(LoadSettingsAsync(), LoadInvoicesAsync());
+        StateHasChanged();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        var result = await InvoicesApi.GetEmailSettingsAsync();
+        if (result.IsSuccess && result.Value is not null)
+            emailSettings = result.Value;
+        // 404 means not configured yet — keep defaults
+    }
+
+    private async Task LoadInvoicesAsync()
+    {
+        loadingInvoices = true;
+        invoicesError = null;
+        var result = await InvoicesApi.GetInvoicesAsync();
+        if (result.IsSuccess)
+            invoices = result.Value ?? [];
+        else
+            invoicesError = result.ErrorMessage ?? "Could not load invoices.";
+        loadingInvoices = false;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        savingSettings = true;
+        settingsError = null;
+        var result = await InvoicesApi.SaveEmailSettingsAsync(emailSettings);
+        if (result.IsSuccess && result.Value is not null)
+            emailSettings = result.Value;
+        else
+            settingsError = result.ErrorMessage ?? "Could not save settings.";
+        savingSettings = false;
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        testingConnection = true;
+        testResult = null;
+        var result = await InvoicesApi.TestEmailConnectionAsync(emailSettings);
+        testSuccess = result.IsSuccess;
+        testResult  = result.IsSuccess ? "Connection successful" : (result.ErrorMessage ?? "Connection failed");
+        testingConnection = false;
+    }
+
+    private async Task ToggleAutoScanAsync()
+    {
+        emailSettings.AutoScanEnabled = !emailSettings.AutoScanEnabled;
+        await SaveSettingsAsync();
+    }
+
+    private async Task ScanNowAsync()
+    {
+        scanning     = true;
+        scanMessage  = null;
+        var result   = await InvoicesApi.ScanNowAsync();
+        scanSuccess  = result.IsSuccess;
+        scanMessage  = result.IsSuccess ? "Scan complete — invoice list updated." : (result.ErrorMessage ?? "Scan failed.");
+        scanning     = false;
+        await LoadInvoicesAsync();
+        StateHasChanged();
+    }
+
+    private void ToggleInvoice(Guid id) =>
+        expandedInvoiceId = expandedInvoiceId == id ? null : id;
+}

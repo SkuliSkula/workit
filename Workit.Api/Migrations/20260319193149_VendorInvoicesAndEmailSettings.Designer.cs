@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Workit.Api.Data;
@@ -11,9 +12,11 @@ using Workit.Api.Data;
 namespace Workit.Api.Migrations
 {
     [DbContext(typeof(WorkitDbContext))]
-    partial class WorkitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319193149_VendorInvoicesAndEmailSettings")]
+    partial class VendorInvoicesAndEmailSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -68,9 +71,6 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<decimal>("DrivingUnitPrice")
-                        .HasColumnType("numeric");
-
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("text");
@@ -94,40 +94,6 @@ namespace Workit.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Companies", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.DrivingEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("JobId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Units")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly>("WorkDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "EmployeeId");
-
-                    b.HasIndex("CompanyId", "JobId");
-
-                    b.ToTable("DrivingEntries", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.Customer", b =>

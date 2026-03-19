@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text;
+using Anthropic.SDK;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -7,6 +8,7 @@ using Serilog;
 using Serilog.Events;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
 
@@ -84,6 +86,13 @@ builder.Services.AddDbContext<WorkitDbContext>(options =>
         ?? "Host=localhost;Port=5432;Database=workkit;Username=postgres;Password=postgres";
     options.UseNpgsql(connectionString);
 });
+
+// ── Invoice scanning services ──────────────────────────────────────────────────
+var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? string.Empty;
+builder.Services.AddSingleton(_ => new AnthropicClient(new Anthropic.SDK.APIAuthentication(anthropicApiKey)));
+builder.Services.AddScoped<InvoiceParserService>();
+builder.Services.AddScoped<EmailScanService>();
+builder.Services.AddHostedService<InvoiceScanBackgroundService>();
 
 var app = builder.Build();
 Microsoft.Extensions.Logging.ILogger apiLogger = app.Logger;
@@ -963,15 +972,17 @@ securedApi.MapPut("/materials/{id:guid}", async (WorkitDbContext db, HttpContext
             if (existing is null)
                 return Results.NotFound();
 
-            existing.Name        = material.Name.Trim();
-            existing.ProductCode = material.ProductCode.Trim();
-            existing.Category    = material.Category.Trim();
-            existing.Unit        = material.Unit.Trim();
-            existing.UnitPrice   = material.UnitPrice;
-            existing.VatRate     = material.VatRate;
-            existing.Quantity    = material.Quantity;
-            existing.Description = material.Description.Trim();
-            existing.IsActive    = material.IsActive;
+            existing.Name          = material.Name.Trim();
+            existing.ProductCode   = material.ProductCode.Trim();
+            existing.Category      = material.Category.Trim();
+            existing.Unit          = material.Unit.Trim();
+            existing.PurchasePrice = material.PurchasePrice;
+            existing.MarkupFactor  = material.MarkupFactor > 0 ? material.MarkupFactor : 1.5m;
+            existing.UnitPrice     = material.UnitPrice;
+            existing.VatRate       = material.VatRate;
+            existing.Quantity      = material.Quantity;
+            existing.Description   = material.Description.Trim();
+            existing.IsActive      = material.IsActive;
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(existing);
@@ -1171,6 +1182,113 @@ securedApi.MapDelete("/driving/{id:guid}", async (WorkitDbContext db, HttpContex
         apiLogger,
         "deleting driving entry"))
     .WithName("DeleteDrivingEntry");
+
+// ── Email Settings ─────────────────────────────────────────────────────────────
+
+securedApi.MapGet("/email-settings", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            var userContext = httpContext.User.ToUserContext();
+            var settings = await db.EmailSettings.FirstOrDefaultAsync(x => x.CompanyId == userContext.CompanyId, ct);
+            return settings is null ? Results.NotFound() : Results.Ok(settings);
+        }, apiLogger, "loading email settings"))
+    .WithName("GetEmailSettings");
+
+securedApi.MapPut("/email-settings", async (WorkitDbContext db, HttpContext httpContext, EmailSettings incoming, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.EmailSettings.FirstOrDefaultAsync(x => x.CompanyId == userContext.CompanyId, ct);
+
+            if (existing is null)
+            {
+                incoming.CompanyId = userContext.CompanyId;
+                db.EmailSettings.Add(incoming);
+            }
+            else
+            {
+                existing.ImapHost        = incoming.ImapHost.Trim();
+                existing.ImapPort        = incoming.ImapPort;
+                existing.UseSsl          = incoming.UseSsl;
+                existing.Username        = incoming.Username.Trim();
+                if (!string.IsNullOrWhiteSpace(incoming.Password))
+                    existing.Password    = incoming.Password;
+                existing.InvoiceFolder   = incoming.InvoiceFolder.Trim();
+                existing.AutoScanEnabled = incoming.AutoScanEnabled;
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing ?? incoming);
+        }, apiLogger, "saving email settings"))
+    .WithName("SaveEmailSettings");
+
+securedApi.MapPost("/email-settings/test", async (WorkitDbContext db, HttpContext httpContext, EmailSettings testSettings, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            try
+            {
+                await EmailScanService.TestConnectionAsync(testSettings);
+                return Results.Ok(new { ok = true, message = "Connection successful." });
+            }
+            catch (Exception ex)
+            {
+                return Results.Ok(new { ok = false, message = ex.Message });
+            }
+        }, apiLogger, "testing email connection"))
+    .WithName("TestEmailConnection");
+
+// ── Vendor Invoices ────────────────────────────────────────────────────────────
+
+securedApi.MapPost("/invoices/scan", async (
+        WorkitDbContext db,
+        HttpContext httpContext,
+        EmailScanService emailService,
+        CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            var userContext = httpContext.User.ToUserContext();
+            var settings = await db.EmailSettings.FirstOrDefaultAsync(x => x.CompanyId == userContext.CompanyId, ct);
+            if (settings is null)
+                return Results.BadRequest("Email settings not configured. Please configure IMAP settings first.");
+
+            var result = await emailService.ScanAsync(settings, userContext.CompanyId);
+            return Results.Ok(result);
+        }, apiLogger, "scanning emails for invoices"))
+    .WithName("ScanInvoices");
+
+securedApi.MapGet("/invoices", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            var userContext = httpContext.User.ToUserContext();
+            var invoices = await db.VendorInvoices
+                .Where(x => x.CompanyId == userContext.CompanyId)
+                .OrderByDescending(x => x.InvoiceDate)
+                .ToListAsync(ct);
+            return Results.Ok(invoices);
+        }, apiLogger, "loading vendor invoices"))
+    .WithName("GetInvoices");
+
+securedApi.MapGet("/invoices/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner()) return Results.Forbid();
+            var userContext = httpContext.User.ToUserContext();
+            var invoice = await db.VendorInvoices.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (invoice is null) return Results.NotFound();
+
+            invoice.LineItems = await db.VendorInvoiceLineItems
+                .Where(x => x.InvoiceId == id)
+                .OrderBy(x => x.Description)
+                .ToListAsync(ct);
+
+            return Results.Ok(invoice);
+        }, apiLogger, "loading vendor invoice detail"))
+    .WithName("GetInvoice");
 
 api.MapGet("/status/database", async (WorkitDbContext db, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>

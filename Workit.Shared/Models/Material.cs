@@ -20,7 +20,13 @@ public sealed class Material
     /// <summary>Current stock quantity (deducted automatically when usage is logged)</summary>
     public decimal Quantity   { get; set; }
 
-    /// <summary>Unit price excl. VAT (ISK)</summary>
+    /// <summary>Purchase price (what we pay the vendor), excl. VAT (ISK). Auto-updated from invoices.</summary>
+    public decimal PurchasePrice { get; set; }
+
+    /// <summary>Markup multiplier applied to PurchasePrice to derive UnitPrice. Default 1.5 = 50% markup.</summary>
+    public decimal MarkupFactor  { get; set; } = 1.5m;
+
+    /// <summary>Sale price excl. VAT (ISK) — what we charge on jobs. = PurchasePrice × MarkupFactor, or set manually.</summary>
     public decimal UnitPrice  { get; set; }
 
     /// <summary>VAT rate in percent, e.g. 24.0</summary>

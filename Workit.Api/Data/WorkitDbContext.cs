@@ -16,6 +16,9 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<Material> Materials => Set<Material>();
     public DbSet<MaterialUsage> MaterialUsages => Set<MaterialUsage>();
     public DbSet<DrivingEntry> DrivingEntries => Set<DrivingEntry>();
+    public DbSet<VendorInvoice> VendorInvoices => Set<VendorInvoice>();
+    public DbSet<VendorInvoiceLineItem> VendorInvoiceLineItems => Set<VendorInvoiceLineItem>();
+    public DbSet<EmailSettings> EmailSettings => Set<EmailSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,6 +32,9 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<ToolAssignment>().ToTable("ToolAssignments");
         modelBuilder.Entity<Material>().ToTable("Materials");
         modelBuilder.Entity<MaterialUsage>().ToTable("MaterialUsages");
+        modelBuilder.Entity<VendorInvoice>().ToTable("VendorInvoices");
+        modelBuilder.Entity<VendorInvoiceLineItem>().ToTable("VendorInvoiceLineItems");
+        modelBuilder.Entity<EmailSettings>().ToTable("EmailSettings");
 
         modelBuilder.Entity<AppUser>()
             .HasIndex(x => x.Email)
@@ -82,5 +88,23 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
 
         modelBuilder.Entity<DrivingEntry>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId });
+
+        // VendorInvoices: dedup on (CompanyId, SourceEmailMessageId)
+        modelBuilder.Entity<VendorInvoice>()
+            .HasIndex(x => new { x.CompanyId, x.SourceEmailMessageId });
+
+        modelBuilder.Entity<VendorInvoice>()
+            .HasIndex(x => new { x.CompanyId, x.InvoiceDate });
+
+        modelBuilder.Entity<VendorInvoiceLineItem>()
+            .HasIndex(x => new { x.CompanyId, x.InvoiceId });
+
+        modelBuilder.Entity<VendorInvoiceLineItem>()
+            .HasIndex(x => new { x.CompanyId, x.ProductCode });
+
+        // EmailSettings: one row per company
+        modelBuilder.Entity<EmailSettings>()
+            .HasIndex(x => x.CompanyId)
+            .IsUnique();
     }
 }
