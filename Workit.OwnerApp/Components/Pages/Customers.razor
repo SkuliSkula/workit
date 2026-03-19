@@ -5,68 +5,142 @@
 
 <PageTitle>Customers</PageTitle>
 
-<FluentCard Class="admin-card">
-    <FluentLabel Typo="Typography.PaneHeader">Customers</FluentLabel>
+<section class="cust-page">
 
-    @if (company is null)
-    {
-        <FluentLabel>Set up the company first in Admin before adding customers.</FluentLabel>
-    }
-    else
-    {
-        <div class="admin-grid">
-            <FluentTextField @bind-Value="newCustomerName" Placeholder="Customer name" />
-            <FluentTextField @bind-Value="newCustomerSsn" Placeholder="SSN" />
-            <FluentTextField @bind-Value="newCustomerEmail" Placeholder="Email" />
-            <FluentTextField @bind-Value="newCustomerPhone" Placeholder="Phone" />
-            <FluentTextField @bind-Value="newCustomerContactPerson" Placeholder="Contact person" />
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateCustomerAsync">Add Customer</FluentButton>
+    @* ── Add / Edit Customer form ── *@
+    <div class="cust-shell">
+        <div class="cust-header">
+            <span class="cust-eyebrow">Customer management</span>
+            <h1 class="cust-title">@(editingCustomer is not null ? "Edit Customer" : "Customers")</h1>
         </div>
-    }
 
-    @if (editingCustomer is not null)
-    {
-        <FluentCard Class="admin-card">
-            <FluentLabel Typo="Typography.PaneHeader">Edit Customer</FluentLabel>
-            <div class="admin-grid">
-                <FluentTextField @bind-Value="editingCustomer.Name" Placeholder="Customer name" />
-                <FluentTextField @bind-Value="editingCustomer.Ssn" Placeholder="SSN" />
-                <FluentTextField @bind-Value="editingCustomer.Email" Placeholder="Email" />
-                <FluentTextField @bind-Value="editingCustomer.Phone" Placeholder="Phone" />
-                <FluentTextField @bind-Value="editingCustomer.ContactPerson" Placeholder="Contact person" />
-                <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync">Save Changes</FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit">Cancel</FluentButton>
+        @if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <div class="cust-alert cust-alert--error">@loadError</div>
+        }
+
+        @if (company is null && !loading)
+        {
+            <p class="cust-note">Set up the company first in Admin before adding customers.</p>
+        }
+        else if (company is not null)
+        {
+            <div class="cust-form-grid">
+                <label class="cust-field">
+                    <span class="cust-label">Customer name</span>
+                    <input class="cust-input" type="text" @bind="newCustomerName" placeholder="Customer name" />
+                </label>
+                <label class="cust-field">
+                    <span class="cust-label">SSN</span>
+                    <input class="cust-input" type="text" @bind="newCustomerSsn" placeholder="SSN" />
+                </label>
+                <label class="cust-field">
+                    <span class="cust-label">Email</span>
+                    <input class="cust-input" type="email" @bind="newCustomerEmail" placeholder="Email" />
+                </label>
+                <label class="cust-field">
+                    <span class="cust-label">Phone</span>
+                    <input class="cust-input" type="tel" @bind="newCustomerPhone" placeholder="Phone" />
+                </label>
+                <label class="cust-field">
+                    <span class="cust-label">Contact person</span>
+                    <input class="cust-input" type="text" @bind="newCustomerContactPerson" placeholder="Contact person" />
+                </label>
             </div>
-        </FluentCard>
-    }
+            <div class="cust-form-actions">
+                <button class="cust-btn cust-btn--primary" @onclick="CreateCustomerAsync"
+                        disabled="@string.IsNullOrWhiteSpace(newCustomerName)">
+                    Add Customer
+                </button>
+            </div>
+        }
 
-    @if (!string.IsNullOrWhiteSpace(loadError))
-    {
-        <FluentLabel>@loadError</FluentLabel>
-    }
+        @* ── Edit inline form ── *@
+        @if (editingCustomer is not null)
+        {
+            <div class="cust-edit-card">
+                <span class="cust-eyebrow" style="margin-bottom:0.5rem; display:block;">Editing customer</span>
+                <div class="cust-form-grid">
+                    <label class="cust-field">
+                        <span class="cust-label">Customer name</span>
+                        <input class="cust-input" type="text" @bind="editingCustomer.Name" placeholder="Customer name" />
+                    </label>
+                    <label class="cust-field">
+                        <span class="cust-label">SSN</span>
+                        <input class="cust-input" type="text" @bind="editingCustomer.Ssn" placeholder="SSN" />
+                    </label>
+                    <label class="cust-field">
+                        <span class="cust-label">Email</span>
+                        <input class="cust-input" type="email" @bind="editingCustomer.Email" placeholder="Email" />
+                    </label>
+                    <label class="cust-field">
+                        <span class="cust-label">Phone</span>
+                        <input class="cust-input" type="tel" @bind="editingCustomer.Phone" placeholder="Phone" />
+                    </label>
+                    <label class="cust-field">
+                        <span class="cust-label">Contact person</span>
+                        <input class="cust-input" type="text" @bind="editingCustomer.ContactPerson" placeholder="Contact person" />
+                    </label>
+                </div>
+                <div class="cust-form-actions">
+                    <button class="cust-btn cust-btn--primary" @onclick="SaveCustomerAsync">Save Changes</button>
+                    <button class="cust-btn cust-btn--outline" @onclick="CancelCustomerEdit">Cancel</button>
+                </div>
+            </div>
+        }
+    </div>
 
-    @if (loading)
-    {
-        <PageLoader />
-    }
-    else if (customers.Count > 0)
-    {
-        <FluentDataGrid TGridItem="Customer" Items="@customers.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
-            <PropertyColumn Property="@(x => x.Name)" Title="Name" />
-            <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
-            <PropertyColumn Property="@(x => x.Email)" Title="Email" />
-            <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
-            <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
-            <TemplateColumn Title="Actions">
-                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditCustomer(context))">Edit</FluentButton>
-            </TemplateColumn>
-        </FluentDataGrid>
-    }
-    else
-    {
-        <FluentLabel>No customers yet.</FluentLabel>
-    }
-</FluentCard>
+    @* ── Customer list ── *@
+    <div class="cust-shell">
+        <div class="cust-header">
+            <span class="cust-eyebrow">Customer list</span>
+            <h2 class="cust-title">All Customers</h2>
+        </div>
+
+        @if (loading)
+        {
+            <PageLoader />
+        }
+        else if (customers.Count > 0)
+        {
+            <div class="cust-table-wrap">
+                <table class="cust-table">
+                    <thead>
+                        <tr>
+                            <th class="cust-th">Name</th>
+                            <th class="cust-th">SSN</th>
+                            <th class="cust-th">Email</th>
+                            <th class="cust-th">Phone</th>
+                            <th class="cust-th">Contact Person</th>
+                            <th class="cust-th"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in customers)
+                        {
+                            <tr class="cust-tr">
+                                <td class="cust-td cust-td--name">@c.Name</td>
+                                <td class="cust-td">@c.Ssn</td>
+                                <td class="cust-td">@c.Email</td>
+                                <td class="cust-td">@c.Phone</td>
+                                <td class="cust-td">@c.ContactPerson</td>
+                                <td class="cust-td cust-td--actions">
+                                    <button class="cust-btn cust-btn--outline cust-btn--sm"
+                                            @onclick="@(() => BeginEditCustomer(c))">Edit</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="cust-empty">No customers yet. Add the first one above.</p>
+        }
+    </div>
+
+</section>
 
 @code {
     private readonly List<Customer> customers = [];

@@ -1,26 +1,14 @@
 /* ── Page wrapper ─────────────────────────────────────────────────────────── */
 
-.emp-page {
+.tool-page {
+    display: grid;
+    gap: 1rem;
     padding: 1rem 0 2rem;
-}
-
-/* ── Two-column layout ────────────────────────────────────────────────────── */
-
-.emp-layout {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 1rem;
-    align-items: start;
-}
-
-.emp-sidebar {
-    display: grid;
-    gap: 1rem;
 }
 
 /* ── Shell card ───────────────────────────────────────────────────────────── */
 
-.emp-shell {
+.tool-shell {
     padding: 1.25rem;
     border-radius: 24px;
     background:
@@ -32,18 +20,14 @@
     gap: 1rem;
 }
 
-.emp-list-shell {
-    min-width: 0;
-}
-
 /* ── Header ───────────────────────────────────────────────────────────────── */
 
-.emp-header {
+.tool-header {
     display: grid;
     gap: 0.2rem;
 }
 
-.emp-eyebrow {
+.tool-eyebrow {
     text-transform: uppercase;
     letter-spacing: 0.16em;
     font-size: 0.72rem;
@@ -51,43 +35,54 @@
     color: #60758b;
 }
 
-.emp-title {
+.tool-title {
     margin: 0;
-    font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+    font-size: clamp(1.4rem, 3vw, 2rem);
     font-weight: 800;
     color: #14304b;
     letter-spacing: -0.02em;
     line-height: 1.1;
 }
 
-/* ── Alert ────────────────────────────────────────────────────────────────── */
+/* ── Alerts ───────────────────────────────────────────────────────────────── */
 
-.emp-alert {
+.tool-alert {
     border-radius: 14px;
     padding: 0.7rem 1rem;
     font-size: 0.875rem;
     font-weight: 500;
 }
 
-.emp-alert--error {
+.tool-alert--error {
     background: #fee2e2;
     color: #991b1b;
     border: 1px solid #fca5a5;
 }
 
-/* ── Form ─────────────────────────────────────────────────────────────────── */
-
-.emp-form {
-    display: grid;
-    gap: 0.75rem;
+.tool-alert--ok {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
 }
 
-.emp-field {
+/* ── Form grid ────────────────────────────────────────────────────────────── */
+
+.tool-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.85rem;
+}
+
+.tool-field {
     display: grid;
     gap: 0.4rem;
 }
 
-.emp-label {
+.tool-field--wide {
+    grid-column: 1 / -1;
+}
+
+.tool-label {
     font-size: 0.82rem;
     font-weight: 700;
     color: #14304b;
@@ -95,8 +90,7 @@
     letter-spacing: 0.07em;
 }
 
-.emp-input,
-.emp-select {
+.tool-input {
     min-height: 44px;
     padding: 0.6rem 0.9rem;
     border-radius: 14px;
@@ -110,28 +104,27 @@
     box-sizing: border-box;
 }
 
-.emp-input:focus,
-.emp-select:focus {
+.tool-input:focus {
     border-color: rgba(20, 48, 75, 0.4);
     box-shadow: 0 0 0 3px rgba(20, 48, 75, 0.08);
 }
 
-.emp-input::placeholder {
+.tool-input::placeholder {
     color: #9ca3af;
 }
 
-/* ── Actions ──────────────────────────────────────────────────────────────── */
+/* ── Form actions ─────────────────────────────────────────────────────────── */
 
-.emp-actions {
+.tool-form-actions {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
-    margin-top: 0.25rem;
+    align-items: center;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 
-.emp-btn {
+.tool-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -147,52 +140,83 @@
     white-space: nowrap;
 }
 
-.emp-btn:disabled {
+.tool-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.emp-btn--primary {
+.tool-btn--primary {
     background: #14304b;
     color: #ffffff;
 }
 
-.emp-btn--primary:hover:not(:disabled) {
+.tool-btn--primary:hover:not(:disabled) {
     background: #1a3d5c;
 }
 
-.emp-btn--outline {
+.tool-btn--outline {
     background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(20, 48, 75, 0.2);
     color: #14304b;
 }
 
-.emp-btn--outline:hover:not(:disabled) {
+.tool-btn--outline:hover:not(:disabled) {
     background: rgba(20, 48, 75, 0.06);
 }
 
-.emp-btn--sm {
+.tool-btn--danger {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(153, 27, 27, 0.25);
+    color: #991b1b;
+}
+
+.tool-btn--danger:hover:not(:disabled) {
+    background: #fee2e2;
+}
+
+.tool-btn--sm {
     min-height: 34px;
     padding: 0.3rem 0.85rem;
     font-size: 0.8rem;
     border-radius: 10px;
 }
 
+/* ── Badges ───────────────────────────────────────────────────────────────── */
+
+.tool-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.tool-badge--green {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.tool-badge--amber {
+    background: #fef3c7;
+    color: #92400e;
+}
+
 /* ── Table ────────────────────────────────────────────────────────────────── */
 
-.emp-table-wrap {
+.tool-table-wrap {
     overflow-x: auto;
     border-radius: 16px;
     border: 1px solid rgba(20, 48, 75, 0.09);
 }
 
-.emp-table {
+.tool-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
 }
 
-.emp-th {
+.tool-th {
     padding: 0.65rem 1rem;
     text-align: left;
     font-size: 0.75rem;
@@ -205,70 +229,58 @@
     white-space: nowrap;
 }
 
-.emp-tr {
+.tool-tr {
     transition: background 0.1s;
 }
 
-.emp-tr:hover {
+.tool-tr:hover {
     background: rgba(20, 48, 75, 0.03);
 }
 
-.emp-tr + .emp-tr {
+.tool-tr + .tool-tr {
     border-top: 1px solid rgba(20, 48, 75, 0.06);
 }
 
-.emp-td {
+.tool-td {
     padding: 0.75rem 1rem;
     color: #374151;
     vertical-align: middle;
 }
 
-.emp-td--name {
+.tool-td--name {
     font-weight: 600;
     color: #14304b;
 }
 
-.emp-td--actions {
-    white-space: nowrap;
+.tool-td--dim {
+    color: #60758b;
+    font-size: 0.82rem;
 }
 
-.emp-td--actions {
+.tool-td--actions {
+    text-align: right;
+    white-space: nowrap;
     display: flex;
     gap: 0.4rem;
     align-items: center;
-    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
-/* ── Password reveal ──────────────────────────────────────────────────────── */
+/* ── Empty ────────────────────────────────────────────────────────────────── */
 
-.emp-new-password {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #065f46;
-    background: #d1fae5;
-    border-radius: 8px;
-    padding: 0.2rem 0.6rem;
-}
-
-/* ── Notes ────────────────────────────────────────────────────────────────── */
-
-.emp-note {
-    font-size: 0.875rem;
-    color: #60758b;
-    margin: 0;
-}
-
-.emp-empty {
+.tool-empty {
     font-size: 0.875rem;
     color: #9ca3af;
     font-style: italic;
     margin: 0;
 }
 
-/* ── Responsive ───────────────────────────────────────────────────────────── */
-
-@media (max-width: 900px) {
-    .emp-layout {
+@media (max-width: 720px) {
+    .tool-form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .tool-field--wide {
+        grid-column: 1;
     }
 }

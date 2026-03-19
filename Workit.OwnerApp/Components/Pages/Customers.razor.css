@@ -1,26 +1,14 @@
 /* ── Page wrapper ─────────────────────────────────────────────────────────── */
 
-.emp-page {
+.cust-page {
+    display: grid;
+    gap: 1rem;
     padding: 1rem 0 2rem;
-}
-
-/* ── Two-column layout ────────────────────────────────────────────────────── */
-
-.emp-layout {
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 1rem;
-    align-items: start;
-}
-
-.emp-sidebar {
-    display: grid;
-    gap: 1rem;
 }
 
 /* ── Shell card ───────────────────────────────────────────────────────────── */
 
-.emp-shell {
+.cust-shell {
     padding: 1.25rem;
     border-radius: 24px;
     background:
@@ -32,18 +20,14 @@
     gap: 1rem;
 }
 
-.emp-list-shell {
-    min-width: 0;
-}
-
 /* ── Header ───────────────────────────────────────────────────────────────── */
 
-.emp-header {
+.cust-header {
     display: grid;
     gap: 0.2rem;
 }
 
-.emp-eyebrow {
+.cust-eyebrow {
     text-transform: uppercase;
     letter-spacing: 0.16em;
     font-size: 0.72rem;
@@ -51,9 +35,9 @@
     color: #60758b;
 }
 
-.emp-title {
+.cust-title {
     margin: 0;
-    font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+    font-size: clamp(1.4rem, 3vw, 2rem);
     font-weight: 800;
     color: #14304b;
     letter-spacing: -0.02em;
@@ -62,32 +46,33 @@
 
 /* ── Alert ────────────────────────────────────────────────────────────────── */
 
-.emp-alert {
+.cust-alert {
     border-radius: 14px;
     padding: 0.7rem 1rem;
     font-size: 0.875rem;
     font-weight: 500;
 }
 
-.emp-alert--error {
+.cust-alert--error {
     background: #fee2e2;
     color: #991b1b;
     border: 1px solid #fca5a5;
 }
 
-/* ── Form ─────────────────────────────────────────────────────────────────── */
+/* ── Form grid ────────────────────────────────────────────────────────────── */
 
-.emp-form {
+.cust-form-grid {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.85rem;
 }
 
-.emp-field {
+.cust-field {
     display: grid;
     gap: 0.4rem;
 }
 
-.emp-label {
+.cust-label {
     font-size: 0.82rem;
     font-weight: 700;
     color: #14304b;
@@ -95,8 +80,7 @@
     letter-spacing: 0.07em;
 }
 
-.emp-input,
-.emp-select {
+.cust-input {
     min-height: 44px;
     padding: 0.6rem 0.9rem;
     border-radius: 14px;
@@ -110,28 +94,27 @@
     box-sizing: border-box;
 }
 
-.emp-input:focus,
-.emp-select:focus {
+.cust-input:focus {
     border-color: rgba(20, 48, 75, 0.4);
     box-shadow: 0 0 0 3px rgba(20, 48, 75, 0.08);
 }
 
-.emp-input::placeholder {
+.cust-input::placeholder {
     color: #9ca3af;
 }
 
-/* ── Actions ──────────────────────────────────────────────────────────────── */
+/* ── Form actions ─────────────────────────────────────────────────────────── */
 
-.emp-actions {
+.cust-form-actions {
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
-    margin-top: 0.25rem;
+    align-items: center;
 }
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 
-.emp-btn {
+.cust-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -147,52 +130,79 @@
     white-space: nowrap;
 }
 
-.emp-btn:disabled {
+.cust-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.emp-btn--primary {
+.cust-btn--primary {
     background: #14304b;
     color: #ffffff;
 }
 
-.emp-btn--primary:hover:not(:disabled) {
+.cust-btn--primary:hover:not(:disabled) {
     background: #1a3d5c;
 }
 
-.emp-btn--outline {
+.cust-btn--outline {
     background: rgba(255, 255, 255, 0.85);
     border: 1px solid rgba(20, 48, 75, 0.2);
     color: #14304b;
 }
 
-.emp-btn--outline:hover:not(:disabled) {
+.cust-btn--outline:hover:not(:disabled) {
     background: rgba(20, 48, 75, 0.06);
 }
 
-.emp-btn--sm {
+.cust-btn--sm {
     min-height: 34px;
     padding: 0.3rem 0.85rem;
     font-size: 0.8rem;
     border-radius: 10px;
 }
 
+/* ── Edit card ────────────────────────────────────────────────────────────── */
+
+.cust-edit-card {
+    margin-top: 0.25rem;
+    padding: 1rem;
+    border-radius: 16px;
+    background: rgba(20, 48, 75, 0.04);
+    border: 1px solid rgba(20, 48, 75, 0.1);
+    display: grid;
+    gap: 0.85rem;
+}
+
+/* ── Notes ────────────────────────────────────────────────────────────────── */
+
+.cust-note {
+    font-size: 0.875rem;
+    color: #60758b;
+    margin: 0;
+}
+
+.cust-empty {
+    font-size: 0.875rem;
+    color: #9ca3af;
+    font-style: italic;
+    margin: 0;
+}
+
 /* ── Table ────────────────────────────────────────────────────────────────── */
 
-.emp-table-wrap {
+.cust-table-wrap {
     overflow-x: auto;
     border-radius: 16px;
     border: 1px solid rgba(20, 48, 75, 0.09);
 }
 
-.emp-table {
+.cust-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
 }
 
-.emp-th {
+.cust-th {
     padding: 0.65rem 1rem;
     text-align: left;
     font-size: 0.75rem;
@@ -205,70 +215,36 @@
     white-space: nowrap;
 }
 
-.emp-tr {
+.cust-tr {
     transition: background 0.1s;
 }
 
-.emp-tr:hover {
+.cust-tr:hover {
     background: rgba(20, 48, 75, 0.03);
 }
 
-.emp-tr + .emp-tr {
+.cust-tr + .cust-tr {
     border-top: 1px solid rgba(20, 48, 75, 0.06);
 }
 
-.emp-td {
+.cust-td {
     padding: 0.75rem 1rem;
     color: #374151;
     vertical-align: middle;
 }
 
-.emp-td--name {
+.cust-td--name {
     font-weight: 600;
     color: #14304b;
 }
 
-.emp-td--actions {
+.cust-td--actions {
+    text-align: right;
     white-space: nowrap;
 }
 
-.emp-td--actions {
-    display: flex;
-    gap: 0.4rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-/* ── Password reveal ──────────────────────────────────────────────────────── */
-
-.emp-new-password {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #065f46;
-    background: #d1fae5;
-    border-radius: 8px;
-    padding: 0.2rem 0.6rem;
-}
-
-/* ── Notes ────────────────────────────────────────────────────────────────── */
-
-.emp-note {
-    font-size: 0.875rem;
-    color: #60758b;
-    margin: 0;
-}
-
-.emp-empty {
-    font-size: 0.875rem;
-    color: #9ca3af;
-    font-style: italic;
-    margin: 0;
-}
-
-/* ── Responsive ───────────────────────────────────────────────────────────── */
-
-@media (max-width: 900px) {
-    .emp-layout {
+@media (max-width: 720px) {
+    .cust-form-grid {
         grid-template-columns: 1fr;
     }
 }
