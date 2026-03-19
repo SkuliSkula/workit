@@ -6,7 +6,6 @@
 @inject IEmployeesApi EmployeesApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
-@inject IDrivingApi DrivingApi
 
 <PageTitle>Jobs</PageTitle>
 
@@ -73,7 +72,7 @@
                 <FluentLabel>Price per unit (km)</FluentLabel>
                 <FluentNumberField TValue="decimal" @bind-Value="drivingUnitPrice" Min="0" Step="1" style="width:100%" />
             </div>
-            <FluentButton Appearance="Appearance.Accent" @onclick="SaveDrivingRateAsync" Disabled="@savingDrivingRate">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveDrivingRateAsync" Disabled="@savingDrivingRate" style="align-self:flex-end;">
                 @(savingDrivingRate ? "Saving…" : "Save rate")
             </FluentButton>
         </div>
@@ -149,6 +148,13 @@ else if (jobs.Count > 0)
                                     <span class="job-kpi-val">@details.EntryCount</span>
                                     <span class="job-kpi-lbl">time entr@(details.EntryCount == 1 ? "y" : "ies")</span>
                                 </div>
+                                @if (details.TotalDrivingUnits > 0)
+                                {
+                                    <div class="job-kpi job-kpi--driving">
+                                        <span class="job-kpi-val">@details.TotalDrivingUnits</span>
+                                        <span class="job-kpi-lbl">driving unit@(details.TotalDrivingUnits == 1 ? "" : "s")@(drivingUnitPrice > 0 ? $" · {(details.TotalDrivingUnits * drivingUnitPrice).ToString("N0")} kr." : "")</span>
+                                    </div>
+                                }
                                 @if (details.MaterialCostExVat > 0)
                                 {
                                     <div class="job-kpi job-kpi--materials">
@@ -178,6 +184,10 @@ else if (jobs.Count > 0)
                                                 @if (row.OvertimeHours > 0)
                                                 {
                                                     <span class="job-row-ot"> + @row.OvertimeHours.ToString("0.#") OT</span>
+                                                }
+                                                @if (row.DrivingUnits > 0)
+                                                {
+                                                    <span class="job-row-dim"> · @row.DrivingUnits unit@(row.DrivingUnits == 1 ? "" : "s") driving</span>
                                                 }
                                                 <span class="job-row-dim"> · @row.EntryCount entr@(row.EntryCount == 1 ? "y" : "ies")</span>
                                                 @if (row.LastDate.HasValue)
@@ -230,73 +240,6 @@ else if (jobs.Count > 0)
                             else
                             {
                                 <p class="job-empty-note">No materials logged on this job yet.</p>
-                            }
-
-                            @* Driving *@
-                            <div class="job-section-title">
-                                <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                                    <path d="M8 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
-                                    <path d="M3 4a1 1 0 00-1 1v1H1a1 1 0 000 2h1v2a1 1 0 001 1h.5a2.5 2.5 0 005 0H11a2.5 2.5 0 005 0h.5a1 1 0 001-1V8.5A2.5 2.5 0 0015 6h-1.27l-.5-1.5A1 1 0 0012.28 4H3zm5 8a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z"/>
-                                </svg>
-                                Driving
-                                @if (details.TotalDrivingUnits > 0 && drivingUnitPrice > 0)
-                                {
-                                    <span class="job-row-dim" style="margin-left:0.5rem;">
-                                        @details.TotalDrivingUnits km · @((details.TotalDrivingUnits * drivingUnitPrice).ToString("N0")) kr.
-                                    </span>
-                                }
-                            </div>
-
-                            @if (details.DrivingEntries.Count > 0)
-                            {
-                                <div class="job-rows">
-                                    @foreach (var de in details.DrivingEntries.OrderByDescending(d => d.WorkDate))
-                                    {
-                                        @if (editingDrivingEntryId == de.Id)
-                                        {
-                                            <div class="job-row" style="flex-direction:column; gap:0.4rem; align-items:stretch;">
-                                                <div style="display:flex; gap:0.5rem; align-items:center;">
-                                                    <FluentNumberField TValue="int" @bind-Value="editingDrivingUnits" Min="1" style="width:6rem;" />
-                                                    <span class="job-row-dim">km on @de.WorkDate.ToString("dd MMM yyyy") by @employeeLookup.GetValueOrDefault(de.EmployeeId, "?")</span>
-                                                </div>
-                                                <div style="display:flex; gap:0.4rem;">
-                                                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => SaveDrivingEntryAsync(de))">Save</FluentButton>
-                                                    <FluentButton Appearance="Appearance.Outline" @onclick="CancelDrivingEdit">Cancel</FluentButton>
-                                                </div>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            <div class="job-row">
-                                                <span class="job-row-name">
-                                                    @de.WorkDate.ToString("dd MMM yyyy")
-                                                    <span class="job-row-dim"> · @employeeLookup.GetValueOrDefault(de.EmployeeId, "?")</span>
-                                                </span>
-                                                <span class="job-row-meta" style="display:flex; align-items:center; gap:0.5rem;">
-                                                    <strong>@de.Units km</strong>
-                                                    @if (!string.IsNullOrWhiteSpace(de.Notes))
-                                                    {
-                                                        <span class="job-row-dim">· @de.Notes</span>
-                                                    }
-                                                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginDrivingEdit(de))">Edit</FluentButton>
-                                                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => DeleteDrivingEntryAsync(job.Id, de.Id))">Delete</FluentButton>
-                                                </span>
-                                            </div>
-                                        }
-                                    }
-                                </div>
-                                <div class="job-material-total">
-                                    Total: <strong>@details.TotalDrivingUnits km</strong>
-                                    @if (drivingUnitPrice > 0)
-                                    {
-                                        <span style="color:#9ca3af;font-weight:400;margin:0 0.2rem">·</span>
-                                        <strong>@((details.TotalDrivingUnits * drivingUnitPrice).ToString("N0")) kr.</strong>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <p class="job-empty-note">No driving logged on this job yet.</p>
                             }
 
                             @* Edit inline *@
@@ -397,10 +340,6 @@ else if (company is not null)
     private bool    savingDrivingRate;
     private string? drivingRateError;
 
-    // ── Driving entry edit state ───────────────────────────────────────────────
-    private Guid editingDrivingEntryId;
-    private int  editingDrivingUnits;
-
     // ── View models ────────────────────────────────────────────────────────────
     private sealed class JobDetail
     {
@@ -413,7 +352,6 @@ else if (company is not null)
         public int     TotalDrivingUnits    { get; set; }
         public List<EmployeeRow>   ByEmployee    { get; set; } = [];
         public List<MaterialRow>   ByMaterial    { get; set; } = [];
-        public List<DrivingEntry>  DrivingEntries { get; set; } = [];
     }
 
     private sealed class EmployeeRow
@@ -421,6 +359,7 @@ else if (company is not null)
         public string    EmployeeName  { get; set; } = string.Empty;
         public decimal   Hours         { get; set; }
         public decimal   OvertimeHours { get; set; }
+        public int       DrivingUnits  { get; set; }
         public int       EntryCount    { get; set; }
         public DateOnly? LastDate      { get; set; }
     }
@@ -499,12 +438,10 @@ else if (company is not null)
     {
         var entriesTask = TimeEntriesApi.GetTimeEntriesAsync(jobId: jobId);
         var usageTask   = MaterialsApi.GetMaterialUsageAsync(jobId: jobId);
-        var drivingTask = DrivingApi.GetDrivingEntriesAsync(jobId: jobId);
-        await Task.WhenAll(entriesTask, usageTask, drivingTask);
+        await Task.WhenAll(entriesTask, usageTask);
 
-        var entries  = (await entriesTask).Value  ?? [];
-        var usages   = (await usageTask).Value    ?? [];
-        var driving  = (await drivingTask).Value  ?? [];
+        var entries = (await entriesTask).Value ?? [];
+        var usages  = (await usageTask).Value   ?? [];
 
         var byEmp = entries
             .GroupBy(e => e.EmployeeId)
@@ -513,6 +450,7 @@ else if (company is not null)
                 EmployeeName  = employeeLookup.GetValueOrDefault(g.Key, g.Key.ToString()[..8]),
                 Hours         = g.Sum(e => e.Hours),
                 OvertimeHours = g.Sum(e => e.OvertimeHours),
+                DrivingUnits  = g.Sum(e => e.DrivingUnits),
                 EntryCount    = g.Count(),
                 LastDate      = g.Max(e => e.WorkDate)
             })
@@ -545,10 +483,9 @@ else if (company is not null)
             EntryCount           = entries.Count,
             MaterialCostExVat    = byMat.Sum(m => m.TotalCostExVat),
             MaterialCostInclVat  = byMat.Sum(m => m.TotalCostInclVat),
-            TotalDrivingUnits    = driving.Sum(d => d.Units),
+            TotalDrivingUnits    = byEmp.Sum(r => r.DrivingUnits),
             ByEmployee           = byEmp,
-            ByMaterial           = byMat,
-            DrivingEntries       = driving
+            ByMaterial           = byMat
         };
     }
 
@@ -595,48 +532,10 @@ else if (company is not null)
         drivingRateError  = null;
         try
         {
-            var result = await DrivingApi.UpdateDrivingRateAsync(drivingUnitPrice);
+            var result = await CompanyApi.UpdateDrivingRateAsync(drivingUnitPrice);
             if (!result.IsSuccess) drivingRateError = result.ErrorMessage;
             else if (company is not null) company.DrivingUnitPrice = drivingUnitPrice;
         }
         finally { savingDrivingRate = false; }
-    }
-
-    // ── Driving entry edit/delete ─────────────────────────────────────────────
-    private void BeginDrivingEdit(DrivingEntry entry)
-    {
-        editingDrivingEntryId = entry.Id;
-        editingDrivingUnits   = entry.Units;
-    }
-
-    private void CancelDrivingEdit() => editingDrivingEntryId = Guid.Empty;
-
-    private async Task SaveDrivingEntryAsync(DrivingEntry entry)
-    {
-        var updated = new DrivingEntry
-        {
-            Id         = entry.Id,
-            CompanyId  = entry.CompanyId,
-            JobId      = entry.JobId,
-            EmployeeId = entry.EmployeeId,
-            WorkDate   = entry.WorkDate,
-            Units      = editingDrivingUnits,
-            Notes      = entry.Notes
-        };
-        var result = await DrivingApi.UpdateDrivingEntryAsync(updated);
-        if (result.IsSuccess)
-        {
-            editingDrivingEntryId = Guid.Empty;
-            jobDetails.Remove(entry.JobId);
-            await LoadJobDetailAsync(entry.JobId);
-        }
-        else { loadError = result.ErrorMessage; }
-    }
-
-    private async Task DeleteDrivingEntryAsync(Guid jobId, Guid entryId)
-    {
-        var result = await DrivingApi.DeleteDrivingEntryAsync(entryId);
-        if (result.IsSuccess) { jobDetails.Remove(jobId); await LoadJobDetailAsync(jobId); }
-        else { loadError = result.ErrorMessage; }
     }
 }

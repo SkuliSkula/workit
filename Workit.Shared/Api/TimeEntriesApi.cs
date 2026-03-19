@@ -6,6 +6,7 @@ public interface ITimeEntriesApi
 {
     Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly? from = null, DateOnly? to = null, Guid? employeeId = null, Guid? jobId = null);
     Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry);
+    Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry);
 }
 
 internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -33,4 +34,7 @@ internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor
 
     public Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry) =>
         PostAsync("api/timeentries", timeEntry, "The time entry could not be saved right now.");
+
+    public Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry) =>
+        PutAsync($"api/timeentries/{timeEntry.Id}", timeEntry, "The time entry could not be updated right now.");
 }

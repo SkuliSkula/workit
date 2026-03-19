@@ -87,6 +87,16 @@ h1:focus {
     align-items: end;
 }
 
+.admin-grid > * {
+    min-width: 0;
+}
+
+.admin-grid fluent-date-picker {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+
 .admin-accordion {
     margin: 1rem;
 }

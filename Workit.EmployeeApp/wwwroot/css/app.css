@@ -1111,6 +1111,13 @@ code {
     padding: 0.85rem 1rem;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
     border: 1px solid #eaeff6;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.hours-entry-item:active {
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
+    border-color: #c7d4e8;
 }
 
 .hours-entry-top {
@@ -1150,6 +1157,11 @@ code {
 .hours-entry-badge-ot {
     background: linear-gradient(135deg, #d97706, #f59e0b);
     box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
+}
+
+.hours-entry-badge-driving {
+    background: linear-gradient(135deg, #0369a1, #0ea5e9);
+    box-shadow: 0 2px 6px rgba(3, 105, 161, 0.3);
 }
 
 .hours-entry-job {
@@ -1420,32 +1432,6 @@ code {
     gap: 0.3rem;
     margin-bottom: 0.75rem;
     font-size: 0.95rem;
-}
-
-/* ── Mode toggle (Hours / Driving) ────────────────────────────────────────── */
-.hours-mode-toggle {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem 0;
-}
-
-.hours-mode-btn {
-    flex: 1;
-    padding: 0.5rem 0;
-    border: 1.5px solid var(--neutral-stroke-rest, #d1d5db);
-    border-radius: 8px;
-    background: transparent;
-    color: var(--neutral-foreground-rest, #374151);
-    font-size: 0.95rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.hours-mode-btn--active {
-    background: var(--accent-fill-rest, #0f4c81);
-    color: #fff;
-    border-color: var(--accent-fill-rest, #0f4c81);
 }
 
 /* ── Two-column sheet row ──────────────────────────────────────────────────── */

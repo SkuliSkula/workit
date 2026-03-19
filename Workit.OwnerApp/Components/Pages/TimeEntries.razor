@@ -70,6 +70,11 @@
             <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
         </div>
 
+        <div>
+            <FluentLabel>Driving units</FluentLabel>
+            <FluentNumberField TValue="int" @bind-Value="drivingUnits" Min="0" style="width:100%" />
+        </div>
+
         <div style="grid-column: span 2">
             <FluentLabel>Notes</FluentLabel>
             <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
@@ -113,13 +118,18 @@
             <PropertyColumn Property="@(x => x.JobName)"      Title="Job" />
             <PropertyColumn Property="@(x => x.Hours)"         Title="Hours"    Format="0.##" />
             <PropertyColumn Property="@(x => x.OvertimeHours)" Title="Overtime" Format="0.##" />
+            <PropertyColumn Property="@(x => x.DrivingUnits)"  Title="Driving"  />
             <PropertyColumn Property="@(x => x.Notes)"         Title="Notes" />
         </FluentDataGrid>
 
         <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
             Total: <strong>@entries.Sum(e => e.Hours).ToString("0.##") hrs</strong>
             · Overtime: <strong>@entries.Sum(e => e.OvertimeHours).ToString("0.##") hrs</strong>
-            across @entries.Count entries
+            @if (entries.Sum(e => e.DrivingUnits) > 0)
+            {
+                <span> · Driving: <strong>@entries.Sum(e => e.DrivingUnits) units</strong></span>
+            }
+            · across @entries.Count entries
         </FluentLabel>
     }
     else if (!loadingEntries && hasLoadedEntries)
@@ -142,6 +152,7 @@
     private DateTime? workDate = DateTime.Today;
     private decimal hours = 8m;
     private decimal overtimeHours = 0m;
+    private int     drivingUnits = 0;
     private string notes = string.Empty;
     private bool saving;
     private string? saveResult;
@@ -167,6 +178,7 @@
         public string   JobName       { get; set; } = string.Empty;
         public decimal  Hours         { get; set; }
         public decimal  OvertimeHours { get; set; }
+        public int      DrivingUnits  { get; set; }
         public string   Notes         { get; set; } = string.Empty;
     }
 
@@ -225,15 +237,17 @@
                 WorkDate      = DateOnly.FromDateTime(workDate.Value),
                 Hours         = hours,
                 OvertimeHours = overtimeHours,
+                DrivingUnits  = drivingUnits,
                 Notes         = notes.Trim()
             });
 
             if (result.IsSuccess)
             {
-                saveResult    = $"✓ Entry saved ({hours:0.##} hrs{(overtimeHours > 0 ? $" + {overtimeHours:0.##} OT" : string.Empty)})";
+                saveResult    = $"✓ Entry saved ({hours:0.##} hrs{(overtimeHours > 0 ? $" + {overtimeHours:0.##} OT" : string.Empty)}{(drivingUnits > 0 ? $" + {drivingUnits} driving" : string.Empty)})";
                 notes         = string.Empty;
                 hours         = 8m;
                 overtimeHours = 0m;
+                drivingUnits  = 0;
                 await LoadEntriesAsync();
             }
             else
@@ -278,6 +292,7 @@
                     JobName       = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),
                     Hours         = e.Hours,
                     OvertimeHours = e.OvertimeHours,
+                    DrivingUnits  = e.DrivingUnits,
                     Notes         = e.Notes
                 });
 

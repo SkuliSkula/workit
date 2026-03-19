@@ -9,5 +9,6 @@ public sealed class TimeEntry
     public DateOnly WorkDate { get; set; }
     public decimal Hours { get; set; }
     public decimal OvertimeHours { get; set; }
+    public int DrivingUnits { get; set; }
     public string Notes { get; set; } = string.Empty;
 }

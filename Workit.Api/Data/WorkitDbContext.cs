@@ -15,7 +15,6 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
     public DbSet<Material> Materials => Set<Material>();
     public DbSet<MaterialUsage> MaterialUsages => Set<MaterialUsage>();
-    public DbSet<DrivingEntry> DrivingEntries => Set<DrivingEntry>();
     public DbSet<VendorInvoice> VendorInvoices => Set<VendorInvoice>();
     public DbSet<VendorInvoiceLineItem> VendorInvoiceLineItems => Set<VendorInvoiceLineItem>();
     public DbSet<EmailSettings> EmailSettings => Set<EmailSettings>();
@@ -79,14 +78,6 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.MaterialId });
 
         modelBuilder.Entity<MaterialUsage>()
-            .HasIndex(x => new { x.CompanyId, x.EmployeeId });
-
-        modelBuilder.Entity<DrivingEntry>().ToTable("DrivingEntries");
-
-        modelBuilder.Entity<DrivingEntry>()
-            .HasIndex(x => new { x.CompanyId, x.JobId });
-
-        modelBuilder.Entity<DrivingEntry>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId });
 
         // VendorInvoices: dedup on (CompanyId, SourceEmailMessageId)
