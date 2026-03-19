@@ -28,15 +28,8 @@ public sealed class EmailScanService(
             await client.ConnectAsync(settings.ImapHost, settings.ImapPort, settings.UseSsl);
             await client.AuthenticateAsync(settings.Username, settings.Password);
 
-            var folder    = await OpenFolderAsync(client, settings.InvoiceFolder);
-            var allUids   = await folder.SearchAsync(SearchQuery.All);
-
-            // Filter by subject in C# to avoid IMAP server issues with non-ASCII characters (e.g. ö)
-            var summaries = await folder.FetchAsync(allUids, MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope);
-            var uids = summaries
-                .Where(s => s.Envelope?.Subject?.Contains("Johan Rönning", StringComparison.OrdinalIgnoreCase) == true)
-                .Select(s => s.UniqueId)
-                .ToList();
+            var folder = await OpenFolderAsync(client, settings.InvoiceFolder);
+            var uids   = await folder.SearchAsync(SearchQuery.All);
 
             foreach (var uid in uids)
             {
