@@ -68,6 +68,9 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal>("DrivingUnitPrice")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("text");
@@ -91,6 +94,40 @@ namespace Workit.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Companies", (string)null);
+                });
+
+            modelBuilder.Entity("Workit.Shared.Models.DrivingEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("WorkDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "EmployeeId");
+
+                    b.HasIndex("CompanyId", "JobId");
+
+                    b.ToTable("DrivingEntries", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.Customer", b =>

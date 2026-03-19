@@ -250,6 +250,24 @@ securedApi.MapGet("/company", async (WorkitDbContext db, HttpContext httpContext
         "loading company"))
     .WithName("GetCompany");
 
+securedApi.MapPut("/company/driving-rate", async (WorkitDbContext db, HttpContext httpContext, UpdateDrivingRateRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+            var company = await db.Companies.FirstOrDefaultAsync(x => x.Id == userContext.CompanyId, ct);
+            if (company is null) return Results.NotFound();
+
+            company.DrivingUnitPrice = request.UnitPrice;
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(company);
+        },
+        apiLogger,
+        "updating driving rate"))
+    .WithName("UpdateDrivingRate");
+
 securedApi.MapGet("/customers", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
@@ -1049,6 +1067,111 @@ securedApi.MapPost("/materials/usage", async (WorkitDbContext db, HttpContext ht
         "logging material usage"))
     .WithName("CreateMaterialUsage");
 
+// ── Driving ────────────────────────────────────────────────────────────────────
+
+securedApi.MapGet("/driving", async (WorkitDbContext db, HttpContext httpContext, Guid? jobId, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            var userContext = httpContext.User.ToUserContext();
+            var query = db.DrivingEntries.Where(x => x.CompanyId == userContext.CompanyId);
+
+            if (!httpContext.User.IsOwner())
+            {
+                if (userContext.EmployeeId is not Guid currentEmployeeId)
+                    return Results.Forbid();
+                query = query.Where(x => x.EmployeeId == currentEmployeeId);
+            }
+
+            if (jobId.HasValue)
+                query = query.Where(x => x.JobId == jobId.Value);
+
+            var entries = await query.OrderByDescending(x => x.WorkDate).ToListAsync(ct);
+            return Results.Ok(entries);
+        },
+        apiLogger,
+        "loading driving entries"))
+    .WithName("GetDrivingEntries");
+
+securedApi.MapPost("/driving", async (WorkitDbContext db, HttpContext httpContext, DrivingEntry entry, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            var userContext = httpContext.User.ToUserContext();
+
+            if (entry.Units <= 0)
+                return Results.BadRequest("Units must be greater than zero.");
+
+            if (httpContext.User.IsOwner())
+            {
+                entry.CompanyId = userContext.CompanyId;
+                var employeeExists = await db.Employees
+                    .AnyAsync(x => x.Id == entry.EmployeeId && x.CompanyId == userContext.CompanyId, ct);
+                if (!employeeExists)
+                    return Results.BadRequest("Employee not found in this company.");
+            }
+            else if (userContext.EmployeeId is Guid currentEmployeeId)
+            {
+                entry.CompanyId  = userContext.CompanyId;
+                entry.EmployeeId = currentEmployeeId;
+            }
+            else
+            {
+                return Results.Forbid();
+            }
+
+            db.DrivingEntries.Add(entry);
+            await db.SaveChangesAsync(ct);
+            return Results.Created($"/api/driving/{entry.Id}", entry);
+        },
+        apiLogger,
+        "creating driving entry"))
+    .WithName("CreateDrivingEntry");
+
+securedApi.MapPut("/driving/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, DrivingEntry entry, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+                return Results.Forbid();
+
+            if (id != entry.Id)
+                return Results.BadRequest("Driving entry id mismatch.");
+
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.DrivingEntries.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (existing is null) return Results.NotFound();
+
+            if (entry.Units <= 0)
+                return Results.BadRequest("Units must be greater than zero.");
+
+            existing.JobId    = entry.JobId;
+            existing.WorkDate = entry.WorkDate;
+            existing.Units    = entry.Units;
+            existing.Notes    = entry.Notes;
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "updating driving entry"))
+    .WithName("UpdateDrivingEntry");
+
+securedApi.MapDelete("/driving/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.DrivingEntries.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (existing is null) return Results.NotFound();
+
+            db.DrivingEntries.Remove(existing);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        },
+        apiLogger,
+        "deleting driving entry"))
+    .WithName("DeleteDrivingEntry");
+
 api.MapGet("/status/database", async (WorkitDbContext db, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
@@ -1189,3 +1312,5 @@ static async Task LogStartupDatabaseStatusAsync(
         logger.LogError(ex, "Database connection check failed at startup. The API will keep running and return 503 for database-backed endpoints.");
     }
 }
+
+record UpdateDrivingRateRequest(decimal UnitPrice);

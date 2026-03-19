@@ -15,6 +15,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
     public DbSet<Material> Materials => Set<Material>();
     public DbSet<MaterialUsage> MaterialUsages => Set<MaterialUsage>();
+    public DbSet<DrivingEntry> DrivingEntries => Set<DrivingEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +73,14 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.MaterialId });
 
         modelBuilder.Entity<MaterialUsage>()
+            .HasIndex(x => new { x.CompanyId, x.EmployeeId });
+
+        modelBuilder.Entity<DrivingEntry>().ToTable("DrivingEntries");
+
+        modelBuilder.Entity<DrivingEntry>()
+            .HasIndex(x => new { x.CompanyId, x.JobId });
+
+        modelBuilder.Entity<DrivingEntry>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId });
     }
 }

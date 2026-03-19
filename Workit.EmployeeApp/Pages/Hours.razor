@@ -6,75 +6,144 @@
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
+@inject IDrivingApi DrivingApi
 
 <PageTitle>Hours</PageTitle>
 
-@* ── Summary header ── *@
-<div class="hours-header employee-shell hours-card">
-    <div>
-        <span class="employee-eyebrow">Last 30 days</span>
-        <div class="hours-header-total">
-            @totalRecentHours.ToString("0.#")<span class="hours-header-unit"> hrs</span>
-        </div>
-        <div class="hours-header-company">@(company?.Name ?? string.Empty)</div>
-    </div>
-    <div class="hours-header-stats">
-        <div class="hours-header-stat">
-            <span class="hours-header-stat-val">@entries.Count</span>
-            <span class="hours-header-stat-lbl">entries</span>
-        </div>
-        <div class="hours-header-stat">
-            <span class="hours-header-stat-val">@uniqueJobCount</span>
-            <span class="hours-header-stat-lbl">jobs</span>
-        </div>
-    </div>
+@* ── Mode toggle ── *@
+<div class="hours-mode-toggle employee-shell">
+    <button class="hours-mode-btn @(mode == PageMode.Hours ? "hours-mode-btn--active" : "")"
+            @onclick="@(() => SetMode(PageMode.Hours))">Hours</button>
+    <button class="hours-mode-btn @(mode == PageMode.Driving ? "hours-mode-btn--active" : "")"
+            @onclick="@(() => SetMode(PageMode.Driving))">Driving</button>
 </div>
+
+@* ── Summary header ── *@
+@if (mode == PageMode.Hours)
+{
+    <div class="hours-header employee-shell hours-card">
+        <div>
+            <span class="employee-eyebrow">Last 30 days</span>
+            <div class="hours-header-total">
+                @totalRecentHours.ToString("0.#")<span class="hours-header-unit"> hrs</span>
+            </div>
+            <div class="hours-header-company">@(company?.Name ?? string.Empty)</div>
+        </div>
+        <div class="hours-header-stats">
+            <div class="hours-header-stat">
+                <span class="hours-header-stat-val">@entries.Count</span>
+                <span class="hours-header-stat-lbl">entries</span>
+            </div>
+            <div class="hours-header-stat">
+                <span class="hours-header-stat-val">@uniqueJobCount</span>
+                <span class="hours-header-stat-lbl">jobs</span>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="hours-header employee-shell hours-card">
+        <div>
+            <span class="employee-eyebrow">Last 30 days</span>
+            <div class="hours-header-total">
+                @totalRecentDrivingUnits<span class="hours-header-unit"> km</span>
+            </div>
+            <div class="hours-header-company">@(company?.Name ?? string.Empty)</div>
+        </div>
+        <div class="hours-header-stats">
+            <div class="hours-header-stat">
+                <span class="hours-header-stat-val">@drivingEntries.Count</span>
+                <span class="hours-header-stat-lbl">entries</span>
+            </div>
+            <div class="hours-header-stat">
+                <span class="hours-header-stat-val">@uniqueDrivingJobCount</span>
+                <span class="hours-header-stat-lbl">jobs</span>
+            </div>
+        </div>
+    </div>
+}
 
 @if (!string.IsNullOrWhiteSpace(loadError))
 {
     <div class="hours-error-banner">@loadError</div>
 }
 
-@* ── Entry list ── *@
-@if (entries.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+@* ── Hours entry list ── *@
+@if (mode == PageMode.Hours)
 {
-    <div class="hours-empty">
-        <FluentIcon Value="new Size48.Clock()" />
-        <strong>No entries yet</strong>
-        <span>Tap the + button to log your first hours.</span>
-    </div>
-}
-else
-{
-    <div class="hours-entry-list">
-        @foreach (var entry in entries.OrderByDescending(e => e.WorkDate).ThenByDescending(e => e.Hours))
-        {
-            <div class="hours-entry-item">
-                <div class="hours-entry-top">
-                    <span class="hours-entry-date">@entry.WorkDate.ToString("MMM d, yyyy")</span>
-                    <div class="hours-entry-badges">
-                        <span class="hours-entry-badge">@entry.Hours h</span>
-                        @if (entry.OvertimeHours > 0)
-                        {
-                            <span class="hours-entry-badge hours-entry-badge-ot">+@entry.OvertimeHours h OT</span>
-                        }
+    @if (entries.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+    {
+        <div class="hours-empty">
+            <FluentIcon Value="new Size48.Clock()" />
+            <strong>No entries yet</strong>
+            <span>Tap the + button to log your first hours.</span>
+        </div>
+    }
+    else
+    {
+        <div class="hours-entry-list">
+            @foreach (var entry in entries.OrderByDescending(e => e.WorkDate).ThenByDescending(e => e.Hours))
+            {
+                <div class="hours-entry-item">
+                    <div class="hours-entry-top">
+                        <span class="hours-entry-date">@entry.WorkDate.ToString("MMM d, yyyy")</span>
+                        <div class="hours-entry-badges">
+                            <span class="hours-entry-badge">@entry.Hours h</span>
+                            @if (entry.OvertimeHours > 0)
+                            {
+                                <span class="hours-entry-badge hours-entry-badge-ot">+@entry.OvertimeHours h OT</span>
+                            }
+                        </div>
                     </div>
+                    <div class="hours-entry-job">@jobLookup.GetValueOrDefault(entry.JobId, "Unknown job")</div>
+                    @if (!string.IsNullOrWhiteSpace(entry.Notes))
+                    {
+                        <div class="hours-entry-notes">@entry.Notes</div>
+                    }
                 </div>
-                <div class="hours-entry-job">@jobLookup.GetValueOrDefault(entry.JobId, "Unknown job")</div>
-                @if (!string.IsNullOrWhiteSpace(entry.Notes))
-                {
-                    <div class="hours-entry-notes">@entry.Notes</div>
-                }
-            </div>
-        }
-    </div>
+            }
+        </div>
+    }
+}
+
+@* ── Driving entry list ── *@
+@if (mode == PageMode.Driving)
+{
+    @if (drivingEntries.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+    {
+        <div class="hours-empty">
+            <FluentIcon Value="new Size48.VehicleCar()" />
+            <strong>No driving logged yet</strong>
+            <span>Tap the + button to log driving.</span>
+        </div>
+    }
+    else
+    {
+        <div class="hours-entry-list">
+            @foreach (var de in drivingEntries.OrderByDescending(d => d.WorkDate))
+            {
+                <div class="hours-entry-item">
+                    <div class="hours-entry-top">
+                        <span class="hours-entry-date">@de.WorkDate.ToString("MMM d, yyyy")</span>
+                        <span class="hours-entry-badge">@de.Units km</span>
+                    </div>
+                    <div class="hours-entry-job">@jobLookup.GetValueOrDefault(de.JobId, "Unknown job")</div>
+                    @if (!string.IsNullOrWhiteSpace(de.Notes))
+                    {
+                        <div class="hours-entry-notes">@de.Notes</div>
+                    }
+                </div>
+            }
+        </div>
+    }
 }
 
 @* ── Floating action button ── *@
 <button class="hours-fab"
         @onclick="OpenSheet"
         disabled="@(!CanCreateEntries)"
-        aria-label="Log new hours">
+        aria-label="@(mode == PageMode.Hours ? "Log new hours" : "Log driving")">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28"
          fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <line x1="12" y1="4" x2="12" y2="20" />
@@ -98,7 +167,7 @@ else
                     <polyline points="12 6 12 12 16 14" />
                 </svg>
             </div>
-            <h2>Log hours</h2>
+            <h2>@(mode == PageMode.Hours ? "Log hours" : "Log driving")</h2>
         </div>
         <button class="sheet-close-btn" @onclick="CloseSheet" aria-label="Close">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
@@ -130,24 +199,40 @@ else
             }
         </div>
 
-        @* Date + Hours + Overtime — three columns *@
-        <div class="sheet-row sheet-row-3">
-            <div class="sheet-field">
-                <label class="sheet-label">Date</label>
-                <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+        @* Date + Hours/Driving fields *@
+        @if (mode == PageMode.Hours)
+        {
+            <div class="sheet-row sheet-row-3">
+                <div class="sheet-field">
+                    <label class="sheet-label">Date</label>
+                    <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+                </div>
+                <div class="sheet-field">
+                    <label class="sheet-label">Hours</label>
+                    <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+                </div>
+                <div class="sheet-field">
+                    <label class="sheet-label">
+                        Overtime
+                        <span class="sheet-label-hint">optional</span>
+                    </label>
+                    <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
+                </div>
             </div>
-            <div class="sheet-field">
-                <label class="sheet-label">Hours</label>
-                <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+        }
+        else
+        {
+            <div class="sheet-row sheet-row-2">
+                <div class="sheet-field">
+                    <label class="sheet-label">Date</label>
+                    <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+                </div>
+                <div class="sheet-field">
+                    <label class="sheet-label">km driven</label>
+                    <FluentNumberField TValue="int" @bind-Value="drivingUnits" Min="1" style="width:100%" />
+                </div>
             </div>
-            <div class="sheet-field">
-                <label class="sheet-label">
-                    Overtime
-                    <span class="sheet-label-hint">optional</span>
-                </label>
-                <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
-            </div>
-        </div>
+        }
 
         @* Notes — full width *@
         <div class="sheet-field sheet-field-full">
@@ -181,33 +266,42 @@ else
                 <polyline points="17 21 17 13 7 13 7 21" />
                 <polyline points="7 3 7 8 15 8" />
             </svg>
-            <span>Save hours</span>
+            <span>@(mode == PageMode.Hours ? "Save hours" : "Save driving")</span>
         }
     </button>
 </section>
 
 @code {
-    private readonly List<Job> jobs = [];
-    private readonly List<TimeEntry> entries = [];
+    private enum PageMode { Hours, Driving }
+
+    private readonly List<Job>          jobs           = [];
+    private readonly List<TimeEntry>    entries        = [];
+    private readonly List<DrivingEntry> drivingEntries = [];
     private readonly Dictionary<Guid, string> jobLookup = new();
 
-    private Company? company;
-    private string? selectedJobId;
-    private string? loadError;
-    private string? saveError;
-    private DateTime? workDate = DateTime.Today;
-    private decimal hours = 8m;
-    private decimal overtimeHours = 0m;
-    private string notes = string.Empty;
-    private bool isSheetOpen;
-    private bool isSaving;
+    private Company?  company;
+    private PageMode  mode          = PageMode.Hours;
+    private string?   selectedJobId;
+    private string?   loadError;
+    private string?   saveError;
+    private DateTime? workDate      = DateTime.Today;
+    private decimal   hours         = 8m;
+    private decimal   overtimeHours = 0m;
+    private int       drivingUnits  = 1;
+    private string    notes         = string.Empty;
+    private bool      isSheetOpen;
+    private bool      isSaving;
 
-    private decimal totalRecentHours => entries.Sum(e => e.Hours);
-    private int uniqueJobCount => entries.Select(e => e.JobId).Distinct().Count();
+    private decimal totalRecentHours        => entries.Sum(e => e.Hours);
+    private int     uniqueJobCount          => entries.Select(e => e.JobId).Distinct().Count();
+    private int     totalRecentDrivingUnits => drivingEntries.Sum(d => d.Units);
+    private int     uniqueDrivingJobCount   => drivingEntries.Select(d => d.JobId).Distinct().Count();
 
     private bool CanCreateEntries =>
         company is not null &&
         Guid.TryParse(selectedJobId, out _);
+
+    private void SetMode(PageMode m) { mode = m; isSheetOpen = false; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -233,6 +327,7 @@ else
     {
         jobs.Clear();
         entries.Clear();
+        drivingEntries.Clear();
         jobLookup.Clear();
         selectedJobId = null;
 
@@ -246,10 +341,16 @@ else
         selectedJobId = jobs.FirstOrDefault()?.Id.ToString();
 
         var from = DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
-        var entriesResult = await TimeEntriesApi.GetTimeEntriesAsync(from);
-        if (!entriesResult.IsSuccess) { loadError ??= entriesResult.ErrorMessage; return; }
+        var entriesTask  = TimeEntriesApi.GetTimeEntriesAsync(from);
+        var drivingTask  = DrivingApi.GetDrivingEntriesAsync();
+        await Task.WhenAll(entriesTask, drivingTask);
 
+        var entriesResult = await entriesTask;
+        if (!entriesResult.IsSuccess) { loadError ??= entriesResult.ErrorMessage; return; }
         entries.AddRange(entriesResult.Value ?? []);
+
+        var drivingResult = await drivingTask;
+        if (drivingResult.IsSuccess) drivingEntries.AddRange(drivingResult.Value ?? []);
     }
 
     private async Task SaveEntryAsync()
@@ -262,21 +363,38 @@ else
 
         try
         {
-            var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
+            ApiResult result;
+
+            if (mode == PageMode.Hours)
             {
-                CompanyId     = company.Id,
-                JobId         = jobId,
-                WorkDate      = DateOnly.FromDateTime(workDate.Value.Date),
-                Hours         = hours,
-                OvertimeHours = overtimeHours,
-                Notes         = notes
-            });
+                result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
+                {
+                    CompanyId     = company.Id,
+                    JobId         = jobId,
+                    WorkDate      = DateOnly.FromDateTime(workDate.Value.Date),
+                    Hours         = hours,
+                    OvertimeHours = overtimeHours,
+                    Notes         = notes
+                });
+            }
+            else
+            {
+                result = await DrivingApi.CreateDrivingEntryAsync(new DrivingEntry
+                {
+                    CompanyId = company.Id,
+                    JobId     = jobId,
+                    WorkDate  = DateOnly.FromDateTime(workDate.Value.Date),
+                    Units     = drivingUnits,
+                    Notes     = notes
+                });
+            }
 
             if (result.IsSuccess)
             {
                 notes         = string.Empty;
                 hours         = 8m;
                 overtimeHours = 0m;
+                drivingUnits  = 1;
                 isSheetOpen   = false;
                 await LoadDataAsync();
             }

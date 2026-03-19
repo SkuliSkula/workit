@@ -9,4 +9,5 @@ public sealed class Company
     public string Address { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
     public string Owner { get; set; } = string.Empty;
+    public decimal DrivingUnitPrice { get; set; }
 }
