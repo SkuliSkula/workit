@@ -57,11 +57,19 @@ public sealed class EmailScanService(
         catch (Exception ex)
         {
             logger.LogError(ex, "IMAP scan failed for company {CompanyId}", companyId);
-            result.FatalError = ex.Message;
+
+            // Give a hint for the most common Gmail failure
+            result.FatalError = ex.Message.Contains("Invalid credentials", StringComparison.OrdinalIgnoreCase)
+                ? "Invalid credentials. For Gmail, use an App Password (myaccount.google.com → Security → App Passwords) instead of your regular password."
+                : ex.Message;
         }
 
-        settings.LastScannedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        // Only update LastScannedAt on a successful scan
+        if (result.FatalError is null)
+        {
+            settings.LastScannedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
 
         return result;
     }
