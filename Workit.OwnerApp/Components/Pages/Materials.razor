@@ -4,211 +4,186 @@
 
 <PageTitle>Materials</PageTitle>
 
-<section class="mat-page">
+@* ── Add / Edit form ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">@(editingMaterial is not null ? "Edit Material" : "Materials")</FluentLabel>
 
-    @* ── Add / Edit form ── *@
-    <div class="mat-shell">
-        <div class="mat-header">
-            <span class="mat-eyebrow">Material management</span>
-            <h1 class="mat-title">@(editingMaterial is not null ? "Edit Material" : "Materials")</h1>
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+    }
+
+    <div class="admin-grid">
+        <div>
+            <FluentLabel>Name *</FluentLabel>
+            <FluentTextField @bind-Value="formName" Placeholder="e.g. N1XE-U 5G 16 Cu 1kV Aflstrengur" style="width:100%" />
         </div>
 
-        @if (!string.IsNullOrWhiteSpace(loadError))
-        {
-            <div class="mat-alert mat-alert--error">@loadError</div>
-        }
+        <div>
+            <FluentLabel>Product code</FluentLabel>
+            <FluentTextField @bind-Value="formCode" Placeholder="e.g. N1XECU015G016" style="width:100%" />
+        </div>
 
-        <div class="mat-form-grid">
-            <label class="mat-field">
-                <span class="mat-label">Name *</span>
-                <input class="mat-input" type="text" @bind="formName" placeholder="e.g. N1XE-U 5G 16 Cu 1kV Aflstrengur" />
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Product code</span>
-                <input class="mat-input" type="text" @bind="formCode" placeholder="e.g. N1XECU015G016" />
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Category *</span>
-                <select class="mat-select" @bind="formCategory">
-                    @foreach (var cat in Categories)
-                    {
-                        <option value="@cat">@cat</option>
-                    }
-                </select>
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Unit</span>
-                <select class="mat-select" @bind="formUnit">
-                    @foreach (var u in Units)
-                    {
-                        <option value="@u">@u</option>
-                    }
-                </select>
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Purchase price (ex. VAT)</span>
-                <input class="mat-input" type="number" @bind="formPurchasePrice" @bind:after="RecalcSalePrice"
-                       min="0" step="0.01" placeholder="What you pay the vendor" />
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Markup factor</span>
-                <input class="mat-input" type="number" @bind="formMarkupFactor" @bind:after="RecalcSalePrice"
-                       min="1" step="0.05" placeholder="e.g. 1.5 = 50% markup" />
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Sale price (ex. VAT)</span>
-                <input class="mat-input" type="number" @bind="formUnitPrice" min="0" step="0.01" />
-                @if (formPurchasePrice > 0 && formMarkupFactor > 0)
+        <div>
+            <FluentLabel>Category *</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="formCategory" style="width:100%">
+                @foreach (var cat in Categories)
                 {
-                    <span class="mat-hint">Auto-calc: @((formPurchasePrice * formMarkupFactor).ToString("N0")) kr.</span>
+                    <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
                 }
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">VAT rate (%)</span>
-                <input class="mat-input" type="number" @bind="formVatRate" min="0" max="100" step="0.5" />
-            </label>
-
-            <label class="mat-field">
-                <span class="mat-label">Quantity in stock</span>
-                <input class="mat-input" type="number" @bind="formQuantity" min="0" step="1"
-                       placeholder="e.g. 500 (metres of cable)" />
-            </label>
-
-            <label class="mat-field mat-field--wide">
-                <span class="mat-label">Description</span>
-                <input class="mat-input" type="text" @bind="formDescription" placeholder="Optional notes" />
-            </label>
+            </FluentSelect>
         </div>
 
-        <div class="mat-form-actions">
+        <div>
+            <FluentLabel>Unit</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="formUnit" style="width:100%">
+                @foreach (var u in Units)
+                {
+                    <FluentOption TOption="string" Value="@u">@u</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div>
+            <FluentLabel>Purchase price (ex. VAT)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formPurchasePrice" Min="0" Step="0.01" style="width:100%"
+                               @bind-Value:after="RecalcSalePrice" Placeholder="What you pay the vendor" />
+        </div>
+
+        <div>
+            <FluentLabel>Markup factor</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formMarkupFactor" Min="1" Step="0.05" style="width:100%"
+                               @bind-Value:after="RecalcSalePrice" Placeholder="e.g. 1.5 = 50% markup" />
+        </div>
+
+        <div>
+            <FluentLabel>Sale price (ex. VAT)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formUnitPrice" Min="0" Step="0.01" style="width:100%" />
+            @if (formPurchasePrice > 0 && formMarkupFactor > 0)
+            {
+                <span style="font-size:0.82rem; color:#60758b; margin-top:0.2rem; display:block;">
+                    Auto-calc: @((formPurchasePrice * formMarkupFactor).ToString("N0")) kr.
+                </span>
+            }
+        </div>
+
+        <div>
+            <FluentLabel>VAT rate (%)</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formVatRate" Min="0" Max="100" Step="0.5" style="width:100%" />
+        </div>
+
+        <div>
+            <FluentLabel>Quantity in stock</FluentLabel>
+            <FluentNumberField TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
+                               Placeholder="e.g. 500 (metres of cable)" />
+        </div>
+
+        <div style="grid-column: span 2">
+            <FluentLabel>Description</FluentLabel>
+            <FluentTextField @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
+        </div>
+
+        <div style="display:flex; align-items:flex-end; gap:0.5rem;">
             @if (editingMaterial is not null)
             {
-                <button class="mat-btn mat-btn--primary" @onclick="UpdateMaterialAsync"
-                        disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
+                <FluentButton Appearance="Appearance.Accent" @onclick="UpdateMaterialAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
                     @(saving ? "Saving…" : "Save changes")
-                </button>
-                <button class="mat-btn mat-btn--outline" @onclick="CancelEdit">Cancel</button>
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" @onclick="CancelEdit">Cancel</FluentButton>
             }
             else
             {
-                <button class="mat-btn mat-btn--primary" @onclick="CreateMaterialAsync"
-                        disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
+                <FluentButton Appearance="Appearance.Accent" @onclick="CreateMaterialAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(formName) || saving)">
                     @(saving ? "Saving…" : "Add material")
-                </button>
+                </FluentButton>
             }
         </div>
-
-        @if (!string.IsNullOrWhiteSpace(saveResult))
-        {
-            <div class="mat-alert mat-alert--ok">@saveResult</div>
-        }
     </div>
 
-    @* ── Catalog ── *@
-    <div class="mat-shell">
-        <div class="mat-catalog-header">
-            <div class="mat-header">
-                <span class="mat-eyebrow">Material catalog</span>
-                <h2 class="mat-title">Catalog</h2>
-            </div>
-            <div class="mat-filter-row">
-                <label class="mat-field">
-                    <span class="mat-label">Category filter</span>
-                    <select class="mat-select mat-select--filter" @bind="filterCategory" @bind:after="ApplyFilter">
-                        <option value="">All</option>
-                        @foreach (var cat in Categories)
-                        {
-                            <option value="@cat">@cat</option>
-                        }
-                    </select>
-                </label>
-                <span class="mat-count">@filteredMaterials.Count material@(filteredMaterials.Count == 1 ? "" : "s")</span>
-            </div>
+    @if (!string.IsNullOrWhiteSpace(saveResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Category filter + grid ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+        <FluentLabel Typo="Typography.Body"><strong>Catalog</strong></FluentLabel>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+            <FluentLabel>Category:</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterCategory"
+                          @bind-Value:after="ApplyFilter" style="min-width:180px">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                @foreach (var cat in Categories)
+                {
+                    <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
+                }
+            </FluentSelect>
         </div>
-
-        @if (loading)
-        {
-            <PageLoader />
-        }
-        else if (filteredMaterials.Count > 0)
-        {
-            <div class="mat-table-wrap">
-                <table class="mat-table">
-                    <thead>
-                        <tr>
-                            <th class="mat-th">Category</th>
-                            <th class="mat-th">Name</th>
-                            <th class="mat-th">Code</th>
-                            <th class="mat-th">Unit</th>
-                            <th class="mat-th mat-right">Purchase</th>
-                            <th class="mat-th mat-right">Markup</th>
-                            <th class="mat-th mat-right">Sale (ex. VAT)</th>
-                            <th class="mat-th mat-right">Price (incl. VAT)</th>
-                            <th class="mat-th mat-right">VAT %</th>
-                            <th class="mat-th mat-right">In stock</th>
-                            <th class="mat-th">Status</th>
-                            <th class="mat-th"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var m in filteredMaterials)
-                        {
-                            <tr class="mat-tr">
-                                <td class="mat-td mat-td--cat">@m.Category</td>
-                                <td class="mat-td mat-td--name">@m.Name</td>
-                                <td class="mat-td mat-td--dim">@m.ProductCode</td>
-                                <td class="mat-td">@m.Unit</td>
-                                <td class="mat-td mat-right">@(m.PurchasePrice > 0 ? $"{m.PurchasePrice:N0} kr." : "—")</td>
-                                <td class="mat-td mat-right">@(m.MarkupFactor != 1m ? $"{m.MarkupFactor:0.##}×" : "—")</td>
-                                <td class="mat-td mat-right">@m.UnitPrice.ToString("N0") kr.</td>
-                                <td class="mat-td mat-right">@((m.UnitPrice * (1 + m.VatRate / 100m)).ToString("N0")) kr.</td>
-                                <td class="mat-td mat-right">@m.VatRate.ToString("0.#")</td>
-                                <td class="mat-td mat-right">
-                                    @{
-                                        var stockClass = m.Quantity <= 0
-                                            ? "mat-stock mat-stock--empty"
-                                            : m.Quantity < 10
-                                                ? "mat-stock mat-stock--low"
-                                                : "mat-stock mat-stock--ok";
-                                    }
-                                    <span class="@stockClass">@m.Quantity.ToString("0.##") @m.Unit</span>
-                                </td>
-                                <td class="mat-td">
-                                    @if (m.IsActive)
-                                    {
-                                        <span class="mat-badge mat-badge--green">Active</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="mat-badge mat-badge--red">Inactive</span>
-                                    }
-                                </td>
-                                <td class="mat-td mat-td--actions">
-                                    <button class="mat-btn mat-btn--outline mat-btn--sm"
-                                            @onclick="@(() => BeginEdit(m))">Edit</button>
-                                    <button class="mat-btn mat-btn--danger mat-btn--sm"
-                                            @onclick="@(() => DeleteMaterialAsync(m))">Delete</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        else
-        {
-            <p class="mat-empty">No materials yet. Add the first one above.</p>
-        }
+        <FluentLabel style="margin-left:auto; color: var(--neutral-foreground-rest)">
+            @filteredMaterials.Count material@(filteredMaterials.Count == 1 ? "" : "s")
+        </FluentLabel>
     </div>
 
-</section>
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (filteredMaterials.Count > 0)
+    {
+        <FluentDataGrid TGridItem="Material" Items="@filteredMaterials.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.25rem;">
+            <PropertyColumn Property="@(x => x.Category)"    Title="Category" />
+            <PropertyColumn Property="@(x => x.Name)"        Title="Name" />
+            <PropertyColumn Property="@(x => x.ProductCode)" Title="Code" />
+            <PropertyColumn Property="@(x => x.Unit)"        Title="Unit" />
+            <TemplateColumn Title="Purchase">
+                <span>@(context.PurchasePrice > 0 ? $"{context.PurchasePrice:N0} kr." : "—")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Markup">
+                <span>@(context.MarkupFactor != 1m ? $"{context.MarkupFactor:0.##}×" : "—")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Sale price (ex. VAT)">
+                <span>@context.UnitPrice.ToString("N0") kr.</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Price (incl. VAT)">
+                <span>@((context.UnitPrice * (1 + context.VatRate / 100m)).ToString("N0")) kr.</span>
+            </TemplateColumn>
+            <PropertyColumn Property="@(x => x.VatRate)"     Title="VAT %" Format="0.#" />
+            <TemplateColumn Title="In stock">
+                @{
+                    var stockStyle = context.Quantity <= 0
+                        ? "color:#dc2626; font-weight:600;"
+                        : context.Quantity < 10
+                            ? "color:#d97706; font-weight:600;"
+                            : "color:#059669; font-weight:600;";
+                }
+                <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Status">
+                @{
+                    var statusStyle = context.IsActive
+                        ? "background:#d1fae5; color:#065f46; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;"
+                        : "background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;";
+                }
+                <span style="@statusStyle">@(context.IsActive ? "Active" : "Inactive")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context))">Edit</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--error);"
+                              @onclick="@(() => DeleteMaterialAsync(context))">Delete</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No materials yet. Add the first one above.</FluentLabel>
+    }
+</FluentCard>
 
 @code {
     // ── Static lists ───────────────────────────────────────────────────────────

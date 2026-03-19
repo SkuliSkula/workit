@@ -5,189 +5,140 @@
 
 <PageTitle>Tools</PageTitle>
 
-<section class="tool-page">
+@* ── Add Tool ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">Tools</FluentLabel>
 
-    @* ── Add Tool ── *@
-    <div class="tool-shell">
-        <div class="tool-header">
-            <span class="tool-eyebrow">Tool management</span>
-            <h1 class="tool-title">Add Tool</h1>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(loadError))
-        {
-            <div class="tool-alert tool-alert--error">@loadError</div>
-        }
-
-        <div class="tool-form-grid">
-            <label class="tool-field">
-                <span class="tool-label">Name</span>
-                <input class="tool-input" type="text" @bind="newName" placeholder="e.g. Angle grinder" />
-            </label>
-            <label class="tool-field">
-                <span class="tool-label">Serial number</span>
-                <input class="tool-input" type="text" @bind="newSerial" placeholder="Optional" />
-            </label>
-            <label class="tool-field tool-field--wide">
-                <span class="tool-label">Description</span>
-                <input class="tool-input" type="text" @bind="newDescription" placeholder="Optional notes" />
-            </label>
-        </div>
-
-        <div class="tool-form-actions">
-            <button class="tool-btn tool-btn--primary" @onclick="CreateToolAsync"
-                    disabled="@(string.IsNullOrWhiteSpace(newName) || saving)">
-                @(saving ? "Saving…" : "Add Tool")
-            </button>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(saveResult))
-        {
-            <div class="tool-alert tool-alert--ok">@saveResult</div>
-        }
-    </div>
-
-    @* ── Edit panel ── *@
-    @if (editingTool is not null)
+    @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <div class="tool-shell">
-            <div class="tool-header">
-                <span class="tool-eyebrow">Editing tool</span>
-                <h2 class="tool-title">Edit Tool</h2>
-            </div>
-
-            <div class="tool-form-grid">
-                <label class="tool-field">
-                    <span class="tool-label">Name</span>
-                    <input class="tool-input" type="text" @bind="editingTool.Name" />
-                </label>
-                <label class="tool-field">
-                    <span class="tool-label">Serial number</span>
-                    <input class="tool-input" type="text" @bind="editingTool.SerialNumber" />
-                </label>
-                <label class="tool-field tool-field--wide">
-                    <span class="tool-label">Description</span>
-                    <input class="tool-input" type="text" @bind="editingTool.Description" />
-                </label>
-            </div>
-
-            <div class="tool-form-actions">
-                <button class="tool-btn tool-btn--primary" @onclick="SaveToolAsync"
-                        disabled="@(string.IsNullOrWhiteSpace(editingTool.Name) || saving)">
-                    @(saving ? "Saving…" : "Save Changes")
-                </button>
-                <button class="tool-btn tool-btn--outline" @onclick="CancelEdit">Cancel</button>
-            </div>
-        </div>
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
     }
 
-    @* ── Tool Inventory ── *@
-    <div class="tool-shell">
-        <div class="tool-header">
-            <span class="tool-eyebrow">Inventory</span>
-            <h2 class="tool-title">Tool Inventory</h2>
+    <div class="admin-grid">
+        <div>
+            <FluentLabel>Name</FluentLabel>
+            <FluentTextField @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
         </div>
 
-        @if (loading)
-        {
-            <PageLoader />
-        }
-        else if (tools.Count > 0)
-        {
-            <div class="tool-table-wrap">
-                <table class="tool-table">
-                    <thead>
-                        <tr>
-                            <th class="tool-th">Name</th>
-                            <th class="tool-th">Serial #</th>
-                            <th class="tool-th">Description</th>
-                            <th class="tool-th">Added</th>
-                            <th class="tool-th">Status</th>
-                            <th class="tool-th"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in tools)
-                        {
-                            <tr class="tool-tr">
-                                <td class="tool-td tool-td--name">@row.Name</td>
-                                <td class="tool-td">@row.SerialNumber</td>
-                                <td class="tool-td">@row.Description</td>
-                                <td class="tool-td tool-td--dim">@row.CreatedAt.LocalDateTime.ToString("dd MMM yyyy")</td>
-                                <td class="tool-td">
-                                    @if (row.IsAssigned)
-                                    {
-                                        <span class="tool-badge tool-badge--amber">In use</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="tool-badge tool-badge--green">Available</span>
-                                    }
-                                </td>
-                                <td class="tool-td tool-td--actions">
-                                    <button class="tool-btn tool-btn--outline tool-btn--sm"
-                                            @onclick="@(() => BeginEdit(row.Tool))">Edit</button>
-                                    <button class="tool-btn tool-btn--danger tool-btn--sm"
-                                            disabled="@row.IsAssigned"
-                                            @onclick="@(() => DeleteToolAsync(row.Tool))">Delete</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        else
-        {
-            <p class="tool-empty">No tools yet. Add the first one above.</p>
-        }
-    </div>
-
-    @* ── Assignment Overview ── *@
-    <div class="tool-shell">
-        <div class="tool-header">
-            <span class="tool-eyebrow">Assignments</span>
-            <h2 class="tool-title">Current Tool Assignments</h2>
+        <div>
+            <FluentLabel>Serial number</FluentLabel>
+            <FluentTextField @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
         </div>
 
-        @if (currentAssignments.Count > 0)
-        {
-            <div class="tool-table-wrap">
-                <table class="tool-table">
-                    <thead>
-                        <tr>
-                            <th class="tool-th">Tool</th>
-                            <th class="tool-th">Employee</th>
-                            <th class="tool-th">Assigned since</th>
-                            <th class="tool-th">Duration</th>
-                            <th class="tool-th"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in currentAssignments)
-                        {
-                            <tr class="tool-tr">
-                                <td class="tool-td tool-td--name">@row.ToolName</td>
-                                <td class="tool-td">@row.EmployeeName</td>
-                                <td class="tool-td tool-td--dim">@row.AssignedSince</td>
-                                <td class="tool-td">@row.Duration</td>
-                                <td class="tool-td tool-td--actions">
-                                    <button class="tool-btn tool-btn--outline tool-btn--sm"
-                                            @onclick="@(() => ReturnToolAsync(row.Assignment))">Return</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-        else
-        {
-            <p class="tool-empty">No tools are currently assigned.</p>
-        }
+        <div style="grid-column: span 2">
+            <FluentLabel>Description</FluentLabel>
+            <FluentTextField @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
+        </div>
+
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateToolAsync"
+                          Disabled="@(string.IsNullOrWhiteSpace(newName) || saving)">
+                @(saving ? "Saving…" : "Add Tool")
+            </FluentButton>
+        </div>
     </div>
 
-</section>
+    @if (!string.IsNullOrWhiteSpace(saveResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Edit panel ── *@
+@if (editingTool is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.PaneHeader">Edit Tool</FluentLabel>
+        <div class="admin-grid">
+            <div>
+                <FluentLabel>Name</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.Name" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Serial number</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.SerialNumber" style="width:100%" />
+            </div>
+
+            <div style="grid-column: span 2">
+                <FluentLabel>Description</FluentLabel>
+                <FluentTextField @bind-Value="editingTool.Description" style="width:100%" />
+            </div>
+
+            <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="SaveToolAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(editingTool.Name) || saving)">
+                    @(saving ? "Saving…" : "Save Changes")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit">Cancel</FluentButton>
+            </div>
+        </div>
+    </FluentCard>
+}
+
+@* ── Tool list ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>Tool Inventory</strong></FluentLabel>
+
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (tools.Count > 0)
+    {
+        <FluentDataGrid TGridItem="ToolRow" Items="@tools.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.Name)"         Title="Name" />
+            <PropertyColumn Property="@(x => x.SerialNumber)" Title="Serial #" />
+            <PropertyColumn Property="@(x => x.Description)"  Title="Description" />
+            <PropertyColumn Property="@(x => x.CreatedAt)"   Title="Added"       Format="dd MMM yyyy" />
+            <TemplateColumn Title="Status">
+                @{
+                    var statusStyle = context.IsAssigned
+                        ? "background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;"
+                        : "background:#d1fae5; color:#065f46; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;";
+                }
+                <span style="@statusStyle">@(context.IsAssigned ? "In use" : "Available")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context.Tool))">Edit</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--error);"
+                              Disabled="@context.IsAssigned"
+                              @onclick="@(() => DeleteToolAsync(context.Tool))">Delete</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No tools yet.</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Assignment Overview ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>Current Tool Assignments</strong></FluentLabel>
+
+    @if (currentAssignments.Count > 0)
+    {
+        <FluentDataGrid TGridItem="AssignmentRow" Items="@currentAssignments.AsQueryable()" AutoFit="true"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.ToolName)"      Title="Tool" />
+            <PropertyColumn Property="@(x => x.EmployeeName)"  Title="Employee" />
+            <PropertyColumn Property="@(x => x.AssignedSince)" Title="Assigned since" />
+            <PropertyColumn Property="@(x => x.Duration)"      Title="Duration" />
+            <TemplateColumn Title="Actions">
+                <FluentButton Appearance="Appearance.Stealth"
+                              style="color: var(--warning);"
+                              @onclick="@(() => ReturnToolAsync(context.Assignment))">Return</FluentButton>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No tools are currently assigned.</FluentLabel>
+    }
+</FluentCard>
 
 @code {
 

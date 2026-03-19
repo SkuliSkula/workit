@@ -5,186 +5,141 @@
 
 <PageTitle>Employees</PageTitle>
 
-<section class="emp-page">
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
 
     <div class="emp-layout">
-
-        @* ── Sidebar: Add / Edit Employee forms ── *@
-        <aside class="emp-sidebar">
-
-            @* Add Employee Card *@
-            <div class="emp-shell">
-                <div class="emp-header">
-                    <span class="emp-eyebrow">Employee management</span>
-                    <h1 class="emp-title">Add Employee</h1>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(loadError))
-                {
-                    <div class="emp-alert emp-alert--error">@loadError</div>
-                }
-
-                @if (company is null && !loading)
-                {
-                    <p class="emp-note">Set up the company first in Admin before adding employees.</p>
-                }
-                else if (company is not null)
-                {
-                    <div class="emp-form">
-                        <label class="emp-field">
-                            <span class="emp-label">Name</span>
-                            <input class="emp-input" type="text" @bind="newEmployeeName" placeholder="Full name" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Trade</span>
-                            <select class="emp-select" @bind="newEmployeeTrade">
-                                @foreach (var trade in Trades)
-                                {
-                                    <option value="@trade">@trade</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">SSN</span>
-                            <input class="emp-input" type="text" @bind="newEmployeeSsn" placeholder="Social security number" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Email</span>
-                            <input class="emp-input" type="email" @bind="newEmployeeEmail" placeholder="employee@example.com" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Password</span>
-                            <input class="emp-input" type="password" @bind="newEmployeePassword" placeholder="Min. 8 characters" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Phone</span>
-                            <input class="emp-input" type="tel" @bind="newEmployeePhone" placeholder="Phone number" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Contact person</span>
-                            <input class="emp-input" type="text" @bind="newEmployeeContactPerson" placeholder="Emergency contact" />
-                        </label>
-                        <div class="emp-actions">
-                            <button class="emp-btn emp-btn--primary" @onclick="CreateEmployeeAsync"
-                                    disabled="@string.IsNullOrWhiteSpace(newEmployeeName)">
-                                Add Employee
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-
-            @* Edit Employee Card *@
-            @if (editingEmployee is not null)
+        <div class="emp-sidebar">
+            @if (company is null)
             {
-                <div class="emp-shell">
-                    <div class="emp-header">
-                        <span class="emp-eyebrow">Editing employee</span>
-                        <h2 class="emp-title">Edit Employee</h2>
-                    </div>
-                    <div class="emp-form">
-                        <label class="emp-field">
-                            <span class="emp-label">Name</span>
-                            <input class="emp-input" type="text" @bind="editingEmployee.DisplayName" placeholder="Full name" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Trade</span>
-                            <select class="emp-select" @bind="editingEmployee.Trade">
-                                @foreach (var trade in Trades)
-                                {
-                                    <option value="@trade">@trade</option>
-                                }
-                            </select>
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">SSN</span>
-                            <input class="emp-input" type="text" @bind="editingEmployee.Ssn" placeholder="Social security number" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Email</span>
-                            <input class="emp-input" type="email" @bind="editingEmployee.Email" placeholder="employee@example.com" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Phone</span>
-                            <input class="emp-input" type="tel" @bind="editingEmployee.Phone" placeholder="Phone number" />
-                        </label>
-                        <label class="emp-field">
-                            <span class="emp-label">Contact person</span>
-                            <input class="emp-input" type="text" @bind="editingEmployee.ContactPerson" placeholder="Emergency contact" />
-                        </label>
-                        <div class="emp-actions">
-                            <button class="emp-btn emp-btn--primary" @onclick="SaveEmployeeAsync">Save Changes</button>
-                            <button class="emp-btn emp-btn--outline" @onclick="CancelEmployeeEdit">Cancel</button>
-                        </div>
+                <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
+            }
+            else
+            {
+                <div class="emp-form">
+                    <label class="emp-field">
+                        <span>Name</span>
+                        <FluentTextField @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Trade</span>
+                        <FluentSelect TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
+                            @foreach (var trade in Trades)
+                            {
+                                <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                            }
+                        </FluentSelect>
+                    </label>
+                    <label class="emp-field">
+                        <span>SSN</span>
+                        <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Email</span>
+                        <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Password</span>
+                        <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Phone</span>
+                        <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Contact person</span>
+                        <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                    </label>
+                    <div class="emp-actions">
+                        <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
                     </div>
                 </div>
             }
-        </aside>
 
-        @* ── Main: Employee list ── *@
-        <div class="emp-shell emp-list-shell">
-            <div class="emp-header">
-                <span class="emp-eyebrow">Employee roster</span>
-                <h2 class="emp-title">All Employees</h2>
-            </div>
+            @if (editingEmployee is not null)
+            {
+                <FluentCard Class="admin-card" AreaRestricted="false">
+                    <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
+                    <div class="emp-form">
+                        <label class="emp-field">
+                            <span>Name</span>
+                            <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Trade</span>
+                            <FluentSelect TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
+                                @foreach (var trade in Trades)
+                                {
+                                    <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                                }
+                            </FluentSelect>
+                        </label>
+                        <label class="emp-field">
+                            <span>SSN</span>
+                            <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Email</span>
+                            <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Phone</span>
+                            <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Contact person</span>
+                            <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                        </label>
+                        <div class="emp-actions">
+                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
+                            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
+                        </div>
+                    </div>
+                </FluentCard>
+            }
 
+            @if (!string.IsNullOrWhiteSpace(loadError))
+            {
+                <FluentLabel>@loadError</FluentLabel>
+            }
+        </div>
+
+        <div class="emp-list">
             @if (loading)
             {
                 <PageLoader />
             }
             else if (employees.Count > 0)
             {
-                <div class="emp-table-wrap">
-                    <table class="emp-table">
-                        <thead>
-                            <tr>
-                                <th class="emp-th">Name</th>
-                                <th class="emp-th">Trade</th>
-                                <th class="emp-th">SSN</th>
-                                <th class="emp-th">Email</th>
-                                <th class="emp-th">Phone</th>
-                                <th class="emp-th">Contact Person</th>
-                                <th class="emp-th"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var emp in employees)
+                <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+                    <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
+                    <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
+                    <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
+                    <PropertyColumn Property="@(x => x.Email)" Title="Email" />
+                    <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
+                    <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
+                    <TemplateColumn Title="Actions">
+                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
+                                          Disabled="@resettingIds.Contains(context.Id)">
+                                @(resettingIds.Contains(context.Id) ? "Resetting…" : "Reset Password")
+                            </FluentButton>
+                            @if (resetPasswords.TryGetValue(context.Id, out var pw))
                             {
-                                <tr class="emp-tr">
-                                    <td class="emp-td emp-td--name">@emp.DisplayName</td>
-                                    <td class="emp-td">@emp.Trade</td>
-                                    <td class="emp-td">@emp.Ssn</td>
-                                    <td class="emp-td">@emp.Email</td>
-                                    <td class="emp-td">@emp.Phone</td>
-                                    <td class="emp-td">@emp.ContactPerson</td>
-                                    <td class="emp-td emp-td--actions">
-                                        <button class="emp-btn emp-btn--outline emp-btn--sm"
-                                                @onclick="@(() => BeginEditEmployee(emp))">Edit</button>
-                                        <button class="emp-btn emp-btn--outline emp-btn--sm"
-                                                @onclick="@(() => ResetEmployeePasswordAsync(emp))"
-                                                disabled="@resettingIds.Contains(emp.Id)">
-                                            @(resettingIds.Contains(emp.Id) ? "Resetting…" : "Reset Password")
-                                        </button>
-                                        @if (resetPasswords.TryGetValue(emp.Id, out var pw))
-                                        {
-                                            <span class="emp-new-password">New: @pw</span>
-                                        }
-                                    </td>
-                                </tr>
+                                <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">New password: @pw</FluentLabel>
                             }
-                        </tbody>
-                    </table>
-                </div>
+                        </div>
+                    </TemplateColumn>
+                </FluentDataGrid>
             }
             else
             {
-                <p class="emp-empty">No employees yet. Add the first one using the form.</p>
+                <FluentLabel>No employees yet.</FluentLabel>
             }
         </div>
-
     </div>
-
-</section>
+</FluentCard>
 
 @code {
     private static readonly string[] Trades = ["Electrician", "Carpenter", "Plumber", "Painter", "Other"];
