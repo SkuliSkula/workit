@@ -43,8 +43,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.workit-api.rule=Host(`api.workit.is`)"
-      - "traefik.http.routers.workit-api.entrypoints=websecure"
-      - "traefik.http.routers.workit-api.tls.certresolver=cloudflare"
+      - "traefik.http.routers.workit-api.entrypoints=web"
       - "traefik.http.services.workit-api.loadbalancer.server.port=8080"
       - "traefik.docker.network=proxy"
 
@@ -70,8 +69,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.workit-owner.rule=Host(`admin.workit.is`)"
-      - "traefik.http.routers.workit-owner.entrypoints=websecure"
-      - "traefik.http.routers.workit-owner.tls.certresolver=cloudflare"
+      - "traefik.http.routers.workit-owner.entrypoints=web"
       - "traefik.http.services.workit-owner.loadbalancer.server.port=8080"
       - "traefik.docker.network=proxy"
 
@@ -89,10 +87,19 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.workit-employee.rule=Host(`app.workit.is`)"
-      - "traefik.http.routers.workit-employee.entrypoints=websecure"
-      - "traefik.http.routers.workit-employee.tls.certresolver=cloudflare"
+      - "traefik.http.routers.workit-employee.entrypoints=web"
       - "traefik.http.services.workit-employee.loadbalancer.server.port=80"
       - "traefik.docker.network=proxy"
+
+  # ── Cloudflare Tunnel ───────────────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - proxy
 
 networks:
   proxy:

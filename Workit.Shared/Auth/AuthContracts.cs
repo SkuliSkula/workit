@@ -36,6 +36,18 @@ public sealed class CreateEmployeeUserRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public sealed class SetupCompanyRequest
+{
+    public Models.Company Company { get; set; } = new();
+    public string OwnerEmail { get; set; } = string.Empty;
+}
+
+public sealed class SetupCompanyResponse
+{
+    public string OwnerEmail { get; set; } = string.Empty;
+    public string GeneratedPassword { get; set; } = string.Empty;
+}
+
 public sealed class ResetPasswordRequest
 {
     public string NewPassword { get; set; } = string.Empty;

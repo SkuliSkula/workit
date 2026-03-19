@@ -5,6 +5,7 @@
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayEmployeesApi PaydayEmployeesApi
 @inject IPaydayPayrollApi PaydayPayrollApi
+@inject IAuthApi AuthApi
 @inject ICompanyApi CompanyApi
 @inject ICustomersApi CustomersApi
 @inject IEmployeesApi EmployeesApi
@@ -42,6 +43,43 @@
                 <FluentLabel>@paydayCompany.Address, @paydayCompany.Zip @paydayCompany.City</FluentLabel>
                 <FluentLabel>SSN: @paydayCompany.Ssn</FluentLabel>
                 <FluentLabel>VAT: @paydayCompany.VatNumber</FluentLabel>
+            </div>
+        </FluentCard>
+    }
+
+    @* ── First-time Company Setup ── *@
+    @if (!companyExists && paydayCompany is not null)
+    {
+        <FluentCard Class="admin-card" style="border: 2px solid var(--accent-fill-rest);">
+            <FluentLabel Typo="Typography.Body"><strong>First-time Setup</strong></FluentLabel>
+            <FluentLabel style="margin-top:0.4rem;">
+                No company has been set up yet. Register <strong>@paydayCompany.Name</strong> as the application company
+                and create an owner account for <strong>@paydayCompany.Email</strong>.
+            </FluentLabel>
+            <div style="margin-top:0.75rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="SetupCompanyAsync" Disabled="@settingUpCompany">
+                    @(settingUpCompany ? "Setting up…" : "Setup Company & Create Owner Account")
+                </FluentButton>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(setupError))
+            {
+                <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@setupError</FluentLabel>
+            }
+        </FluentCard>
+    }
+
+    @* ── Owner credentials (shown once after setup) ── *@
+    @if (setupResult is not null)
+    {
+        <FluentCard Class="admin-card" style="border: 2px solid var(--success-fill-rest);">
+            <FluentLabel Typo="Typography.Body"><strong>Owner account created — save this password now</strong></FluentLabel>
+            <FluentLabel style="margin-top:0.4rem;">This password will not be shown again.</FluentLabel>
+            <div style="margin-top:0.75rem; display:flex; flex-direction:column; gap:0.4rem;">
+                <FluentLabel><strong>Email:</strong> @setupResult.OwnerEmail</FluentLabel>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <FluentLabel><strong>Password:</strong> @setupResult.GeneratedPassword</FluentLabel>
+                    <FluentButton Appearance="Appearance.Outline" @onclick="CopyPasswordAsync">Copy</FluentButton>
+                </div>
             </div>
         </FluentCard>
     }
@@ -147,6 +185,12 @@
     private readonly List<PaydayUser> paydayUsers = [];
     private string? loadError;
 
+    // ── Company setup state ──────────────────────────────────────────────────
+    private bool companyExists;
+    private bool settingUpCompany;
+    private string? setupError;
+    private SetupCompanyResponse? setupResult;
+
     // ── Sync state ──────────────────────────────────────────────────────────
     private bool syncingCustomers;
     private bool syncingEmployees;
@@ -192,11 +236,63 @@
             var usersResult = await PaydayUsersApi.GetAllAsync();
             if (usersResult.IsSuccess)
                 paydayUsers.AddRange(usersResult.Value ?? []);
+
+            var workitCompany = await CompanyApi.GetCompanyAsync();
+            companyExists = workitCompany.IsSuccess && workitCompany.Value is not null;
         }
         finally
         {
             isLoading = false;
         }
+    }
+
+    // ── Company Setup ─────────────────────────────────────────────────────────
+    private async Task SetupCompanyAsync()
+    {
+        if (paydayCompany is null) return;
+
+        settingUpCompany = true;
+        setupError = null;
+
+        try
+        {
+            var request = new SetupCompanyRequest
+            {
+                Company = new Workit.Shared.Models.Company
+                {
+                    Name    = paydayCompany.Name    ?? string.Empty,
+                    Ssn     = paydayCompany.Ssn     ?? string.Empty,
+                    Email   = paydayCompany.Email   ?? string.Empty,
+                    Address = paydayCompany.Address ?? string.Empty,
+                    Phone   = paydayCompany.Phone   ?? string.Empty,
+                    Owner   = paydayCompany.Name    ?? string.Empty
+                },
+                OwnerEmail = paydayCompany.Email ?? string.Empty
+            };
+
+            var result = await AuthApi.SetupCompanyAsync(request);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                setupResult = result.Value;
+                companyExists = true;
+            }
+            else
+            {
+                setupError = result.ErrorMessage ?? "Setup failed.";
+            }
+        }
+        finally
+        {
+            settingUpCompany = false;
+        }
+    }
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    private async Task CopyPasswordAsync()
+    {
+        if (setupResult is null) return;
+        await JS.InvokeVoidAsync("copyToClipboard", setupResult.GeneratedPassword);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

@@ -177,6 +177,68 @@ authApi.MapPost("/register-company", async (WorkitDbContext db, HttpContext http
     .RequireAuthorization()
     .WithName("RegisterCompany");
 
+authApi.MapPost("/setup-company", async (WorkitDbContext db, HttpContext httpContext, SetupCompanyRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!string.Equals(httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value, WorkitRoles.Admin, StringComparison.Ordinal))
+            {
+                return Results.Forbid();
+            }
+
+            if (await db.Companies.AnyAsync(ct))
+            {
+                return Results.Conflict("A company is already set up.");
+            }
+
+            if (!IsValidCompany(request.Company))
+            {
+                return Results.BadRequest("Company name, SSN, email, address, phone, and owner are required.");
+            }
+
+            var ownerEmail = request.OwnerEmail.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(ownerEmail))
+            {
+                return Results.BadRequest("Owner email is required.");
+            }
+
+            if (await db.AppUsers.AnyAsync(x => x.Email == ownerEmail, ct))
+            {
+                return Results.Conflict("That email address is already in use.");
+            }
+
+            var password = GenerateOwnerPassword();
+
+            var company = new Company
+            {
+                Name    = request.Company.Name.Trim(),
+                Ssn     = request.Company.Ssn.Trim(),
+                Email   = request.Company.Email.Trim(),
+                Address = request.Company.Address.Trim(),
+                Phone   = request.Company.Phone.Trim(),
+                Owner   = request.Company.Owner.Trim()
+            };
+
+            db.Companies.Add(company);
+            db.AppUsers.Add(new AppUser
+            {
+                Email        = ownerEmail,
+                PasswordHash = PasswordHasher.HashPassword(password),
+                Role         = WorkitRoles.Owner,
+                CompanyId    = company.Id
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Ok(new SetupCompanyResponse
+            {
+                OwnerEmail        = ownerEmail,
+                GeneratedPassword = password
+            });
+        },
+        apiLogger,
+        "setting up company"))
+    .RequireAuthorization()
+    .WithName("SetupCompany");
+
 securedApi.MapGet("/company", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
@@ -1074,6 +1136,12 @@ static bool IsDatabaseException(Exception ex)
     }
 
     return false;
+}
+
+static string GenerateOwnerPassword()
+{
+    var raw = Guid.NewGuid().ToString("N");
+    return char.ToUpper(raw[0]) + raw[1..10] + "!1";
 }
 
 static bool IsValidCompany(Company company) =>
