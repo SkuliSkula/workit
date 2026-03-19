@@ -321,12 +321,26 @@
 
     private async Task ScanNowAsync()
     {
-        scanning     = true;
-        scanMessage  = null;
-        var result   = await InvoicesApi.ScanNowAsync();
-        scanSuccess  = result.IsSuccess;
-        scanMessage  = result.IsSuccess ? "Scan complete — invoice list updated." : (result.ErrorMessage ?? "Scan failed.");
-        scanning     = false;
+        scanning    = true;
+        scanMessage = null;
+        var result  = await InvoicesApi.ScanNowAsync();
+        scanSuccess = result.IsSuccess;
+
+        if (!result.IsSuccess)
+        {
+            scanMessage = result.ErrorMessage ?? "Scan failed.";
+        }
+        else if (result.Value is { } sr)
+        {
+            if (!string.IsNullOrWhiteSpace(sr.FatalError))
+                scanMessage = $"Scan error: {sr.FatalError}";
+            else
+                scanMessage = $"Scan complete — {sr.Imported} imported, {sr.Skipped} skipped, {sr.Errors} errors.";
+
+            scanSuccess = string.IsNullOrWhiteSpace(sr.FatalError) && sr.Errors == 0;
+        }
+
+        scanning = false;
         await LoadInvoicesAsync();
         StateHasChanged();
     }
