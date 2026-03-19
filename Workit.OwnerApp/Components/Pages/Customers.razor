@@ -45,7 +45,11 @@
         <FluentLabel>@loadError</FluentLabel>
     }
 
-    @if (customers.Count > 0)
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (customers.Count > 0)
     {
         <FluentDataGrid TGridItem="Customer" Items="@customers.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
             <PropertyColumn Property="@(x => x.Name)" Title="Name" />
@@ -68,6 +72,7 @@
     private readonly List<Customer> customers = [];
     private Company? company;
     private Customer? editingCustomer;
+    private bool loading = true;
     private string newCustomerName = string.Empty;
     private string newCustomerSsn = string.Empty;
     private string newCustomerEmail = string.Empty;
@@ -82,7 +87,8 @@
 
     private async Task LoadAsync()
     {
-        loadError = null;
+        loading    = true;
+        loadError  = null;
         customers.Clear();
         var companyResult = await CompanyApi.GetCompanyAsync();
         company = companyResult.Value;
@@ -90,11 +96,13 @@
         if (!companyResult.IsSuccess)
         {
             loadError = companyResult.ErrorMessage;
+            loading = false;
             return;
         }
 
         if (company is null)
         {
+            loading = false;
             return;
         }
 
@@ -102,10 +110,12 @@
         if (!customersResult.IsSuccess)
         {
             loadError = customersResult.ErrorMessage;
+            loading = false;
             return;
         }
 
         customers.AddRange(customersResult.Value ?? []);
+        loading = false;
     }
 
     private async Task CreateCustomerAsync()

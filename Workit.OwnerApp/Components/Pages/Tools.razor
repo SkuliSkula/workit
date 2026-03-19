@@ -80,7 +80,11 @@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <FluentLabel Typo="Typography.Body"><strong>Tool Inventory</strong></FluentLabel>
 
-    @if (tools.Count > 0)
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (tools.Count > 0)
     {
         <FluentDataGrid TGridItem="ToolRow" Items="@tools.AsQueryable()" AutoFit="true"
                         DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
@@ -139,6 +143,7 @@
 @code {
 
     // ── State ─────────────────────────────────────────────────────────────────
+    private bool loading = true;
     private readonly List<ToolRow> tools = [];
     private readonly List<AssignmentRow> currentAssignments = [];
     private readonly Dictionary<Guid, string> employeeNames = new();
@@ -190,6 +195,7 @@
 
     private async Task LoadAsync()
     {
+        loading = true;
         loadError = null;
         tools.Clear();
         currentAssignments.Clear();
@@ -211,6 +217,7 @@
         if (!toolResult.IsSuccess)
         {
             loadError = toolResult.ErrorMessage;
+            loading = false;
             return;
         }
 
@@ -221,6 +228,7 @@
         if (!assignResult.IsSuccess)
         {
             loadError = assignResult.ErrorMessage;
+            loading = false;
             return;
         }
 
@@ -244,6 +252,7 @@
                 EmployeeName = employeeNames.GetValueOrDefault(a.EmployeeId, a.EmployeeId.ToString())
             });
         }
+        loading = false;
     }
 
     // ── Create ────────────────────────────────────────────────────────────────

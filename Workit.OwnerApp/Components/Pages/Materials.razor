@@ -128,7 +128,11 @@
         </FluentLabel>
     </div>
 
-    @if (filteredMaterials.Count > 0)
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (filteredMaterials.Count > 0)
     {
         <FluentDataGrid TGridItem="Material" Items="@filteredMaterials.AsQueryable()" AutoFit="true"
                         DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.25rem;">
@@ -207,6 +211,7 @@
     private static readonly string[] Units = ["stk.", "m.", "pk.", "rúll.", "box", "kg", "ltr."];
 
     // ── State ──────────────────────────────────────────────────────────────────
+    private bool loading = true;
     private List<Material> allMaterials     = [];
     private List<Material> filteredMaterials = [];
     private Material?      editingMaterial;
@@ -240,6 +245,7 @@
 
     private async Task LoadAsync()
     {
+        loading = true;
         loadError = string.Empty;
         var result = await MaterialsApi.GetMaterialsAsync();
         if (result.IsSuccess)
@@ -251,6 +257,7 @@
         {
             loadError = result.ErrorMessage ?? "Could not load materials.";
         }
+        loading = false;
     }
 
     private void ApplyFilter()

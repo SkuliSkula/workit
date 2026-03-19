@@ -85,7 +85,11 @@
 }
 
 @* ── Job accordion list ── *@
-@if (jobs.Count > 0)
+@if (loading)
+{
+    <PageLoader />
+}
+else if (jobs.Count > 0)
 {
     <div class="jobs-panel">
         <div class="jobs-panel-header">
@@ -360,8 +364,10 @@ else if (company is not null)
     </FluentCard>
 }
 
+
 @code {
     // ── Lookup data ────────────────────────────────────────────────────────────
+    private bool loading = true;
     private readonly List<Customer> customers = [];
     private readonly List<Job>      jobs      = [];
     private readonly List<Employee> employees = [];
@@ -433,6 +439,7 @@ else if (company is not null)
 
     private async Task LoadAsync()
     {
+        loading = true;
         loadError = null;
         customers.Clear(); jobs.Clear(); employees.Clear(); materials.Clear();
         customerLookup.Clear(); employeeLookup.Clear(); materialLookup.Clear();
@@ -440,7 +447,7 @@ else if (company is not null)
 
         var companyResult = await CompanyApi.GetCompanyAsync();
         company = companyResult.Value;
-        if (!companyResult.IsSuccess || company is null) { loadError = companyResult.ErrorMessage; return; }
+        if (!companyResult.IsSuccess || company is null) { loadError = companyResult.ErrorMessage; loading = false; return; }
         drivingUnitPrice = company.DrivingUnitPrice;
 
         var custTask = CustomersApi.GetCustomersAsync();
@@ -454,8 +461,8 @@ else if (company is not null)
         var empR  = await empTask;
         var matR  = await matTask;
 
-        if (!custR.IsSuccess) { loadError = custR.ErrorMessage; return; }
-        if (!jobR.IsSuccess)  { loadError = jobR.ErrorMessage;  return; }
+        if (!custR.IsSuccess) { loadError = custR.ErrorMessage; loading = false; return; }
+        if (!jobR.IsSuccess)  { loadError = jobR.ErrorMessage;  loading = false; return; }
 
         customers.AddRange(custR.Value ?? []);
         selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
@@ -468,6 +475,7 @@ else if (company is not null)
 
         materials.AddRange(matR.Value ?? []);
         foreach (var m in materials) materialLookup[m.Id] = m;
+        loading = false;
     }
 
     // ── Accordion ──────────────────────────────────────────────────────────────

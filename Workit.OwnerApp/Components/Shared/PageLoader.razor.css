@@ -1,0 +1,22 @@
+.page-loader {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.5rem 0.25rem;
+    color: #60758b;
+    font-size: 0.9rem;
+}
+
+.page-loader__spinner {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2.5px solid rgba(20, 48, 75, 0.15);
+    border-top-color: #14304b;
+    animation: page-loader-spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes page-loader-spin {
+    to { transform: rotate(360deg); }
+}
