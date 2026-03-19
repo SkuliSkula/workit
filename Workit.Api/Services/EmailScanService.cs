@@ -29,7 +29,7 @@ public sealed class EmailScanService(
             await client.AuthenticateAsync(settings.Username, settings.Password);
 
             var folder = await OpenFolderAsync(client, settings.InvoiceFolder);
-            var uids   = await folder.SearchAsync(SearchQuery.NotSeen);
+            var uids   = await folder.SearchAsync(SearchQuery.SubjectContains("Johan Rönning"));
 
             foreach (var uid in uids)
             {
