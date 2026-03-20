@@ -14,7 +14,7 @@
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <FluentIcon Value="new Size24.Home()" /> Home
             </NavLink>
         </div>
 
@@ -22,7 +22,7 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="login">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Login
+                    <FluentIcon Value="new Size24.PersonKey()" /> Login
                 </NavLink>
             </div>
         }
@@ -31,13 +31,13 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="register">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Register
+                    <FluentIcon Value="new Size24.PersonAdd()" /> Register
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="admin">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Admin
+                    <FluentIcon Value="new Size24.Shield()" /> Admin
                 </NavLink>
             </div>
         }
@@ -46,43 +46,43 @@
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="customers">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Customers
+                    <FluentIcon Value="new Size24.PeopleTeam()" /> Customers
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="employees">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Employees
+                    <FluentIcon Value="new Size24.Person()" /> Employees
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="jobs">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Jobs
+                    <FluentIcon Value="new Size24.Briefcase()" /> Jobs
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="timeentries">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Time Entries
+                    <FluentIcon Value="new Size24.Clock()" /> Time Entries
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="tools">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Tools
+                    <FluentIcon Value="new Size24.Wrench()" /> Tools
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="materials">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Materials
+                    <FluentIcon Value="new Size24.Box()" /> Materials
                 </NavLink>
             </div>
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="invoices">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Invoices
+                    <FluentIcon Value="new Size24.DocumentText()" /> Invoices
                 </NavLink>
             </div>
 
@@ -90,7 +90,7 @@
             <div class="nav-item px-3">
                 <button type="button" class="nav-link nav-link-button nav-group-toggle"
                         @onclick="TogglePayday">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>
+                    <FluentIcon Value="new Size24.Money()" />
                     Payday
                     <span class="nav-chevron @(paydayExpanded ? "expanded" : "")">&#8250;</span>
                 </button>
@@ -101,17 +101,17 @@
                 <div class="nav-submenu">
                     <div class="nav-item">
                         <NavLink class="nav-link nav-sublink" href="payday" Match="NavLinkMatch.All">
-                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Sync
+                            <FluentIcon Value="new Size24.ArrowSync()" /> Sync
                         </NavLink>
                     </div>
                     <div class="nav-item">
                         <NavLink class="nav-link nav-sublink" href="payday/dashboard">
-                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Dashboard
+                            <FluentIcon Value="new Size24.ChartMultiple()" /> Dashboard
                         </NavLink>
                     </div>
                     <div class="nav-item">
                         <NavLink class="nav-link nav-sublink" href="payday/invoices">
-                            <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Invoices
+                            <FluentIcon Value="new Size24.DocumentText()" /> Invoices
                         </NavLink>
                     </div>
                 </div>
@@ -122,7 +122,7 @@
         {
             <div class="nav-item px-3">
                 <button type="button" class="nav-link nav-link-button" @onclick="LogoutAsync">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Logout
+                    <FluentIcon Value="new Size24.SignOut()" /> Logout
                 </button>
             </div>
         }
