@@ -49,6 +49,24 @@
                         <span>Contact person</span>
                         <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
                     </label>
+                    <label class="emp-field">
+                        <span>Employment type</span>
+                        <FluentSelect TValue="string" TOption="string"
+                                      Value="@newEmploymentType.ToString()"
+                                      ValueChanged="@(v => newEmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
+                                      style="width:100%">
+                            <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
+                            <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
+                        </FluentSelect>
+                    </label>
+                    <label class="emp-field">
+                        <span>Hourly salary</span>
+                        <FluentNumberField TValue="decimal" @bind-Value="newHourlySalary" Min="0" Placeholder="0" style="width:100%" />
+                    </label>
+                    <label class="emp-field">
+                        <span>Hourly billable rate</span>
+                        <FluentNumberField TValue="decimal" @bind-Value="newHourlyBillableRate" Min="0" Placeholder="0" style="width:100%" />
+                    </label>
                     <div class="emp-actions">
                         <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
                     </div>
@@ -89,6 +107,24 @@
                             <span>Contact person</span>
                             <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
                         </label>
+                        <label class="emp-field">
+                            <span>Employment type</span>
+                            <FluentSelect TValue="string" TOption="string"
+                                          Value="@editingEmployee.EmploymentType.ToString()"
+                                          ValueChanged="@(v => editingEmployee.EmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
+                                          style="width:100%">
+                                <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
+                                <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
+                            </FluentSelect>
+                        </label>
+                        <label class="emp-field">
+                            <span>Hourly salary</span>
+                            <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlySalary" Min="0" style="width:100%" />
+                        </label>
+                        <label class="emp-field">
+                            <span>Hourly billable rate</span>
+                            <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlyBillableRate" Min="0" style="width:100%" />
+                        </label>
                         <div class="emp-actions">
                             <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
                             <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
@@ -119,9 +155,16 @@
         <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
             <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
             <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
+            <PropertyColumn Property="@(x => x.EmploymentType)" Title="Type" />
             <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
             <PropertyColumn Property="@(x => x.Email)" Title="Email" />
             <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
+            <TemplateColumn Title="Salary/hr">
+                <span>@context.HourlySalary.ToString("N0")</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Billable/hr">
+                <span>@context.HourlyBillableRate.ToString("N0")</span>
+            </TemplateColumn>
             <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
             <TemplateColumn Title="Actions">
                 <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
@@ -158,6 +201,9 @@
     private string newEmployeePassword = string.Empty;
     private string newEmployeePhone = string.Empty;
     private string newEmployeeContactPerson = string.Empty;
+    private EmploymentType newEmploymentType = EmploymentType.Employed;
+    private decimal newHourlySalary;
+    private decimal newHourlyBillableRate;
     private string? loadError;
 
     // ── Reset Password state ─────────────────────────────────────────────────
@@ -219,7 +265,10 @@
                 Ssn = newEmployeeSsn.Trim(),
                 Email = newEmployeeEmail.Trim(),
                 Phone = newEmployeePhone.Trim(),
-                ContactPerson = newEmployeeContactPerson.Trim()
+                ContactPerson = newEmployeeContactPerson.Trim(),
+                EmploymentType = newEmploymentType,
+                HourlySalary = newHourlySalary,
+                HourlyBillableRate = newHourlyBillableRate
             },
             Password = newEmployeePassword
         });
@@ -233,6 +282,9 @@
             newEmployeePassword = string.Empty;
             newEmployeePhone = string.Empty;
             newEmployeeContactPerson = string.Empty;
+            newEmploymentType = EmploymentType.Employed;
+            newHourlySalary = 0;
+            newHourlyBillableRate = 0;
             await LoadAsync();
             return;
         }
@@ -251,7 +303,10 @@
             Ssn = employee.Ssn,
             Email = employee.Email,
             Phone = employee.Phone,
-            ContactPerson = employee.ContactPerson
+            ContactPerson = employee.ContactPerson,
+            EmploymentType = employee.EmploymentType,
+            HourlySalary = employee.HourlySalary,
+            HourlyBillableRate = employee.HourlyBillableRate
         };
     }
 

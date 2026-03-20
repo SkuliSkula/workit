@@ -35,7 +35,7 @@
             </div>
             <div>
                 <FluentLabel>Job code</FluentLabel>
-                <FluentTextField @bind-Value="newJobCode" Placeholder="e.g. HA-1" style="width:100%" />
+                <FluentTextField @bind-Value="newJobCode" Placeholder="Auto-generated" style="width:100%" />
             </div>
             <div>
                 <FluentLabel>Job name</FluentLabel>
@@ -335,6 +335,15 @@ else if (company is not null)
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
     private bool HasEditingCustomer  => Guid.TryParse(editingCustomerId,  out _);
 
+    private string GetNextJobCode()
+    {
+        var maxCode = jobs
+            .Select(j => int.TryParse(j.Code, out var n) ? n : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        return (maxCode + 1).ToString();
+    }
+
     // ── Driving rate state ─────────────────────────────────────────────────────
     private decimal drivingUnitPrice;
     private bool    savingDrivingRate;
@@ -408,6 +417,7 @@ else if (company is not null)
         foreach (var c in customers) customerLookup[c.Id] = c.Name;
 
         jobs.AddRange(jobR.Value ?? []);
+        newJobCode = GetNextJobCode();
 
         employees.AddRange(empR.Value ?? []);
         foreach (var e in employees) employeeLookup[e.Id] = e.DisplayName;
@@ -499,12 +509,12 @@ else if (company is not null)
         {
             CompanyId   = company.Id,
             CustomerId  = customerId,
-            Code        = string.IsNullOrWhiteSpace(newJobCode) ? "JOB" : newJobCode.Trim(),
+            Code        = newJobCode.Trim(),
             Name        = newJobName.Trim(),
             BillingType = newBillingType
         });
 
-        if (result.IsSuccess) { newJobCode = string.Empty; newJobName = string.Empty; newBillingType = BillingType.Hourly; await LoadAsync(); }
+        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
