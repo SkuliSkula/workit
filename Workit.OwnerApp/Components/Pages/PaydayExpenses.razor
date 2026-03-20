@@ -117,7 +117,7 @@
                     </div>
                     <div>
                         <FluentLabel>Qty</FluentLabel>
-                        <FluentNumberField TValue="int" @bind-Value="line.Quantity" Min="1" style="width:100%" />
+                        <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="1" style="width:100%" />
                     </div>
                     <div>
                         <FluentLabel>Price (ex VAT)</FluentLabel>
@@ -471,7 +471,7 @@
     private sealed class ExpenseLineForm
     {
         public string  Description           { get; set; } = string.Empty;
-        public int     Quantity              { get; set; } = 1;
+        public decimal  Quantity              { get; set; } = 1;
         public decimal UnitPriceExcludingVat { get; set; }
         public decimal VatPercentage         { get; set; } = 24m;
         public decimal DiscountPercentage    { get; set; }

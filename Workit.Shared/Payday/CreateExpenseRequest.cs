@@ -42,7 +42,7 @@ public sealed class CreateExpenseLineRequest
     public required string Description { get; set; }
 
     /// <summary>Required.</summary>
-    public required int Quantity { get; set; }
+    public required decimal Quantity { get; set; }
 
     /// <summary>One of unitPriceExcludingVat or unitPriceIncludingVat is required.</summary>
     public decimal? UnitPriceExcludingVat { get; set; }
