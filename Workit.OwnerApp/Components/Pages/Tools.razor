@@ -77,8 +77,11 @@
 }
 
 @* ── Tool list ── *@
-<FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.Body"><strong>Tool Inventory</strong></FluentLabel>
+<div class="tool-panel">
+    <div class="tool-panel-header">
+        <span class="tool-panel-title">Tool Inventory</span>
+        <span class="tool-count">@tools.Count</span>
+    </div>
 
     @if (loading)
     {
@@ -113,11 +116,14 @@
     {
         <FluentLabel>No tools yet.</FluentLabel>
     }
-</FluentCard>
+</div>
 
 @* ── Assignment Overview ── *@
-<FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.Body"><strong>Current Tool Assignments</strong></FluentLabel>
+<div class="tool-panel">
+    <div class="tool-panel-header">
+        <span class="tool-panel-title">Current Assignments</span>
+        <span class="tool-count">@currentAssignments.Count</span>
+    </div>
 
     @if (currentAssignments.Count > 0)
     {
@@ -138,7 +144,7 @@
     {
         <FluentLabel>No tools are currently assigned.</FluentLabel>
     }
-</FluentCard>
+</div>
 
 @code {
 

@@ -8,8 +8,7 @@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
 
-    <div class="emp-layout">
-        <div class="emp-sidebar">
+    <div class="emp-sidebar">
             @if (company is null)
             {
                 <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
@@ -102,44 +101,48 @@
             {
                 <FluentLabel>@loadError</FluentLabel>
             }
-        </div>
-
-        <div class="emp-list">
-            @if (loading)
-            {
-                <PageLoader />
-            }
-            else if (employees.Count > 0)
-            {
-                <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
-                    <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
-                    <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
-                    <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
-                    <PropertyColumn Property="@(x => x.Email)" Title="Email" />
-                    <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
-                    <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
-                    <TemplateColumn Title="Actions">
-                        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
-                            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
-                                          Disabled="@resettingIds.Contains(context.Id)">
-                                @(resettingIds.Contains(context.Id) ? "Resetting…" : "Reset Password")
-                            </FluentButton>
-                            @if (resetPasswords.TryGetValue(context.Id, out var pw))
-                            {
-                                <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">New password: @pw</FluentLabel>
-                            }
-                        </div>
-                    </TemplateColumn>
-                </FluentDataGrid>
-            }
-            else
-            {
-                <FluentLabel>No employees yet.</FluentLabel>
-            }
-        </div>
     </div>
 </FluentCard>
+
+<div class="emp-panel">
+    <div class="emp-panel-header">
+        <span class="emp-panel-title">All Employees</span>
+        <span class="emp-count">@employees.Count</span>
+    </div>
+
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (employees.Count > 0)
+    {
+        <FluentDataGrid TGridItem="Employee" Items="@employees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+            <PropertyColumn Property="@(x => x.DisplayName)" Title="Name" />
+            <PropertyColumn Property="@(x => x.Trade)" Title="Trade" />
+            <PropertyColumn Property="@(x => x.Ssn)" Title="SSN" />
+            <PropertyColumn Property="@(x => x.Email)" Title="Email" />
+            <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
+            <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
+            <TemplateColumn Title="Actions">
+                <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
+                                  Disabled="@resettingIds.Contains(context.Id)">
+                        @(resettingIds.Contains(context.Id) ? "Resetting…" : "Reset Password")
+                    </FluentButton>
+                    @if (resetPasswords.TryGetValue(context.Id, out var pw))
+                    {
+                        <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">New password: @pw</FluentLabel>
+                    }
+                </div>
+            </TemplateColumn>
+        </FluentDataGrid>
+    }
+    else
+    {
+        <FluentLabel>No employees yet.</FluentLabel>
+    }
+</div>
 
 @code {
     private static readonly string[] Trades = ["Electrician", "Carpenter", "Plumber", "Painter", "Other"];

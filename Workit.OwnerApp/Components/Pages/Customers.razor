@@ -44,6 +44,13 @@
     {
         <FluentLabel>@loadError</FluentLabel>
     }
+</FluentCard>
+
+<div class="cust-panel">
+    <div class="cust-panel-header">
+        <span class="cust-panel-title">All Customers</span>
+        <span class="cust-count">@customers.Count</span>
+    </div>
 
     @if (loading)
     {
@@ -66,7 +73,7 @@
     {
         <FluentLabel>No customers yet.</FluentLabel>
     }
-</FluentCard>
+</div>
 
 @code {
     private readonly List<Customer> customers = [];

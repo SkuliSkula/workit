@@ -1,9 +1,4 @@
-.emp-sidebar {
-    display: grid;
-    gap: 1rem;
-}
-
-.emp-panel {
+.tool-panel {
     margin: 1rem 0 2rem;
     padding: 1.25rem;
     border-radius: 24px;
@@ -17,14 +12,14 @@
     gap: 0.6rem;
 }
 
-.emp-panel-header {
+.tool-panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.1rem;
 }
 
-.emp-panel-title {
+.tool-panel-title {
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -32,32 +27,11 @@
     color: #60758b;
 }
 
-.emp-count {
+.tool-count {
     font-size: 0.72rem;
     font-weight: 700;
     color: #fff;
     background: #14304b;
     border-radius: 999px;
     padding: 2px 8px;
-}
-
-.emp-form {
-    display: grid;
-    gap: 0.75rem;
-    max-width: 480px;
-}
-
-.emp-field {
-    display: grid;
-    gap: 0.35rem;
-    font-weight: 600;
-    color: #14304b;
-    font-size: 0.9rem;
-}
-
-.emp-actions {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 0.25rem;
-
 }

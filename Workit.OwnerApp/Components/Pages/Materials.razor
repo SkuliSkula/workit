@@ -109,23 +109,22 @@
 </FluentCard>
 
 @* ── Category filter + grid ── *@
-<FluentCard Class="admin-card" AreaRestricted="false">
-    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:0.75rem;">
-        <FluentLabel Typo="Typography.Body"><strong>Catalog</strong></FluentLabel>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-            <FluentLabel>Category:</FluentLabel>
-            <FluentSelect TValue="string" TOption="string" @bind-Value="filterCategory"
-                          @bind-Value:after="ApplyFilter" style="min-width:180px">
-                <FluentOption TOption="string" Value="">All</FluentOption>
-                @foreach (var cat in Categories)
-                {
-                    <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
-                }
-            </FluentSelect>
-        </div>
-        <FluentLabel style="margin-left:auto; color: var(--neutral-foreground-rest)">
-            @filteredMaterials.Count material@(filteredMaterials.Count == 1 ? "" : "s")
-        </FluentLabel>
+<div class="mat-panel">
+    <div class="mat-panel-header">
+        <span class="mat-panel-title">Material Catalog</span>
+        <span class="mat-count">@filteredMaterials.Count</span>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+        <FluentLabel>Category:</FluentLabel>
+        <FluentSelect TValue="string" TOption="string" @bind-Value="filterCategory"
+                      @bind-Value:after="ApplyFilter" style="min-width:180px">
+            <FluentOption TOption="string" Value="">All</FluentOption>
+            @foreach (var cat in Categories)
+            {
+                <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
+            }
+        </FluentSelect>
     </div>
 
     @if (loading)
@@ -183,7 +182,7 @@
     {
         <FluentLabel>No materials yet. Add the first one above.</FluentLabel>
     }
-</FluentCard>
+</div>
 
 @code {
     // ── Static lists ───────────────────────────────────────────────────────────
