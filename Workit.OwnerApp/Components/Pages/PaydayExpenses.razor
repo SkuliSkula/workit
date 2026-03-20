@@ -1,0 +1,817 @@
+@page "/payday/expenses"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPaydayExpensesApi ExpensesApi
+
+<PageTitle>Payday Expenses</PageTitle>
+
+@* ── Header + filters ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Payday Expenses</FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+            @(showCreateForm ? "✕ Cancel" : "+ New Expense")
+        </FluentButton>
+    </div>
+
+    <div class="admin-grid" style="margin-top:0.75rem;">
+        <FluentDatePicker @bind-Value="filterFrom" Label="From" />
+        <FluentDatePicker @bind-Value="filterTo"   Label="To" />
+        <div>
+            <FluentLabel>Status</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterStatus" style="width:100%">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                <FluentOption TOption="string" Value="DRAFT">Draft</FluentOption>
+                <FluentOption TOption="string" Value="UNPAID">Unpaid</FluentOption>
+                <FluentOption TOption="string" Value="PAID">Paid</FluentOption>
+            </FluentSelect>
+        </div>
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadExpensesAsync" Disabled="@isLoading">
+                @(isLoading ? "Loading…" : "Load")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Create / Edit form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>@(editingExpense is not null ? "Edit Expense" : "New Expense")</strong></FluentLabel>
+
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Creditor SSN</FluentLabel>
+                <FluentTextField @bind-Value="formCreditorSsn" Placeholder="e.g. 5501012000" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Creditor Name</FluentLabel>
+                <FluentTextField @bind-Value="formCreditorName" Placeholder="Vendor name" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="formDate" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Due Date</FluentLabel>
+                <FluentDatePicker @bind-Value="formDueDate" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Final Due Date</FluentLabel>
+                <FluentDatePicker @bind-Value="formFinalDueDate" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Status <span style="color:red">*</span></FluentLabel>
+                <FluentSelect TValue="string" TOption="string" @bind-Value="formStatus" style="width:100%">
+                    <FluentOption TOption="string" Value="DRAFT">Draft</FluentOption>
+                    <FluentOption TOption="string" Value="UNPAID">Unpaid</FluentOption>
+                    <FluentOption TOption="string" Value="PAID">Paid</FluentOption>
+                </FluentSelect>
+            </div>
+
+            @if (formStatus == "PAID")
+            {
+                <div>
+                    <FluentLabel>Paid Date</FluentLabel>
+                    <FluentDatePicker @bind-Value="formPaidDate" style="width:100%" />
+                </div>
+            }
+
+            <div>
+                <FluentLabel>Reference</FluentLabel>
+                <FluentTextField @bind-Value="formReference" Placeholder="Invoice # or ref" style="width:100%" />
+            </div>
+
+            <div style="display:flex; align-items:flex-end; gap:1rem;">
+                <FluentCheckbox @bind-Value="formDeductible" Label="VAT Deductible" />
+            </div>
+
+            <div style="grid-column: span 3">
+                <FluentLabel>Comments</FluentLabel>
+                <FluentTextField @bind-Value="formComments" Placeholder="Optional comments" style="width:100%" />
+            </div>
+        </div>
+
+        @* ── Lines ── *@
+        <div style="margin-top:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <FluentLabel><strong>Lines</strong></FluentLabel>
+                <FluentButton Appearance="Appearance.Outline" @onclick="AddLine">+ Add line</FluentButton>
+            </div>
+
+            @for (var i = 0; i < formLines.Count; i++)
+            {
+                var idx = i;
+                var line = formLines[idx];
+                <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
+                    <div>
+                        <FluentLabel>Description <span style="color:red">*</span></FluentLabel>
+                        <FluentTextField @bind-Value="line.Description" Placeholder="Description" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>Qty</FluentLabel>
+                        <FluentNumberField TValue="int" @bind-Value="line.Quantity" Min="1" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>Price (ex VAT)</FluentLabel>
+                        <FluentNumberField TValue="decimal" @bind-Value="line.UnitPriceExcludingVat" Min="0" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>VAT %</FluentLabel>
+                        <FluentSelect TValue="string" TOption="string"
+                                      Value="@line.VatPercentage.ToString()"
+                                      ValueChanged="@(v => line.VatPercentage = decimal.TryParse(v, out var d) ? d : 24m)"
+                                      style="width:100%">
+                            <FluentOption TOption="string" Value="0">0%</FluentOption>
+                            <FluentOption TOption="string" Value="11">11%</FluentOption>
+                            <FluentOption TOption="string" Value="24">24%</FluentOption>
+                        </FluentSelect>
+                    </div>
+                    <div>
+                        <FluentLabel>Disc %</FluentLabel>
+                        <FluentNumberField TValue="decimal" @bind-Value="line.DiscountPercentage" Min="0" Max="100" style="width:100%" />
+                    </div>
+                    <div>
+                        <FluentLabel>Account</FluentLabel>
+                        <FluentSelect TValue="string" TOption="string"
+                                      @bind-Value="line.AccountIdStr"
+                                      style="width:100%">
+                            <FluentOption TOption="string" Value="">— Select —</FluentOption>
+                            @foreach (var a in accounts)
+                            {
+                                <FluentOption TOption="string" Value="@a.Id.ToString()">
+                                    @(a.Number.HasValue ? $"{a.Number} – {a.Name}" : a.Name)
+                                </FluentOption>
+                            }
+                        </FluentSelect>
+                    </div>
+                    <div>
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => RemoveLine(idx))"
+                                      Disabled="@(formLines.Count == 1)"
+                                      title="Remove line">✕</FluentButton>
+                    </div>
+                </div>
+            }
+
+            @if (formLines.Count > 0)
+            {
+                var previewTotal = formLines.Sum(l =>
+                    l.Quantity * l.UnitPriceExcludingVat * (1 - l.DiscountPercentage / 100m) * (1 + l.VatPercentage / 100m));
+                <div style="text-align:right; margin-top:0.4rem; font-size:0.85rem;">
+                    Est. total incl. VAT: <strong>@previewTotal.ToString("N0") ISK</strong>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@formError</FluentLabel>
+        }
+
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveExpenseAsync"
+                          Disabled="@(!CanSave || saving)">
+                @(saving ? "Saving…" : (editingExpense is not null ? "Update Expense" : "Create Expense"))
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Expense list ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+
+    @if (isLoading)
+    {
+        <div style="display:flex; align-items:center; gap:0.75rem; padding:1rem 0;">
+            <FluentProgressRing />
+            <FluentLabel>Loading expenses…</FluentLabel>
+        </div>
+    }
+    else if (DisplayedExpenses.Count > 0)
+    {
+        <div style="font-size:0.8rem; color:var(--neutral-foreground-hint-rest); margin-bottom:0.4rem;">
+            Showing @DisplayedExpenses.Count of @expenses.Count loaded
+            @(totalExpenses > 0 ? $"(total in Payday: {totalExpenses})" : string.Empty)
+        </div>
+
+        <FluentDataGrid TGridItem="PaydayExpense" Items="@DisplayedExpenses.AsQueryable()"
+                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+
+            <TemplateColumn Title="Creditor">
+                <FluentLabel>@(context.Creditor?.Name ?? context.Creditor?.Ssn ?? "—")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Status">
+                <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                    @context.Status
+                </span>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Date">
+                <FluentLabel>@context.Date?.ToString("dd MMM yyyy")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Due Date">
+                <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Amount" Align="Align.End">
+                <FluentLabel>@context.AmountIncludingVat.ToString("N0") ISK</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Deductible" Align="Align.Center">
+                <FluentLabel>@(context.Deductible ? "✓" : "—")</FluentLabel>
+            </TemplateColumn>
+
+            <TemplateColumn Title="Actions" Align="Align.End">
+                <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  @onclick="@(() => ToggleDetail(context))"
+                                  title="View details">
+                        @(selectedExpense?.Id == context.Id ? "▲ Close" : "▼ View")
+                    </FluentButton>
+
+                    @if (context.Status is "DRAFT" or "UNPAID")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => BeginEdit(context))"
+                                      title="Edit expense">Edit</FluentButton>
+                    }
+
+                    @if (context.Status is "UNPAID" or "DRAFT")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => BeginMarkPaid(context))"
+                                      title="Mark as paid">✓ Paid</FluentButton>
+                    }
+
+                    @if (context.Status is "DRAFT")
+                    {
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => DeleteExpenseAsync(context))"
+                                      title="Delete draft">Delete</FluentButton>
+                    }
+                </div>
+            </TemplateColumn>
+        </FluentDataGrid>
+
+        @if (expenses.Count < totalExpenses)
+        {
+            <div style="margin-top:0.75rem; display:flex; align-items:center; gap:0.75rem;">
+                <FluentButton Appearance="Appearance.Outline" @onclick="LoadMoreAsync" Disabled="@loadingMore">
+                    @(loadingMore ? "Loading…" : $"Load more ({totalExpenses - expenses.Count} remaining)")
+                </FluentButton>
+            </div>
+        }
+    }
+    else if (!isLoading)
+    {
+        <FluentLabel>No expenses found for the selected period and filters.</FluentLabel>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(actionResult))
+    {
+        <FluentLabel style="margin-top:0.5rem;">@actionResult</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(actionError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@actionError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Mark Paid panel ── *@
+@if (markPaidExpense is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Mark Expense as Paid</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <FluentDatePicker @bind-Value="markPaidDate" Label="Payment date" />
+            <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmMarkPaidAsync" Disabled="@markingPaid">
+                    @(markingPaid ? "Saving…" : "Confirm")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelMarkPaid">Cancel</FluentButton>
+            </div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(markPaidError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.4rem;">@markPaidError</FluentLabel>
+        }
+    </FluentCard>
+}
+
+@* ── Expense detail ── *@
+@if (selectedExpense is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <FluentLabel Typo="Typography.Body">
+                <strong>Expense Detail</strong>
+                <span style="@StatusStyle(selectedExpense.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                    @selectedExpense.Status
+                </span>
+            </FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="ClearSelected">✕ Close</FluentButton>
+        </div>
+
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Creditor</FluentLabel>
+                <FluentLabel><strong>@(selectedExpense.Creditor?.Name ?? selectedExpense.Creditor?.Ssn ?? "—")</strong></FluentLabel>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(selectedExpense.Creditor?.Ssn))
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">SSN</FluentLabel>
+                    <FluentLabel>@selectedExpense.Creditor.Ssn</FluentLabel>
+                </div>
+            }
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Date</FluentLabel>
+                <FluentLabel>@selectedExpense.Date?.ToString("dd MMM yyyy")</FluentLabel>
+            </div>
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
+                <FluentLabel>@selectedExpense.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+            </div>
+            @if (selectedExpense.FinalDueDate.HasValue)
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
+                    <FluentLabel>@selectedExpense.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </div>
+            }
+            @if (selectedExpense.PaidDate.HasValue)
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
+                    <FluentLabel>@selectedExpense.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </div>
+            }
+            <div>
+                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT Deductible</FluentLabel>
+                <FluentLabel>@(selectedExpense.Deductible ? "Yes" : "No")</FluentLabel>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(selectedExpense.Reference))
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Reference</FluentLabel>
+                    <FluentLabel>@selectedExpense.Reference</FluentLabel>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(selectedExpense.Voucher))
+            {
+                <div>
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Voucher</FluentLabel>
+                    <FluentLabel>@selectedExpense.Voucher</FluentLabel>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(selectedExpense.Comments))
+            {
+                <div style="grid-column:span 2">
+                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Comments</FluentLabel>
+                    <FluentLabel>@selectedExpense.Comments</FluentLabel>
+                </div>
+            }
+        </div>
+
+        @if (selectedExpense.Lines is { Count: > 0 })
+        {
+            <div style="margin-top:1rem;">
+                <FluentLabel><strong>Lines</strong></FluentLabel>
+                <FluentDataGrid TGridItem="PaydayExpenseLine" Items="@selectedExpense.Lines.AsQueryable()"
+                                AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
+                    <PropertyColumn Property="@(x => x.Description)" Title="Description" />
+                    <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty" />
+                    <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
+                        <FluentLabel>@context.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
+                        <FluentLabel>@context.UnitPriceIncludingVat.ToString("N0")</FluentLabel>
+                    </TemplateColumn>
+                    <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
+                    <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
+                </FluentDataGrid>
+            </div>
+        }
+
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
+            <div>Amount ex VAT: <strong>@selectedExpense.AmountExcludingVat.ToString("N0") ISK</strong></div>
+            <div>VAT: <strong>@selectedExpense.AmountVat.ToString("N0") ISK</strong></div>
+            <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedExpense.AmountIncludingVat.ToString("N0") ISK</strong></div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(detailError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
+        }
+    </FluentCard>
+}
+
+@code {
+
+    // ── Lookups ───────────────────────────────────────────────────────────────
+    private readonly List<PaydayExpenseAccount> accounts = [];
+
+    // ── List state ────────────────────────────────────────────────────────────
+    private readonly List<PaydayExpense> expenses = [];
+    private bool isLoading;
+    private bool loadingMore;
+    private int totalExpenses;
+    private int currentPage = 1;
+    private const int PerPage = 50;
+
+    private DateTime? filterFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? filterTo   = DateTime.Today;
+    private string    filterStatus = string.Empty;
+    private string?   loadError;
+
+    private IList<PaydayExpense> DisplayedExpenses =>
+        string.IsNullOrWhiteSpace(filterStatus)
+            ? expenses
+            : expenses.Where(e => e.Status == filterStatus).ToList();
+
+    // ── Action feedback ───────────────────────────────────────────────────────
+    private string? actionResult;
+    private string? actionError;
+
+    // ── Create / Edit form state ──────────────────────────────────────────────
+    private bool    showCreateForm;
+    private PaydayExpense? editingExpense;
+
+    private string    formCreditorSsn   = string.Empty;
+    private string    formCreditorName  = string.Empty;
+    private DateTime? formDate          = DateTime.Today;
+    private DateTime? formDueDate;
+    private DateTime? formFinalDueDate;
+    private string    formStatus        = "DRAFT";
+    private DateTime? formPaidDate      = DateTime.Today;
+    private string    formReference     = string.Empty;
+    private bool      formDeductible    = true;
+    private string    formComments      = string.Empty;
+    private bool      saving;
+    private string?   formError;
+
+    private readonly List<ExpenseLineForm> formLines = [new ExpenseLineForm()];
+
+    private bool CanSave =>
+        formDate is not null &&
+        formLines.All(l => !string.IsNullOrWhiteSpace(l.Description) && l.Quantity > 0 && l.UnitPriceExcludingVat > 0
+                           && Guid.TryParse(l.AccountIdStr, out _));
+
+    private sealed class ExpenseLineForm
+    {
+        public string  Description           { get; set; } = string.Empty;
+        public int     Quantity              { get; set; } = 1;
+        public decimal UnitPriceExcludingVat { get; set; }
+        public decimal VatPercentage         { get; set; } = 24m;
+        public decimal DiscountPercentage    { get; set; }
+        public string  AccountIdStr         { get; set; } = string.Empty;
+    }
+
+    // ── Mark paid state ───────────────────────────────────────────────────────
+    private PaydayExpense? markPaidExpense;
+    private DateTime?      markPaidDate = DateTime.Today;
+    private bool           markingPaid;
+    private string?        markPaidError;
+
+    // ── Detail state ──────────────────────────────────────────────────────────
+    private PaydayExpense? selectedExpense;
+    private string?        detailError;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        var accountsTask  = ExpensesApi.GetAccountsAsync();
+        var expensesTask  = FetchPageAsync(page: 1, append: false);
+        await Task.WhenAll(accountsTask, expensesTask);
+
+        var ar = await accountsTask;
+        if (ar.IsSuccess && ar.Value is not null)
+            accounts.AddRange(ar.Value);
+    }
+
+    // ── Load ──────────────────────────────────────────────────────────────────
+    private async Task LoadExpensesAsync()
+    {
+        currentPage = 1;
+        await FetchPageAsync(page: 1, append: false);
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        loadingMore = true;
+        try
+        {
+            currentPage++;
+            await FetchPageAsync(page: currentPage, append: true);
+        }
+        finally
+        {
+            loadingMore = false;
+        }
+    }
+
+    private async Task FetchPageAsync(int page, bool append)
+    {
+        if (!append)
+        {
+            isLoading       = true;
+            loadError       = null;
+            expenses.Clear();
+            selectedExpense = null;
+        }
+
+        try
+        {
+            var from = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : null;
+            var to   = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : null;
+
+            var result = await ExpensesApi.GetAllAsync(
+                page:     page,
+                perPage:  PerPage,
+                include:  "lines",
+                dateFrom: from,
+                dateTo:   to);
+
+            if (!result.IsSuccess)
+            {
+                loadError = result.ErrorMessage;
+                return;
+            }
+
+            if (result.Value is not null)
+            {
+                expenses.AddRange(result.Value.Expenses);
+                totalExpenses = result.Value.Total;
+            }
+        }
+        finally
+        {
+            if (!append) isLoading = false;
+        }
+    }
+
+    // ── Create / Edit ─────────────────────────────────────────────────────────
+    private void ToggleCreateForm()
+    {
+        showCreateForm = !showCreateForm;
+        if (!showCreateForm) editingExpense = null;
+        formError = null;
+    }
+
+    private void AddLine()    => formLines.Add(new ExpenseLineForm());
+    private void RemoveLine(int idx) { if (formLines.Count > 1) formLines.RemoveAt(idx); }
+
+    private void BeginEdit(PaydayExpense expense)
+    {
+        editingExpense    = expense;
+        formCreditorSsn   = expense.Creditor?.Ssn ?? string.Empty;
+        formCreditorName  = expense.Creditor?.Name ?? string.Empty;
+        formDate          = expense.Date;
+        formDueDate       = expense.DueDate;
+        formFinalDueDate  = expense.FinalDueDate;
+        formStatus        = expense.Status;
+        formPaidDate      = expense.PaidDate ?? DateTime.Today;
+        formReference     = expense.Reference ?? string.Empty;
+        formDeductible    = expense.Deductible;
+        formComments      = expense.Comments ?? string.Empty;
+
+        formLines.Clear();
+        if (expense.Lines is { Count: > 0 })
+        {
+            foreach (var line in expense.Lines)
+            {
+                formLines.Add(new ExpenseLineForm
+                {
+                    Description           = line.Description,
+                    Quantity              = line.Quantity,
+                    UnitPriceExcludingVat = line.UnitPriceExcludingVat,
+                    VatPercentage         = line.VatPercentage,
+                    DiscountPercentage    = line.DiscountPercentage ?? 0,
+                    AccountIdStr         = line.AccountId?.ToString() ?? string.Empty
+                });
+            }
+        }
+        if (formLines.Count == 0) formLines.Add(new ExpenseLineForm());
+
+        showCreateForm = true;
+        formError      = null;
+    }
+
+    private async Task SaveExpenseAsync()
+    {
+        if (formDate is null) return;
+
+        saving    = true;
+        formError = null;
+
+        try
+        {
+            var lines = formLines.Select(l => new CreateExpenseLineRequest
+            {
+                Description           = l.Description.Trim(),
+                Quantity              = l.Quantity,
+                UnitPriceExcludingVat = l.UnitPriceExcludingVat,
+                VatPercentage         = l.VatPercentage,
+                DiscountPercentage    = l.DiscountPercentage > 0 ? l.DiscountPercentage : null,
+                AccountId             = Guid.TryParse(l.AccountIdStr, out var aid) ? aid : Guid.Empty
+            }).ToList();
+
+            if (editingExpense is not null)
+            {
+                // Update
+                var updateReq = new UpdateExpenseRequest
+                {
+                    Creditor = new PaydayExpenseCreditor
+                    {
+                        Ssn  = string.IsNullOrWhiteSpace(formCreditorSsn) ? null : formCreditorSsn.Trim(),
+                        Name = string.IsNullOrWhiteSpace(formCreditorName) ? null : formCreditorName.Trim()
+                    },
+                    Date         = formDate.Value.ToString("yyyy-MM-dd"),
+                    Status       = formStatus,
+                    DueDate      = formDueDate?.ToString("yyyy-MM-dd"),
+                    FinalDueDate = formFinalDueDate?.ToString("yyyy-MM-dd"),
+                    PaidDate     = formStatus == "PAID" ? (formPaidDate ?? DateTime.Today).ToString("yyyy-MM-dd") : null,
+                    Reference    = string.IsNullOrWhiteSpace(formReference) ? null : formReference.Trim(),
+                    Deductible   = formDeductible,
+                    Comments     = string.IsNullOrWhiteSpace(formComments) ? null : formComments.Trim(),
+                    Lines        = lines
+                };
+
+                var result = await ExpensesApi.UpdateAsync(editingExpense.Id.ToString(), updateReq);
+                if (result.IsSuccess)
+                {
+                    showCreateForm = false;
+                    editingExpense = null;
+                    ResetForm();
+                    actionResult = "✓ Expense updated.";
+                    actionError  = null;
+                    await LoadExpensesAsync();
+                }
+                else
+                {
+                    formError = result.ErrorMessage ?? "Expense could not be updated.";
+                }
+            }
+            else
+            {
+                // Create
+                var createReq = new CreateExpenseRequest
+                {
+                    Creditor = new PaydayExpenseCreditor
+                    {
+                        Ssn  = string.IsNullOrWhiteSpace(formCreditorSsn) ? null : formCreditorSsn.Trim(),
+                        Name = string.IsNullOrWhiteSpace(formCreditorName) ? null : formCreditorName.Trim()
+                    },
+                    Date         = formDate.Value.ToString("yyyy-MM-dd"),
+                    Status       = formStatus,
+                    PaidDate     = formStatus == "PAID" ? (formPaidDate ?? DateTime.Today).ToString("yyyy-MM-dd") : null,
+                    DueDate      = formDueDate?.ToString("yyyy-MM-dd"),
+                    FinalDueDate = formFinalDueDate?.ToString("yyyy-MM-dd"),
+                    Reference    = string.IsNullOrWhiteSpace(formReference) ? null : formReference.Trim(),
+                    Deductible   = formDeductible,
+                    Comments     = string.IsNullOrWhiteSpace(formComments) ? null : formComments.Trim(),
+                    Lines        = lines
+                };
+
+                var result = await ExpensesApi.CreateAsync(createReq);
+                if (result.IsSuccess)
+                {
+                    showCreateForm = false;
+                    ResetForm();
+                    actionResult = "✓ Expense created.";
+                    actionError  = null;
+                    await LoadExpensesAsync();
+                }
+                else
+                {
+                    formError = result.ErrorMessage ?? "Expense could not be created.";
+                }
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void ResetForm()
+    {
+        formCreditorSsn  = string.Empty;
+        formCreditorName = string.Empty;
+        formDate         = DateTime.Today;
+        formDueDate      = null;
+        formFinalDueDate = null;
+        formStatus       = "DRAFT";
+        formPaidDate     = DateTime.Today;
+        formReference    = string.Empty;
+        formDeductible   = true;
+        formComments     = string.Empty;
+        formLines.Clear();
+        formLines.Add(new ExpenseLineForm());
+    }
+
+    // ── Detail ────────────────────────────────────────────────────────────────
+    private async Task ToggleDetail(PaydayExpense expense)
+    {
+        if (selectedExpense?.Id == expense.Id)
+        {
+            selectedExpense = null;
+            return;
+        }
+
+        detailError = null;
+        var result = await ExpensesApi.GetByIdAsync(expense.Id.ToString(), "lines");
+        if (result.IsSuccess)
+            selectedExpense = result.Value;
+        else
+        {
+            detailError     = result.ErrorMessage;
+            selectedExpense = expense;
+        }
+    }
+
+    private void ClearSelected() => selectedExpense = null;
+
+    // ── Mark Paid ─────────────────────────────────────────────────────────────
+    private void BeginMarkPaid(PaydayExpense expense)
+    {
+        markPaidExpense = expense;
+        markPaidDate    = DateTime.Today;
+        markPaidError   = null;
+        selectedExpense = null;
+    }
+
+    private void CancelMarkPaid() => markPaidExpense = null;
+
+    private async Task ConfirmMarkPaidAsync()
+    {
+        if (markPaidExpense is null || markPaidDate is null) return;
+
+        markingPaid   = true;
+        markPaidError = null;
+
+        try
+        {
+            var result = await ExpensesApi.UpdateAsync(
+                markPaidExpense.Id.ToString(),
+                new UpdateExpenseRequest
+                {
+                    Status   = "PAID",
+                    PaidDate = markPaidDate.Value.ToString("yyyy-MM-dd")
+                });
+
+            if (result.IsSuccess)
+            {
+                actionResult    = "✓ Expense marked as paid.";
+                actionError     = null;
+                markPaidExpense = null;
+                await LoadExpensesAsync();
+            }
+            else
+            {
+                markPaidError = result.ErrorMessage ?? "Could not mark expense as paid.";
+            }
+        }
+        finally
+        {
+            markingPaid = false;
+        }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    private async Task DeleteExpenseAsync(PaydayExpense expense)
+    {
+        actionError = null;
+        var result  = await ExpensesApi.DeleteAsync(expense.Id.ToString());
+        if (result.IsSuccess)
+        {
+            actionResult = "✓ Expense deleted.";
+            if (selectedExpense?.Id == expense.Id) selectedExpense = null;
+            await LoadExpensesAsync();
+        }
+        else
+        {
+            actionError = result.ErrorMessage ?? "Could not delete expense.";
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string StatusStyle(string status) => status switch
+    {
+        "PAID"   => "background:#dcfce7; color:#15803d;",
+        "UNPAID" => "background:#fef3c7; color:#92400e;",
+        "DRAFT"  => "background:#f3f4f6; color:#374151;",
+        _        => "background:#f3f4f6; color:#374151;"
+    };
+}
