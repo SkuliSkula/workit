@@ -8,6 +8,7 @@ public interface IInvoicesApi
     Task<ApiResult<EmailSettings>>        SaveEmailSettingsAsync(EmailSettings settings);
     Task<ApiResult<object>>               TestEmailConnectionAsync(EmailSettings settings);
     Task<ApiResult<ScanResult>>           ScanNowAsync();
+    Task<ApiResult<ScanResult>>           ScanFromFolderAsync();
     Task<ApiResult<List<VendorInvoice>>>  GetInvoicesAsync();
     Task<ApiResult<VendorInvoice>>        GetInvoiceAsync(Guid id);
 }
@@ -26,6 +27,9 @@ public sealed class InvoicesApi(HttpClient httpClient, IAccessTokenAccessor toke
 
     public Task<ApiResult<ScanResult>> ScanNowAsync() =>
         PostForJsonAsync<object?, ScanResult>("/api/invoices/scan", null, "Scan failed.");
+
+    public Task<ApiResult<ScanResult>> ScanFromFolderAsync() =>
+        PostForJsonAsync<object?, ScanResult>("/api/invoices/scan-folder", null, "Folder scan failed.");
 
     public Task<ApiResult<List<VendorInvoice>>> GetInvoicesAsync() =>
         GetAsync<List<VendorInvoice>>("/api/invoices", "Failed to load invoices.");

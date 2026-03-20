@@ -1184,6 +1184,25 @@ securedApi.MapPost("/invoices/scan", async (
         }, apiLogger, "scanning emails for invoices"))
     .WithName("ScanInvoices");
 
+if (app.Environment.IsDevelopment())
+{
+    securedApi.MapPost("/invoices/scan-folder", async (
+            WorkitDbContext db,
+            HttpContext httpContext,
+            EmailScanService emailService,
+            IConfiguration config,
+            CancellationToken ct) =>
+            await ExecuteDbAsync(async () =>
+            {
+                if (!httpContext.User.IsOwner()) return Results.Forbid();
+                var userContext = httpContext.User.ToUserContext();
+                var folder = config["DevScanFolder"] ?? "TestInvoices";
+                var result = await emailService.ScanFolderAsync(folder, userContext.CompanyId);
+                return Results.Ok(result);
+            }, apiLogger, "scanning local folder for invoices"))
+        .WithName("ScanInvoicesFromFolder");
+}
+
 securedApi.MapGet("/invoices", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {

@@ -3,6 +3,7 @@
 @inject IInvoicesApi InvoicesApi
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
+@inject IHostEnvironment HostEnvironment
 
 @using Workit.Shared.Models
 
@@ -122,6 +123,22 @@
                         <span>Scan now</span>
                     }
                 </button>
+                @if (HostEnvironment.IsDevelopment())
+                {
+                    <button class="inv-btn inv-btn--outline" @onclick="ScanFolderAsync" disabled="@scanning" title="Dev only: scan PDFs from TestInvoices folder">
+                        @if (scanning)
+                        {
+                            <span class="inv-spinner"></span><span>Scanning…</span>
+                        }
+                        else
+                        {
+                            <svg class="inv-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                <path d="M3 7h14M3 7l2-2h10l2 2M5 7v8a1 1 0 001 1h8a1 1 0 001-1V7" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>Scan folder</span>
+                        }
+                    </button>
+                }
             </div>
             @if (!string.IsNullOrWhiteSpace(scanMessage))
             {
@@ -336,6 +353,32 @@
                 scanMessage = $"Scan error: {sr.FatalError}";
             else
                 scanMessage = $"Scan complete — {sr.Imported} imported, {sr.Skipped} skipped, {sr.Errors} errors.";
+
+            scanSuccess = string.IsNullOrWhiteSpace(sr.FatalError) && sr.Errors == 0;
+        }
+
+        scanning = false;
+        await LoadInvoicesAsync();
+        StateHasChanged();
+    }
+
+    private async Task ScanFolderAsync()
+    {
+        scanning    = true;
+        scanMessage = null;
+        var result  = await InvoicesApi.ScanFromFolderAsync();
+        scanSuccess = result.IsSuccess;
+
+        if (!result.IsSuccess)
+        {
+            scanMessage = result.ErrorMessage ?? "Folder scan failed.";
+        }
+        else if (result.Value is { } sr)
+        {
+            if (!string.IsNullOrWhiteSpace(sr.FatalError))
+                scanMessage = $"Scan error: {sr.FatalError}";
+            else
+                scanMessage = $"Folder scan complete — {sr.Imported} imported, {sr.Skipped} skipped, {sr.Errors} errors.";
 
             scanSuccess = string.IsNullOrWhiteSpace(sr.FatalError) && sr.Errors == 0;
         }

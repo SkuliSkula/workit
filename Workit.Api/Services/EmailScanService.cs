@@ -29,6 +29,7 @@ public sealed class EmailScanService(
             await client.AuthenticateAsync(settings.Username, settings.Password);
 
             var folder = await OpenFolderAsync(client, settings.InvoiceFolder);
+            await folder.OpenAsync(FolderAccess.ReadOnly);
             var uids   = await folder.SearchAsync(SearchQuery.All);
 
             foreach (var uid in uids)
@@ -64,6 +65,52 @@ public sealed class EmailScanService(
             await db.SaveChangesAsync();
         }
 
+        return result;
+    }
+
+    // ── Dev: scan a local folder ────────────────────────────────────────────
+
+    public async Task<ScanResult> ScanFolderAsync(string folderPath, Guid companyId)
+    {
+        var result = new ScanResult();
+
+        if (!Directory.Exists(folderPath))
+        {
+            result.FatalError = $"Folder not found: {Path.GetFullPath(folderPath)}";
+            return result;
+        }
+
+        var pdfFiles = Directory.GetFiles(folderPath, "*.pdf", SearchOption.TopDirectoryOnly);
+        foreach (var pdfFile in pdfFiles)
+        {
+            try
+            {
+                var fileName  = Path.GetFileName(pdfFile);
+                var dedupKey  = $"file:{fileName}";
+
+                if (db.VendorInvoices.Any(v => v.CompanyId == companyId && v.SourceEmailMessageId == dedupKey))
+                {
+                    result.Skipped++;
+                    continue;
+                }
+
+                var bytes  = await File.ReadAllBytesAsync(pdfFile);
+                var parsed = await parser.ParseAsync(bytes, fileName);
+                if (parsed is null) { result.Errors++; continue; }
+
+                var invoice = ToInvoiceFromFile(parsed, companyId, fileName, dedupKey);
+                db.VendorInvoices.Add(invoice);
+                await ImportLineItemsAsync(invoice, companyId);
+                result.Imported++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to process file {File}", pdfFile);
+                result.Errors++;
+            }
+        }
+
+        await db.SaveChangesAsync();
         return result;
     }
 
@@ -143,24 +190,30 @@ public sealed class EmailScanService(
                 // Create new material
                 material = new Material
                 {
-                    CompanyId    = companyId,
-                    Name         = item.Description,
-                    ProductCode  = item.ProductCode,
-                    Unit         = string.IsNullOrWhiteSpace(item.Unit) ? "stk." : item.Unit,
+                    CompanyId     = companyId,
+                    Name          = item.Description,
+                    ProductCode   = item.ProductCode,
+                    Unit          = string.IsNullOrWhiteSpace(item.Unit) ? "stk." : item.Unit,
                     PurchasePrice = item.PurchasePrice,
                     MarkupFactor  = 1.5m,
                     UnitPrice     = Math.Round(item.PurchasePrice * 1.5m, 2),
                     VatRate       = 24.0m,
-                    Quantity      = 0,
+                    Quantity      = item.Quantity,
                     IsActive      = true
                 };
                 db.Materials.Add(material);
             }
-            else if (material.PurchasePrice != item.PurchasePrice)
+            else
             {
-                // Price changed — update purchase price and recompute sale price
-                material.PurchasePrice = item.PurchasePrice;
-                material.UnitPrice     = Math.Round(item.PurchasePrice * material.MarkupFactor, 2);
+                // Add received quantity to stock
+                material.Quantity += item.Quantity;
+
+                if (material.PurchasePrice != item.PurchasePrice)
+                {
+                    // Price changed — update purchase price and recompute sale price
+                    material.PurchasePrice = item.PurchasePrice;
+                    material.UnitPrice     = Math.Round(item.PurchasePrice * material.MarkupFactor, 2);
+                }
             }
 
             item.IsImported         = true;
@@ -185,6 +238,44 @@ public sealed class EmailScanService(
         }
 
         return client.Inbox;
+    }
+
+    private static VendorInvoice ToInvoiceFromFile(ParsedInvoice parsed, Guid companyId, string fileName, string dedupKey)
+    {
+        DateOnly date = DateOnly.TryParse(parsed.InvoiceDate, out var d) ? d : DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var invoice = new VendorInvoice
+        {
+            CompanyId            = companyId,
+            InvoiceNumber        = parsed.InvoiceNumber,
+            VendorName           = parsed.VendorName,
+            VendorEmail          = parsed.VendorEmail,
+            InvoiceDate          = date,
+            SubtotalExVat        = parsed.SubtotalExVat,
+            VatAmount            = parsed.VatAmount,
+            TotalInclVat         = parsed.TotalInclVat,
+            SourceEmailSubject   = fileName,
+            SourceEmailMessageId = dedupKey,
+            ReceivedAt           = DateTimeOffset.UtcNow
+        };
+
+        foreach (var li in parsed.LineItems)
+        {
+            invoice.LineItems.Add(new VendorInvoiceLineItem
+            {
+                CompanyId       = companyId,
+                InvoiceId       = invoice.Id,
+                ProductCode     = li.ProductCode,
+                Description     = li.Description,
+                Quantity        = li.Quantity,
+                Unit            = li.Unit,
+                ListPrice       = li.ListPrice,
+                DiscountPercent = li.DiscountPercent,
+                PurchasePrice   = li.PurchasePrice
+            });
+        }
+
+        return invoice;
     }
 
     private static VendorInvoice ToInvoice(ParsedInvoice parsed, Guid companyId, MimeMessage message)

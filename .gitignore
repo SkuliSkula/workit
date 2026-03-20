@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Dev test invoices (local PDFs for development testing only)
+Workit.Api/TestInvoices/
+
 # User-specific files
 *.rsuser
 *.suo
