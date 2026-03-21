@@ -5,47 +5,98 @@
 
 <PageTitle>Customers</PageTitle>
 
-<FluentCard Class="admin-card">
-    <FluentLabel Typo="Typography.PaneHeader">Customers</FluentLabel>
+@* ── Header ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Customers</FluentLabel>
+        @if (company is not null)
+        {
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New")
+            </FluentButton>
+        }
+    </div>
 
-    @if (company is null)
+    @if (company is null && !loading)
     {
-        <FluentLabel>Set up the company first in Admin before adding customers.</FluentLabel>
-    }
-    else
-    {
-        <div class="admin-grid">
-            <FluentTextField @bind-Value="newCustomerName" Placeholder="Customer name" />
-            <FluentTextField @bind-Value="newCustomerSsn" Placeholder="SSN" />
-            <FluentTextField @bind-Value="newCustomerEmail" Placeholder="Email" />
-            <FluentTextField @bind-Value="newCustomerPhone" Placeholder="Phone" />
-            <FluentTextField @bind-Value="newCustomerContactPerson" Placeholder="Contact person" />
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateCustomerAsync">Add Customer</FluentButton>
-        </div>
-    }
-
-    @if (editingCustomer is not null)
-    {
-        <FluentCard Class="admin-card">
-            <FluentLabel Typo="Typography.PaneHeader">Edit Customer</FluentLabel>
-            <div class="admin-grid">
-                <FluentTextField @bind-Value="editingCustomer.Name" Placeholder="Customer name" />
-                <FluentTextField @bind-Value="editingCustomer.Ssn" Placeholder="SSN" />
-                <FluentTextField @bind-Value="editingCustomer.Email" Placeholder="Email" />
-                <FluentTextField @bind-Value="editingCustomer.Phone" Placeholder="Phone" />
-                <FluentTextField @bind-Value="editingCustomer.ContactPerson" Placeholder="Contact person" />
-                <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync">Save Changes</FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit">Cancel</FluentButton>
-            </div>
-        </FluentCard>
+        <FluentLabel style="margin-top:0.5rem;">Set up the company first in Admin before adding customers.</FluentLabel>
     }
 
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <FluentLabel>@loadError</FluentLabel>
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
 </FluentCard>
 
+@* ── Create form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Customer</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
+                <FluentTextField @bind-Value="newCustomerName" Placeholder="Customer name" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>SSN</FluentLabel>
+                <FluentTextField @bind-Value="newCustomerSsn" Placeholder="SSN" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Email</FluentLabel>
+                <FluentTextField @bind-Value="newCustomerEmail" Placeholder="Email" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Phone</FluentLabel>
+                <FluentTextField @bind-Value="newCustomerPhone" Placeholder="Phone" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Contact person</FluentLabel>
+                <FluentTextField @bind-Value="newCustomerContactPerson" Placeholder="Contact person" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateCustomerAsync">Save</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Edit form ── *@
+@if (editingCustomer is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Edit Customer</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
+                <FluentTextField @bind-Value="editingCustomer.Name" Placeholder="Customer name" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>SSN</FluentLabel>
+                <FluentTextField @bind-Value="editingCustomer.Ssn" Placeholder="SSN" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Email</FluentLabel>
+                <FluentTextField @bind-Value="editingCustomer.Email" Placeholder="Email" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Phone</FluentLabel>
+                <FluentTextField @bind-Value="editingCustomer.Phone" Placeholder="Phone" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Contact person</FluentLabel>
+                <FluentTextField @bind-Value="editingCustomer.ContactPerson" Placeholder="Contact person" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync">Save Changes</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── List ── *@
 <div class="cust-panel">
     <div class="cust-panel-header">
         <span class="cust-panel-title">All Customers</span>
@@ -80,6 +131,7 @@
     private Company? company;
     private Customer? editingCustomer;
     private bool loading = true;
+    private bool showCreateForm;
     private string newCustomerName = string.Empty;
     private string newCustomerSsn = string.Empty;
     private string newCustomerEmail = string.Empty;
@@ -125,6 +177,21 @@
         loading = false;
     }
 
+    private void ToggleCreateForm()
+    {
+        showCreateForm = !showCreateForm;
+        if (!showCreateForm) ResetCreateForm();
+    }
+
+    private void ResetCreateForm()
+    {
+        newCustomerName = string.Empty;
+        newCustomerSsn = string.Empty;
+        newCustomerEmail = string.Empty;
+        newCustomerPhone = string.Empty;
+        newCustomerContactPerson = string.Empty;
+    }
+
     private async Task CreateCustomerAsync()
     {
         if (company is null || string.IsNullOrWhiteSpace(newCustomerName))
@@ -144,11 +211,8 @@
 
         if (result.IsSuccess)
         {
-            newCustomerName = string.Empty;
-            newCustomerSsn = string.Empty;
-            newCustomerEmail = string.Empty;
-            newCustomerPhone = string.Empty;
-            newCustomerContactPerson = string.Empty;
+            ResetCreateForm();
+            showCreateForm = false;
             await LoadAsync();
             return;
         }
@@ -158,6 +222,7 @@
 
     private void BeginEditCustomer(Customer customer)
     {
+        showCreateForm = false;
         editingCustomer = new Customer
         {
             Id = customer.Id,

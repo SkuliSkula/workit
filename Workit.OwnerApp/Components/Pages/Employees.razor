@@ -5,141 +5,156 @@
 
 <PageTitle>Employees</PageTitle>
 
+@* ── Header ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
-
-    <div class="emp-sidebar">
-            @if (company is null)
-            {
-                <FluentLabel>Set up the company first in Admin before adding employees.</FluentLabel>
-            }
-            else
-            {
-                <div class="emp-form">
-                    <label class="emp-field">
-                        <span>Name</span>
-                        <FluentTextField @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Trade</span>
-                        <FluentSelect TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
-                            @foreach (var trade in Trades)
-                            {
-                                <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
-                            }
-                        </FluentSelect>
-                    </label>
-                    <label class="emp-field">
-                        <span>SSN</span>
-                        <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Email</span>
-                        <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Password</span>
-                        <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Phone</span>
-                        <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Contact person</span>
-                        <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Employment type</span>
-                        <FluentSelect TValue="string" TOption="string"
-                                      Value="@newEmploymentType.ToString()"
-                                      ValueChanged="@(v => newEmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
-                                      style="width:100%">
-                            <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
-                            <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
-                        </FluentSelect>
-                    </label>
-                    <label class="emp-field">
-                        <span>Hourly salary</span>
-                        <FluentNumberField TValue="decimal" @bind-Value="newHourlySalary" Min="0" Placeholder="0" style="width:100%" />
-                    </label>
-                    <label class="emp-field">
-                        <span>Hourly billable rate</span>
-                        <FluentNumberField TValue="decimal" @bind-Value="newHourlyBillableRate" Min="0" Placeholder="0" style="width:100%" />
-                    </label>
-                    <div class="emp-actions">
-                        <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Add Employee</FluentButton>
-                    </div>
-                </div>
-            }
-
-            @if (editingEmployee is not null)
-            {
-                <FluentCard Class="admin-card" AreaRestricted="false">
-                    <FluentLabel Typo="Typography.PaneHeader">Edit Employee</FluentLabel>
-                    <div class="emp-form">
-                        <label class="emp-field">
-                            <span>Name</span>
-                            <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Trade</span>
-                            <FluentSelect TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
-                                @foreach (var trade in Trades)
-                                {
-                                    <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
-                                }
-                            </FluentSelect>
-                        </label>
-                        <label class="emp-field">
-                            <span>SSN</span>
-                            <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Email</span>
-                            <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Phone</span>
-                            <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Contact person</span>
-                            <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Employment type</span>
-                            <FluentSelect TValue="string" TOption="string"
-                                          Value="@editingEmployee.EmploymentType.ToString()"
-                                          ValueChanged="@(v => editingEmployee.EmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
-                                          style="width:100%">
-                                <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
-                                <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
-                            </FluentSelect>
-                        </label>
-                        <label class="emp-field">
-                            <span>Hourly salary</span>
-                            <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlySalary" Min="0" style="width:100%" />
-                        </label>
-                        <label class="emp-field">
-                            <span>Hourly billable rate</span>
-                            <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlyBillableRate" Min="0" style="width:100%" />
-                        </label>
-                        <div class="emp-actions">
-                            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
-                            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
-                        </div>
-                    </div>
-                </FluentCard>
-            }
-
-            @if (!string.IsNullOrWhiteSpace(loadError))
-            {
-                <FluentLabel>@loadError</FluentLabel>
-            }
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Employees</FluentLabel>
+        @if (company is not null)
+        {
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New")
+            </FluentButton>
+        }
     </div>
+
+    @if (company is null && !loading)
+    {
+        <FluentLabel style="margin-top:0.5rem;">Set up the company first in Admin before adding employees.</FluentLabel>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
 </FluentCard>
 
+@* ── Create form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Employee</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
+                <FluentTextField @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Trade</FluentLabel>
+                <FluentSelect TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
+                    @foreach (var trade in Trades)
+                    {
+                        <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentLabel>SSN</FluentLabel>
+                <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Email</FluentLabel>
+                <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Password</FluentLabel>
+                <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Phone</FluentLabel>
+                <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Contact person</FluentLabel>
+                <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Employment type</FluentLabel>
+                <FluentSelect TValue="string" TOption="string"
+                              Value="@newEmploymentType.ToString()"
+                              ValueChanged="@(v => newEmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
+                              style="width:100%">
+                    <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
+                    <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentLabel>Hourly salary</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="newHourlySalary" Min="0" Placeholder="0" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Hourly billable rate</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="newHourlyBillableRate" Min="0" Placeholder="0" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateEmployeeAsync">Save</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Edit form ── *@
+@if (editingEmployee is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Edit Employee</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
+                <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Trade</FluentLabel>
+                <FluentSelect TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
+                    @foreach (var trade in Trades)
+                    {
+                        <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentLabel>SSN</FluentLabel>
+                <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Email</FluentLabel>
+                <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Phone</FluentLabel>
+                <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Contact person</FluentLabel>
+                <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Employment type</FluentLabel>
+                <FluentSelect TValue="string" TOption="string"
+                              Value="@editingEmployee.EmploymentType.ToString()"
+                              ValueChanged="@(v => editingEmployee.EmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
+                              style="width:100%">
+                    <FluentOption TOption="string" Value="@(EmploymentType.Employed.ToString())">Employed</FluentOption>
+                    <FluentOption TOption="string" Value="@(EmploymentType.Contractor.ToString())">Contractor</FluentOption>
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentLabel>Hourly salary</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlySalary" Min="0" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Hourly billable rate</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlyBillableRate" Min="0" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── List ── *@
 <div class="emp-panel">
     <div class="emp-panel-header">
         <span class="emp-panel-title">All Employees</span>
@@ -191,6 +206,7 @@
     private static readonly string[] Trades = ["Electrician", "Carpenter", "Plumber", "Painter", "Other"];
 
     private bool loading = true;
+    private bool showCreateForm;
     private readonly List<Employee> employees = [];
     private Company? company;
     private Employee? editingEmployee;
@@ -248,6 +264,26 @@
         loading = false;
     }
 
+    private void ToggleCreateForm()
+    {
+        showCreateForm = !showCreateForm;
+        if (!showCreateForm) ResetCreateForm();
+    }
+
+    private void ResetCreateForm()
+    {
+        newEmployeeName = string.Empty;
+        newEmployeeTrade = Trades[0];
+        newEmployeeSsn = string.Empty;
+        newEmployeeEmail = string.Empty;
+        newEmployeePassword = string.Empty;
+        newEmployeePhone = string.Empty;
+        newEmployeeContactPerson = string.Empty;
+        newEmploymentType = EmploymentType.Employed;
+        newHourlySalary = 0;
+        newHourlyBillableRate = 0;
+    }
+
     private async Task CreateEmployeeAsync()
     {
         if (company is null || string.IsNullOrWhiteSpace(newEmployeeName))
@@ -275,16 +311,8 @@
 
         if (result.IsSuccess)
         {
-            newEmployeeName = string.Empty;
-            newEmployeeTrade = Trades[0];
-            newEmployeeSsn = string.Empty;
-            newEmployeeEmail = string.Empty;
-            newEmployeePassword = string.Empty;
-            newEmployeePhone = string.Empty;
-            newEmployeeContactPerson = string.Empty;
-            newEmploymentType = EmploymentType.Employed;
-            newHourlySalary = 0;
-            newHourlyBillableRate = 0;
+            ResetCreateForm();
+            showCreateForm = false;
             await LoadAsync();
             return;
         }
@@ -294,6 +322,7 @@
 
     private void BeginEditEmployee(Employee employee)
     {
+        showCreateForm = false;
         editingEmployee = new Employee
         {
             Id = employee.Id,

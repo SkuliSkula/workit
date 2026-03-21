@@ -9,19 +9,37 @@
 
 <PageTitle>Jobs</PageTitle>
 
-@* ── Add Job ── *@
+@* ── Header ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
+        @if (company is not null)
+        {
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New")
+            </FluentButton>
+        }
+    </div>
 
-    @if (company is null)
+    @if (company is null && !loading)
     {
-        <FluentLabel>Set up the company first in Admin before adding jobs.</FluentLabel>
+        <FluentLabel style="margin-top:0.5rem;">Set up the company first in Admin before adding jobs.</FluentLabel>
     }
-    else
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <div class="admin-grid">
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Create form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Job</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Customer</FluentLabel>
+                <FluentLabel>Customer <span style="color:red">*</span></FluentLabel>
                 @if (customers.Count > 0)
                 {
                     <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId" style="width:100%">
@@ -38,7 +56,7 @@
                 <FluentTextField @bind-Value="newJobCode" Placeholder="Auto-generated" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Job name</FluentLabel>
+                <FluentLabel>Job name <span style="color:red">*</span></FluentLabel>
                 <FluentTextField @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
             </div>
             <div>
@@ -51,16 +69,14 @@
                     <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
                 </FluentSelect>
             </div>
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync"
-                          Disabled="@(!HasSelectedCustomer)" style="align-self:end;">Add Job</FluentButton>
         </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(loadError))
-    {
-        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
-    }
-</FluentCard>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync"
+                          Disabled="@(!HasSelectedCustomer)">Save</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
 
 @* ── Driving rate ── *@
 @if (company is not null)
@@ -311,6 +327,7 @@ else if (company is not null)
 @code {
     // ── Lookup data ────────────────────────────────────────────────────────────
     private bool loading = true;
+    private bool showCreateForm;
     private readonly List<Customer> customers = [];
     private readonly List<Job>      jobs      = [];
     private readonly List<Employee> employees = [];
@@ -342,6 +359,11 @@ else if (company is not null)
             .DefaultIfEmpty(0)
             .Max();
         return (maxCode + 1).ToString();
+    }
+
+    private void ToggleCreateForm()
+    {
+        showCreateForm = !showCreateForm;
     }
 
     // ── Driving rate state ─────────────────────────────────────────────────────
@@ -514,7 +536,7 @@ else if (company is not null)
             BillingType = newBillingType
         });
 
-        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; await LoadAsync(); }
+        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; showCreateForm = false; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
