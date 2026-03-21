@@ -3,49 +3,114 @@
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
 
-<PageTitle>Login</PageTitle>
+<PageTitle>Login — Workit Owner</PageTitle>
 
-<FluentCard Class="admin-card">
-    <FluentLabel Typo="Typography.PaneHeader">Admin / Owner Login</FluentLabel>
-    <div class="admin-grid">
-        <FluentTextField @bind-Value="email" Placeholder="Email" />
-        <FluentTextField @bind-Value="password" Placeholder="Password" TextFieldType="TextFieldType.Password" />
-        <FluentButton Appearance="Appearance.Accent" @onclick="LoginAsync">Login</FluentButton>
+<div class="login-page">
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56" fill="none">
+                    <rect width="64" height="64" rx="16" fill="#14304b"/>
+                    <g transform="translate(12, 8)" fill="#ffffff">
+                        <!-- Hammer head -->
+                        <rect x="6" y="8" width="28" height="10" rx="3"/>
+                        <!-- Hammer handle -->
+                        <rect x="17" y="18" width="6" height="28" rx="3"/>
+                        <!-- Hammer claw -->
+                        <path d="M6 8 C6 8, 2 4, 4 2 C6 0, 10 4, 10 8" fill="#ffffff"/>
+                    </g>
+                </svg>
+            </div>
+            <h1>Workit Owner</h1>
+            <p class="login-subtitle">Sign in to manage your business</p>
+        </div>
+
+        <div class="login-form">
+            <div class="login-field">
+                <label for="email">Email</label>
+                <input id="email" type="email" class="login-input" placeholder="you@company.com"
+                       @bind="email" @bind:event="oninput" @onkeydown="OnKeyDown" />
+            </div>
+
+            <div class="login-field">
+                <label for="password">Password</label>
+                <input id="password" type="password" class="login-input" placeholder="Enter your password"
+                       @bind="password" @bind:event="oninput" @onkeydown="OnKeyDown" />
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="login-error">
+                    <span>@errorMessage</span>
+                </div>
+            }
+
+            <button class="login-button" @onclick="LoginAsync" disabled="@isLoggingIn">
+                @if (isLoggingIn)
+                {
+                    <span>Signing in...</span>
+                }
+                else
+                {
+                    <span>Sign in</span>
+                }
+            </button>
+        </div>
+
+        <div class="login-footer">
+            <span>Workit &mdash; Construction management</span>
+        </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <FluentLabel>@errorMessage</FluentLabel>
-    }
-</FluentCard>
+</div>
 
 @code {
     private string email = string.Empty;
     private string password = string.Empty;
     private string? errorMessage;
+    private bool isLoggingIn;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoginAsync();
+        }
+    }
 
     private async Task LoginAsync()
     {
-        errorMessage = null;
-        var result = await AuthSession.LoginAsync(new LoginRequest
-        {
-            Email = email.Trim(),
-            Password = password
-        });
+        if (isLoggingIn) return;
 
-        if (result.IsSuccess && result.Value is not null)
+        errorMessage = null;
+        isLoggingIn = true;
+
+        try
         {
-            if (result.Value.Role == WorkitRoles.Employee)
+            var result = await AuthSession.LoginAsync(new LoginRequest
             {
-                await AuthSession.LogoutAsync();
-                errorMessage = "Employee accounts must use the Employee app.";
+                Email = email.Trim(),
+                Password = password
+            });
+
+            if (result.IsSuccess && result.Value is not null)
+            {
+                if (result.Value.Role == WorkitRoles.Employee)
+                {
+                    await AuthSession.LogoutAsync();
+                    errorMessage = "Employee accounts must use the Employee app.";
+                    return;
+                }
+
+                var target = result.Value.Role == WorkitRoles.Admin ? "/admin" : "/";
+                Navigation.NavigateTo(target, forceLoad: true);
                 return;
             }
 
-            Navigation.NavigateTo("/admin", forceLoad: true);
-            return;
+            errorMessage = result.ErrorMessage ?? "Login failed. Please check your credentials.";
         }
-
-        errorMessage = result.ErrorMessage ?? "Login failed.";
+        finally
+        {
+            isLoggingIn = false;
+        }
     }
 }

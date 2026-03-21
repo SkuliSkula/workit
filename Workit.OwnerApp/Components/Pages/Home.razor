@@ -10,55 +10,14 @@
 
 <PageTitle>Home</PageTitle>
 
-@if (showLoginWelcome)
-{
-    <section class="dashboard welcome-shell">
-        <FluentCard Class="dashboard-shell dashboard-hero welcome-hero">
-            <div class="hero-copy">
-                <span class="eyebrow">Workit Owner</span>
-                <h1>Run the month from one screen.</h1>
-                <p>
-                    Review hours by customer, job, and employee, then drill into the details that need action.
-                    Sign in to open your owner dashboard.
-                </p>
-
-                <div class="welcome-points">
-                    <div>
-                        <strong>Monthly totals</strong>
-                        <span>See worked hours, active jobs, and team load immediately.</span>
-                    </div>
-                    <div>
-                        <strong>Fast drill-down</strong>
-                        <span>Slice the month by customer, employee, or job without leaving home.</span>
-                    </div>
-                    <div>
-                        <strong>Operational view</strong>
-                        <span>Track recent entries and daily spikes before they turn into billing issues.</span>
-                    </div>
-                </div>
-            </div>
-
-            <FluentCard Class="welcome-card">
-                <span class="eyebrow">Sign in</span>
-                <FluentLabel Typo="Typography.PaneHeader">Owner and admin login</FluentLabel>
-                <p>Open the login page to sign in and return here with your dashboard ready.</p>
-
-                <div class="welcome-actions">
-                    <a class="welcome-link-button welcome-link-button-primary" href="/login">Login</a>
-                    <a class="welcome-link-button" href="/login">Open full login</a>
-                </div>
-            </FluentCard>
-        </FluentCard>
-    </section>
-}
-else if (!string.IsNullOrWhiteSpace(loadError))
+@if (!string.IsNullOrWhiteSpace(loadError))
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
         <p>@loadError</p>
         <div class="dashboard-actions">
-            <FluentButton Appearance="Appearance.Accent" @onclick="ReloadAsync">Retry</FluentButton>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="RetryOrLoginAsync">Retry</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" Href="/login">Login</FluentButton>
         </div>
     </FluentCard>
 }
@@ -376,7 +335,6 @@ else
     private Company? company;
     private bool isLoading = true;
     private string? loadError;
-    private bool showLoginWelcome;
     private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
     private List<Customer> customers = [];
     private List<Employee> employees = [];
@@ -434,15 +392,13 @@ else
     {
         isLoading = true;
         loadError = null;
-        showLoginWelcome = false;
 
         try
         {
             session = await AuthSession.GetSessionAsync();
             if (session is null)
             {
-                ResetDashboard();
-                showLoginWelcome = true;
+                Navigation.NavigateTo("/login", forceLoad: true);
                 return;
             }
 
@@ -458,13 +414,11 @@ else
                 if (IsUnauthorized(companyResult.ErrorMessage))
                 {
                     await AuthSession.LogoutAsync();
-                    session = null;
-                    ResetDashboard();
-                    showLoginWelcome = true;
+                    Navigation.NavigateTo("/login", forceLoad: true);
                     return;
                 }
 
-                loadError = companyResult.ErrorMessage ?? "Company could not be loaded.";
+                loadError = companyResult.ErrorMessage ?? "The company profile could not be loaded right now.";
                 ResetDashboard();
                 return;
             }
@@ -478,11 +432,20 @@ else
 
             if (!customersResult.IsSuccess || !employeesResult.IsSuccess || !jobsResult.IsSuccess || !timeEntriesResult.IsSuccess)
             {
-                loadError = customersResult.ErrorMessage
+                var firstError = customersResult.ErrorMessage
                     ?? employeesResult.ErrorMessage
                     ?? jobsResult.ErrorMessage
                     ?? timeEntriesResult.ErrorMessage
                     ?? "Dashboard data could not be loaded.";
+
+                if (IsUnauthorized(firstError))
+                {
+                    await AuthSession.LogoutAsync();
+                    Navigation.NavigateTo("/login", forceLoad: true);
+                    return;
+                }
+
+                loadError = firstError;
                 ResetDashboard();
                 return;
             }
@@ -500,9 +463,10 @@ else
         }
     }
 
-    private async Task ReloadAsync()
+    private async Task RetryOrLoginAsync()
     {
         await LoadDashboardAsync();
+        StateHasChanged();
     }
 
     private async Task PreviousMonthAsync()

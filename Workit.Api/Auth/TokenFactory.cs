@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -49,5 +50,23 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
             Role = user.Role,
             Email = user.Email
         };
+    }
+
+    public RefreshToken CreateRefreshToken(Guid userId)
+    {
+        var options = jwtOptions.Value;
+        return new RefreshToken
+        {
+            UserId = userId,
+            Token = GenerateSecureToken(),
+            ExpiresUtc = DateTime.UtcNow.AddDays(options.RefreshTokenExpirationDays),
+            CreatedUtc = DateTime.UtcNow
+        };
+    }
+
+    private static string GenerateSecureToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(64);
+        return Convert.ToBase64String(bytes);
     }
 }

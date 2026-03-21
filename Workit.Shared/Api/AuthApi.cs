@@ -5,6 +5,7 @@ namespace Workit.Shared.Api;
 public interface IAuthApi
 {
     Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest request);
+    Task<ApiResult<LoginResponse>> RefreshAsync(RefreshTokenRequest request);
     Task<ApiResult<LoginResponse>> RegisterCompanyAsync(RegisterCompanyRequest request);
     Task<ApiResult<SetupCompanyResponse>> SetupCompanyAsync(SetupCompanyRequest request);
 }
@@ -14,6 +15,9 @@ internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor access
 {
     public Task<ApiResult<LoginResponse>> LoginAsync(LoginRequest request) =>
         PostForJsonAsync<LoginRequest, LoginResponse>("api/auth/login", request, "Login failed.");
+
+    public Task<ApiResult<LoginResponse>> RefreshAsync(RefreshTokenRequest request) =>
+        PostForJsonAsync<RefreshTokenRequest, LoginResponse>("api/auth/refresh", request, "Token refresh failed.");
 
     public Task<ApiResult<LoginResponse>> RegisterCompanyAsync(RegisterCompanyRequest request) =>
         PostForJsonAsync<RegisterCompanyRequest, LoginResponse>("api/auth/register-company", request, "Company registration failed.");

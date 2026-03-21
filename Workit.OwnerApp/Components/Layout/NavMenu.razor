@@ -12,17 +12,20 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <FluentIcon Value="new Size24.Home()" /> Home
-            </NavLink>
-        </div>
-
         @if (!isAuthenticated)
         {
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="login">
+                <NavLink class="nav-link" href="login" Match="NavLinkMatch.All">
                     <FluentIcon Value="new Size24.PersonKey()" /> Login
+                </NavLink>
+            </div>
+        }
+
+        @if (isAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <FluentIcon Value="new Size24.Home()" /> Home
                 </NavLink>
             </div>
         }
@@ -126,7 +129,7 @@
         @if (isAuthenticated)
         {
             <div class="nav-item px-3">
-                <button type="button" class="nav-link nav-link-button" @onclick="LogoutAsync">
+                <button type="button" class="nav-link nav-link-button" @onclick="ShowLogoutConfirm">
                     <FluentIcon Value="new Size24.SignOut()" /> Logout
                 </button>
             </div>
@@ -170,6 +173,9 @@
 </style>
 
 @code {
+    [CascadingParameter]
+    public MainLayout? Layout { get; set; }
+
     private bool isAdmin;
     private bool isOwner;
     private bool isAuthenticated;
@@ -216,11 +222,7 @@
         return path.StartsWith("payday", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task LogoutAsync()
-    {
-        await AuthSession.LogoutAsync();
-        Navigation.NavigateTo("/", forceLoad: true);
-    }
+    private void ShowLogoutConfirm() => Layout?.ShowLogoutConfirm();
 
     public void Dispose()
     {

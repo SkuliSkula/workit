@@ -127,11 +127,49 @@ authApi.MapPost("/login", async (WorkitDbContext db, TokenFactory tokenFactory, 
                 return Results.Unauthorized();
             }
 
-            return Results.Ok(tokenFactory.CreateToken(user));
+            var loginResponse = tokenFactory.CreateToken(user);
+            var refreshToken = tokenFactory.CreateRefreshToken(user.Id);
+            db.RefreshTokens.Add(refreshToken);
+            await db.SaveChangesAsync(ct);
+            loginResponse.RefreshToken = refreshToken.Token;
+            return Results.Ok(loginResponse);
         },
         apiLogger,
         "authenticating a user"))
     .WithName("Login");
+
+authApi.MapPost("/refresh", async (WorkitDbContext db, TokenFactory tokenFactory, RefreshTokenRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return Results.BadRequest("Refresh token is required.");
+            }
+
+            var stored = await db.RefreshTokens.FirstOrDefaultAsync(x => x.Token == request.RefreshToken, ct);
+            if (stored is null || stored.Revoked || stored.ExpiresUtc < DateTime.UtcNow)
+            {
+                return Results.Unauthorized();
+            }
+
+            var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == stored.UserId, ct);
+            if (user is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            // Revoke old refresh token and issue new pair
+            stored.Revoked = true;
+            var loginResponse = tokenFactory.CreateToken(user);
+            var newRefreshToken = tokenFactory.CreateRefreshToken(user.Id);
+            db.RefreshTokens.Add(newRefreshToken);
+            await db.SaveChangesAsync(ct);
+            loginResponse.RefreshToken = newRefreshToken.Token;
+            return Results.Ok(loginResponse);
+        },
+        apiLogger,
+        "refreshing a token"))
+    .WithName("RefreshToken");
 
 authApi.MapPost("/register-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, RegisterCompanyRequest request, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>

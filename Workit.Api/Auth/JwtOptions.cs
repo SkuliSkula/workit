@@ -7,5 +7,6 @@ public sealed class JwtOptions
     public string Issuer { get; set; } = "Workit.Api";
     public string Audience { get; set; } = "Workit.Apps";
     public string SigningKey { get; set; } = "workit-dev-signing-key-change-me-2026";
-    public int ExpirationMinutes { get; set; } = 480;
+    public int ExpirationMinutes { get; set; } = 30;
+    public int RefreshTokenExpirationDays { get; set; } = 14;
 }

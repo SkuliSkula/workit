@@ -1,23 +1,104 @@
 @inherits LayoutComponentBase
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
 
 <FluentToastProvider />
 <FluentDialogProvider />
 <FluentTooltipProvider />
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<CascadingValue Value="this" IsFixed="true">
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
+        </div>
 
-    <main>
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+        <main>
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+</CascadingValue>
+
+@if (showLogoutConfirm)
+{
+    <div class="logout-overlay" @onclick="CancelLogout">
+        <div class="logout-dialog" @onclick:stopPropagation="true">
+            <FluentIcon Value="new Size24.SignOut()" Color="Color.Custom" CustomColor="#14304b" />
+            <h3>Sign out?</h3>
+            <p>Are you sure you want to log out of Workit?</p>
+            <div class="logout-actions">
+                <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmLogoutAsync">Yes, sign out</FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="CancelLogout">Cancel</FluentButton>
+            </div>
+        </div>
+    </div>
+}
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+<style>
+    .logout-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+    }
+
+    .logout-dialog {
+        background: #fff;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 340px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
+
+    .logout-dialog h3 {
+        margin: 0.75rem 0 0.25rem;
+        font-size: 1.25rem;
+        color: #14304b;
+    }
+
+    .logout-dialog p {
+        margin: 0 0 1.25rem;
+        color: #555;
+        font-size: 0.9rem;
+    }
+
+    .logout-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+    }
+</style>
+
+@code {
+    private bool showLogoutConfirm;
+
+    public void ShowLogoutConfirm()
+    {
+        showLogoutConfirm = true;
+        StateHasChanged();
+    }
+
+    private void CancelLogout()
+    {
+        showLogoutConfirm = false;
+    }
+
+    private async Task ConfirmLogoutAsync()
+    {
+        showLogoutConfirm = false;
+        await AuthSession.LogoutAsync();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+}
