@@ -15,9 +15,16 @@
         <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
         @if (company is not null)
         {
-            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
-                @(showCreateForm ? "✕ Cancel" : "+ New")
-            </FluentButton>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <FluentLabel style="white-space:nowrap; font-size:0.85rem;">Driving rate</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="drivingUnitPrice" Min="0" Step="1" style="width:100px;" />
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="SaveDrivingRateAsync" Disabled="@savingDrivingRate">
+                    @(savingDrivingRate ? "…" : "Save")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                    @(showCreateForm ? "✕ Cancel" : "+ New")
+                </FluentButton>
+            </div>
         }
     </div>
 
@@ -29,6 +36,10 @@
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(drivingRateError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@drivingRateError</FluentLabel>
     }
 </FluentCard>
 
@@ -75,27 +86,6 @@
                           Disabled="@(!HasSelectedCustomer)">Save</FluentButton>
             <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
         </div>
-    </FluentCard>
-}
-
-@* ── Driving rate ── *@
-@if (company is not null)
-{
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.PaneHeader">Driving Rate</FluentLabel>
-        <div class="admin-grid" style="align-items:flex-end;">
-            <div>
-                <FluentLabel>Price per unit (km)</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="drivingUnitPrice" Min="0" Step="1" style="width:100%" />
-            </div>
-            <FluentButton Appearance="Appearance.Accent" @onclick="SaveDrivingRateAsync" Disabled="@savingDrivingRate" style="align-self:flex-end;">
-                @(savingDrivingRate ? "Saving…" : "Save rate")
-            </FluentButton>
-        </div>
-        @if (!string.IsNullOrWhiteSpace(drivingRateError))
-        {
-            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@drivingRateError</FluentLabel>
-        }
     </FluentCard>
 }
 

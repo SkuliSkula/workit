@@ -6,94 +6,104 @@
 
 <PageTitle>Time Entries</PageTitle>
 
-@* ── Add Entry ── *@
+@* ── Header ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.PaneHeader">Time Entries</FluentLabel>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Time Entries</FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+            @(showCreateForm ? "✕ Cancel" : "+ New")
+        </FluentButton>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
-    }
-
-    <div class="admin-grid">
-
-        <div>
-            <FluentLabel>Employee</FluentLabel>
-            @if (employees.Count > 0)
-            {
-                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
-                    @foreach (var emp in employees)
-                    {
-                        <FluentOption TOption="string" Value="@emp.Id.ToString()">
-                            @emp.DisplayName @(string.IsNullOrWhiteSpace(emp.Trade) ? string.Empty : $"({emp.Trade})")
-                        </FluentOption>
-                    }
-                </FluentSelect>
-            }
-            else
-            {
-                <FluentLabel>No employees yet.</FluentLabel>
-            }
-        </div>
-
-        <div>
-            <FluentLabel>Job</FluentLabel>
-            @if (jobs.Count > 0)
-            {
-                <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
-                    @foreach (var job in jobs)
-                    {
-                        <FluentOption TOption="string" Value="@job.Id.ToString()">
-                            @job.Code – @job.Name
-                        </FluentOption>
-                    }
-                </FluentSelect>
-            }
-            else
-            {
-                <FluentLabel>No jobs yet.</FluentLabel>
-            }
-        </div>
-
-        <div>
-            <FluentLabel>Date</FluentLabel>
-            <FluentDatePicker @bind-Value="workDate" style="width:100%" />
-        </div>
-
-        <div>
-            <FluentLabel>Hours</FluentLabel>
-            <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
-        </div>
-
-        <div>
-            <FluentLabel>Overtime hours</FluentLabel>
-            <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
-        </div>
-
-        <div>
-            <FluentLabel>Driving units</FluentLabel>
-            <FluentNumberField TValue="int" @bind-Value="drivingUnits" Min="0" style="width:100%" />
-        </div>
-
-        <div style="grid-column: span 2">
-            <FluentLabel>Notes</FluentLabel>
-            <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
-        </div>
-
-        <div style="display:flex; align-items:flex-end;">
-            <FluentButton Appearance="Appearance.Accent" @onclick="AddEntryAsync"
-                          Disabled="@(!CanAdd || saving)">
-                @(saving ? "Saving…" : "Add Entry")
-            </FluentButton>
-        </div>
-
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(saveResult))
-    {
-        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
 </FluentCard>
+
+@* ── Add Entry form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Time Entry</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Employee</FluentLabel>
+                @if (employees.Count > 0)
+                {
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                        @foreach (var emp in employees)
+                        {
+                            <FluentOption TOption="string" Value="@emp.Id.ToString()">
+                                @emp.DisplayName @(string.IsNullOrWhiteSpace(emp.Trade) ? string.Empty : $"({emp.Trade})")
+                            </FluentOption>
+                        }
+                    </FluentSelect>
+                }
+                else
+                {
+                    <FluentLabel>No employees yet.</FluentLabel>
+                }
+            </div>
+
+            <div>
+                <FluentLabel>Job</FluentLabel>
+                @if (jobs.Count > 0)
+                {
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
+                        @foreach (var job in jobs)
+                        {
+                            <FluentOption TOption="string" Value="@job.Id.ToString()">
+                                @job.Code – @job.Name
+                            </FluentOption>
+                        }
+                    </FluentSelect>
+                }
+                else
+                {
+                    <FluentLabel>No jobs yet.</FluentLabel>
+                }
+            </div>
+
+            <div>
+                <FluentLabel>Date</FluentLabel>
+                <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Hours</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Overtime hours</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Driving units</FluentLabel>
+                <FluentNumberField TValue="int" @bind-Value="drivingUnits" Min="0" style="width:100%" />
+            </div>
+
+            <div style="grid-column: span 2">
+                <FluentLabel>Notes</FluentLabel>
+                <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="AddEntryAsync"
+                          Disabled="@(!CanAdd || saving)">
+                @(saving ? "Saving…" : "Save")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(saveResult))
+        {
+            <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+        }
+    </FluentCard>
+}
 
 @* ── Entry Log ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
@@ -147,6 +157,7 @@
     private readonly Dictionary<Guid, string> jobNames = new();
 
     // ── Add-entry form state ──────────────────────────────────────────────────
+    private bool showCreateForm;
     private string? selectedEmployeeId;
     private string? selectedJobId;
     private DateTime? workDate = DateTime.Today;
@@ -218,6 +229,8 @@
         await LoadEntriesAsync();
     }
 
+    private void ToggleCreateForm() => showCreateForm = !showCreateForm;
+
     // ── Add Entry ─────────────────────────────────────────────────────────────
     private async Task AddEntryAsync()
     {
@@ -248,6 +261,7 @@
                 hours         = 8m;
                 overtimeHours = 0m;
                 drivingUnits  = 0;
+                showCreateForm = false;
                 await LoadEntriesAsync();
             }
             else

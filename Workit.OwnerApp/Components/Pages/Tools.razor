@@ -5,44 +5,56 @@
 
 <PageTitle>Tools</PageTitle>
 
-@* ── Add Tool ── *@
+@* ── Header ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
-    <FluentLabel Typo="Typography.PaneHeader">Tools</FluentLabel>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Tools</FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+            @(showCreateForm ? "✕ Cancel" : "+ New")
+        </FluentButton>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
-        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
-    }
-
-    <div class="admin-grid">
-        <div>
-            <FluentLabel>Name</FluentLabel>
-            <FluentTextField @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
-        </div>
-
-        <div>
-            <FluentLabel>Serial number</FluentLabel>
-            <FluentTextField @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
-        </div>
-
-        <div style="grid-column: span 2">
-            <FluentLabel>Description</FluentLabel>
-            <FluentTextField @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
-        </div>
-
-        <div style="display:flex; align-items:flex-end;">
-            <FluentButton Appearance="Appearance.Accent" @onclick="CreateToolAsync"
-                          Disabled="@(string.IsNullOrWhiteSpace(newName) || saving)">
-                @(saving ? "Saving…" : "Add Tool")
-            </FluentButton>
-        </div>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(saveResult))
-    {
-        <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
 </FluentCard>
+
+@* ── Add Tool form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>New Tool</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
+                <FluentTextField @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
+            </div>
+
+            <div>
+                <FluentLabel>Serial number</FluentLabel>
+                <FluentTextField @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
+            </div>
+
+            <div style="grid-column: span 2">
+                <FluentLabel>Description</FluentLabel>
+                <FluentTextField @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateToolAsync"
+                          Disabled="@(string.IsNullOrWhiteSpace(newName) || saving)">
+                @(saving ? "Saving…" : "Save")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(saveResult))
+        {
+            <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+        }
+    </FluentCard>
+}
 
 @* ── Edit panel ── *@
 @if (editingTool is not null)
@@ -150,6 +162,7 @@
 
     // ── State ─────────────────────────────────────────────────────────────────
     private bool loading = true;
+    private bool showCreateForm;
     private readonly List<ToolRow> tools = [];
     private readonly List<AssignmentRow> currentAssignments = [];
     private readonly Dictionary<Guid, string> employeeNames = new();
@@ -261,6 +274,8 @@
         loading = false;
     }
 
+    private void ToggleCreateForm() => showCreateForm = !showCreateForm;
+
     // ── Create ────────────────────────────────────────────────────────────────
     private async Task CreateToolAsync()
     {
@@ -284,6 +299,7 @@
                 newName        = string.Empty;
                 newSerial      = string.Empty;
                 newDescription = string.Empty;
+                showCreateForm = false;
                 await LoadAsync();
             }
             else
