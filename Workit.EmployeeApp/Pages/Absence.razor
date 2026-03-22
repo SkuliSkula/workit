@@ -1,0 +1,373 @@
+@page "/absence"
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+@inject IAbsenceApi AbsenceApi
+
+<PageTitle>Absence</PageTitle>
+
+@* ── Summary header ── *@
+<div class="hours-header employee-shell hours-card">
+    <div>
+        <span class="employee-eyebrow">This year</span>
+        <div class="hours-header-total">
+            @totalDays<span class="hours-header-unit"> days</span>
+        </div>
+    </div>
+    <div class="hours-header-stats">
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@pendingCount</span>
+            <span class="hours-header-stat-lbl">pending</span>
+        </div>
+        <div class="hours-header-stat">
+            <span class="hours-header-stat-val">@approvedCount</span>
+            <span class="hours-header-stat-lbl">approved</span>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-error-banner">@loadError</div>
+}
+
+@* ── Absence list ── *@
+@if (absences.Count == 0 && string.IsNullOrWhiteSpace(loadError))
+{
+    <div class="hours-empty">
+        <FluentIcon Value="new Size48.Calendar()" />
+        <strong>No absence requests</strong>
+        <span>Tap the + button to request time off.</span>
+    </div>
+}
+else
+{
+    <div class="hours-entry-list">
+        @foreach (var a in absences.OrderByDescending(x => x.StartDate))
+        {
+            <div class="hours-entry-item" @onclick="@(() => { if (a.Status == AbsenceStatus.Pending) OpenSheet(a); })">
+                <div class="hours-entry-top">
+                    <span class="hours-entry-date">@a.StartDate.ToString("MMM d") – @a.EndDate.ToString("MMM d, yyyy")</span>
+                    <div class="hours-entry-badges">
+                        <span class="hours-entry-badge @GetBadgeClass(a.Status)">@a.Status</span>
+                    </div>
+                </div>
+                <div class="hours-entry-job">@FormatType(a.Type) · @(a.EndDate.DayNumber - a.StartDate.DayNumber + 1) day(s)</div>
+                @if (!string.IsNullOrWhiteSpace(a.Notes))
+                {
+                    <div class="hours-entry-notes">@a.Notes</div>
+                }
+                @if (!string.IsNullOrWhiteSpace(a.ReviewNotes))
+                {
+                    <div class="hours-entry-notes" style="font-style:italic;">Review: @a.ReviewNotes</div>
+                }
+                @if (a.Status == AbsenceStatus.Pending)
+                {
+                    <button class="absence-cancel-btn" @onclick:stopPropagation="true" @onclick="@(() => CancelAsync(a.Id))">
+                        Cancel request
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@* ── FAB ── *@
+<button class="hours-fab" @onclick="@(() => OpenSheet())" aria-label="Request absence">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28"
+         fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="4" x2="12" y2="20" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+    </svg>
+</button>
+
+@* ── Bottom sheet backdrop ── *@
+<div class="sheet-backdrop @(isSheetOpen ? "show" : string.Empty)" @onclick="CloseSheet"></div>
+
+@* ── Bottom sheet drawer ── *@
+<section class="sheet @(isSheetOpen ? "show" : string.Empty)">
+    <div class="sheet-handle"></div>
+
+    <div class="sheet-header">
+        <div class="sheet-header-left">
+            <div class="sheet-header-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+            </div>
+            <h2>@(editingAbsence is null ? "Request absence" : "Edit request")</h2>
+        </div>
+        <button class="sheet-close-btn" @onclick="CloseSheet" aria-label="Close">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="sheet-form">
+        <div class="sheet-field sheet-field-full">
+            <label class="sheet-label">Type</label>
+            <FluentSelect TValue="string" TOption="string"
+                          Value="@selectedType.ToString()"
+                          ValueChanged="@(v => { if (Enum.TryParse<AbsenceType>(v, out var t)) selectedType = t; })"
+                          style="width:100%">
+                @foreach (var t in Enum.GetValues<AbsenceType>())
+                {
+                    <FluentOption TOption="string" Value="@t.ToString()">@FormatType(t)</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+
+        <div class="sheet-row sheet-row-3">
+            <div class="sheet-field">
+                <label class="sheet-label">Start date</label>
+                <FluentDatePicker @bind-Value="startDate" style="width:100%" />
+            </div>
+            <div class="sheet-field">
+                <label class="sheet-label">End date</label>
+                <FluentDatePicker @bind-Value="endDate" style="width:100%" />
+            </div>
+            <div class="sheet-field">
+                <label class="sheet-label">Days</label>
+                <span class="absence-days-preview">@DaysPreview</span>
+            </div>
+        </div>
+
+        <div class="sheet-field sheet-field-full">
+            <label class="sheet-label">Notes <span class="sheet-label-hint">optional</span></label>
+            <FluentTextField @bind-Value="notes" Placeholder="Reason for absence" style="width:100%" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(saveError))
+    {
+        <div class="hours-error-banner">@saveError</div>
+    }
+
+    <button class="sheet-save-btn" @onclick="SaveAsync" disabled="@(!CanSave || isSaving)">
+        @if (isSaving)
+        {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 class="sheet-save-spinner">
+                <path d="M12 2a10 10 0 1 0 10 10" />
+            </svg>
+            <span>Saving…</span>
+        }
+        else
+        {
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"
+                 fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span>@(editingAbsence is null ? "Submit request" : "Save changes")</span>
+        }
+    </button>
+</section>
+
+<style>
+    .absence-cancel-btn {
+        background: none;
+        border: none;
+        color: #c62828;
+        font-size: 0.8rem;
+        padding: 0.25rem 0;
+        cursor: pointer;
+        text-decoration: underline;
+    }
+
+    .absence-days-preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 40px;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--accent-fill-rest, #1a4878);
+    }
+
+    .badge-pending { background: #fff3e0; color: #e65100; }
+    .badge-approved { background: #e8f5e9; color: #2e7d32; }
+    .badge-denied { background: #ffebee; color: #c62828; }
+    .badge-cancelled { background: #f5f5f5; color: #757575; }
+</style>
+
+@code {
+    private readonly List<AbsenceRequest> absences = [];
+
+    private AbsenceRequest? editingAbsence;
+    private AbsenceType selectedType = AbsenceType.Vacation;
+    private DateTime? startDate = DateTime.Today;
+    private DateTime? endDate = DateTime.Today;
+    private string notes = string.Empty;
+    private string? loadError;
+    private string? saveError;
+    private bool isSheetOpen;
+    private bool isSaving;
+
+    private int totalDays => absences
+        .Where(a => a.Status == AbsenceStatus.Approved &&
+                    a.StartDate.Year == DateTime.Today.Year)
+        .Sum(a => a.EndDate.DayNumber - a.StartDate.DayNumber + 1);
+
+    private int pendingCount => absences.Count(a => a.Status == AbsenceStatus.Pending);
+    private int approvedCount => absences.Count(a => a.Status == AbsenceStatus.Approved);
+
+    private int DaysPreview =>
+        startDate is not null && endDate is not null && endDate >= startDate
+            ? (DateOnly.FromDateTime(endDate.Value).DayNumber - DateOnly.FromDateTime(startDate.Value).DayNumber + 1)
+            : 0;
+
+    private bool CanSave =>
+        startDate is not null &&
+        endDate is not null &&
+        endDate >= startDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null || !string.Equals(session.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        absences.Clear();
+        var result = await AbsenceApi.GetAbsencesAsync();
+        if (result.IsSuccess)
+        {
+            absences.AddRange(result.Value ?? []);
+        }
+        else
+        {
+            loadError = result.ErrorMessage;
+        }
+    }
+
+    private void OpenSheet(AbsenceRequest? existing = null)
+    {
+        editingAbsence = existing;
+        if (existing is not null)
+        {
+            selectedType = existing.Type;
+            startDate = existing.StartDate.ToDateTime(TimeOnly.MinValue);
+            endDate = existing.EndDate.ToDateTime(TimeOnly.MinValue);
+            notes = existing.Notes;
+        }
+        else
+        {
+            selectedType = AbsenceType.Vacation;
+            startDate = DateTime.Today;
+            endDate = DateTime.Today;
+            notes = string.Empty;
+        }
+
+        saveError = null;
+        isSheetOpen = true;
+    }
+
+    private void CloseSheet()
+    {
+        isSheetOpen = false;
+        editingAbsence = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (startDate is null || endDate is null) return;
+        saveError = null;
+        isSaving = true;
+
+        try
+        {
+            if (editingAbsence is not null)
+            {
+                editingAbsence.Type = selectedType;
+                editingAbsence.StartDate = DateOnly.FromDateTime(startDate.Value);
+                editingAbsence.EndDate = DateOnly.FromDateTime(endDate.Value);
+                editingAbsence.Notes = notes.Trim();
+
+                var result = await AbsenceApi.UpdateAbsenceAsync(editingAbsence);
+                if (!result.IsSuccess)
+                {
+                    saveError = result.ErrorMessage;
+                    return;
+                }
+            }
+            else
+            {
+                var absence = new AbsenceRequest
+                {
+                    Type = selectedType,
+                    StartDate = DateOnly.FromDateTime(startDate.Value),
+                    EndDate = DateOnly.FromDateTime(endDate.Value),
+                    Notes = notes.Trim()
+                };
+
+                var result = await AbsenceApi.CreateAbsenceAsync(absence);
+                if (!result.IsSuccess)
+                {
+                    saveError = result.ErrorMessage;
+                    return;
+                }
+            }
+
+            CloseSheet();
+            await LoadDataAsync();
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task CancelAsync(Guid id)
+    {
+        var result = await AbsenceApi.DeleteAbsenceAsync(id);
+        if (result.IsSuccess)
+        {
+            await LoadDataAsync();
+        }
+        else
+        {
+            loadError = result.ErrorMessage;
+        }
+    }
+
+    private static string FormatType(AbsenceType type) => type switch
+    {
+        AbsenceType.Vacation => "Vacation",
+        AbsenceType.SickLeave => "Sick Leave",
+        AbsenceType.ParentalLeave => "Parental Leave",
+        AbsenceType.PersonalLeave => "Personal Leave",
+        AbsenceType.Bereavement => "Bereavement",
+        AbsenceType.UnpaidLeave => "Unpaid Leave",
+        AbsenceType.PublicHoliday => "Public Holiday",
+        AbsenceType.WorkInjury => "Work Injury",
+        AbsenceType.UnionLeave => "Union Leave",
+        AbsenceType.StudyLeave => "Study Leave",
+        AbsenceType.SickChildLeave => "Sick Child Leave",
+        _ => type.ToString()
+    };
+
+    private static string GetBadgeClass(AbsenceStatus status) => status switch
+    {
+        AbsenceStatus.Pending => "badge-pending",
+        AbsenceStatus.Approved => "badge-approved",
+        AbsenceStatus.Denied => "badge-denied",
+        AbsenceStatus.Cancelled => "badge-cancelled",
+        _ => string.Empty
+    };
+}

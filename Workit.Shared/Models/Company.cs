@@ -10,4 +10,5 @@ public sealed class Company
     public string Phone { get; set; } = string.Empty;
     public string Owner { get; set; } = string.Empty;
     public decimal DrivingUnitPrice { get; set; }
+    public decimal StandardHoursPerDay { get; set; } = 8m;
 }

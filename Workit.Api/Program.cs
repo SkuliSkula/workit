@@ -11,6 +11,7 @@ using Workit.Api.Data;
 using Workit.Api.Services;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
+using Workit.Shared.Utilities;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
@@ -1271,6 +1272,263 @@ securedApi.MapGet("/invoices/{id:guid}", async (WorkitDbContext db, HttpContext 
         }, apiLogger, "loading vendor invoice detail"))
     .WithName("GetInvoice");
 
+// ── Absences ──────────────────────────────────────────────────────────────────
+
+securedApi.MapGet("/absences", async (
+        WorkitDbContext db,
+        HttpContext httpContext,
+        Guid? employeeId,
+        DateOnly? from,
+        DateOnly? to,
+        AbsenceStatus? status,
+        CancellationToken ct) =>
+    {
+        var userContext = httpContext.User.ToUserContext();
+        var query = db.AbsenceRequests.Where(x => x.CompanyId == userContext.CompanyId);
+
+        if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal))
+        {
+            if (employeeId is not null)
+                query = query.Where(x => x.EmployeeId == employeeId.Value);
+        }
+        else if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+        {
+            if (userContext.EmployeeId is not Guid currentEmployeeId)
+                return Results.Forbid();
+            query = query.Where(x => x.EmployeeId == currentEmployeeId);
+        }
+        else
+        {
+            return Results.Forbid();
+        }
+
+        if (from is not null) query = query.Where(x => x.StartDate >= from.Value);
+        if (to is not null) query = query.Where(x => x.EndDate <= to.Value);
+        if (status is not null) query = query.Where(x => x.Status == status.Value);
+
+        return await ExecuteDbAsync(
+            async () => Results.Ok(await query.OrderByDescending(x => x.StartDate).ToListAsync(ct)),
+            apiLogger,
+            "loading absences");
+    })
+    .WithName("GetAbsences");
+
+securedApi.MapPost("/absences", async (WorkitDbContext db, HttpContext httpContext, AbsenceRequest absence, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            var userContext = httpContext.User.ToUserContext();
+
+            if (absence.StartDate > absence.EndDate)
+                return Results.BadRequest("Start date must be before or equal to end date.");
+
+            if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal))
+            {
+                // Owner registers absence directly — auto-approved
+                absence.CompanyId = userContext.CompanyId;
+                absence.Status = AbsenceStatus.Approved;
+                absence.ReviewedBy = userContext.UserId;
+                absence.ReviewedAt = DateTime.UtcNow;
+
+                var employeeExists = await db.Employees
+                    .AnyAsync(x => x.Id == absence.EmployeeId && x.CompanyId == userContext.CompanyId, ct);
+                if (!employeeExists)
+                    return Results.BadRequest("Employee not found in this company.");
+            }
+            else if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
+                     userContext.EmployeeId is Guid currentEmployeeId)
+            {
+                // Employee requests absence — starts as Pending
+                absence.CompanyId = userContext.CompanyId;
+                absence.EmployeeId = currentEmployeeId;
+                absence.Status = AbsenceStatus.Pending;
+                absence.ReviewedBy = null;
+                absence.ReviewedAt = null;
+            }
+            else
+            {
+                return Results.Forbid();
+            }
+
+            absence.CreatedAt = DateTime.UtcNow;
+            db.AbsenceRequests.Add(absence);
+            await db.SaveChangesAsync(ct);
+            return Results.Created($"/api/absences/{absence.Id}", absence);
+        },
+        apiLogger,
+        "creating an absence"))
+    .WithName("CreateAbsence");
+
+securedApi.MapPut("/absences/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, AbsenceRequest absence, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (id != absence.Id)
+                return Results.BadRequest("Absence id mismatch.");
+
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.AbsenceRequests.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (existing is null) return Results.NotFound();
+
+            // Only pending absences can be edited
+            if (existing.Status != AbsenceStatus.Pending && !httpContext.User.IsOwner())
+                return Results.BadRequest("Only pending absences can be edited.");
+
+            // Employees can only edit their own
+            if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
+                existing.EmployeeId != userContext.EmployeeId)
+                return Results.Forbid();
+
+            existing.Type = absence.Type;
+            existing.StartDate = absence.StartDate;
+            existing.EndDate = absence.EndDate;
+            existing.Notes = absence.Notes;
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "updating an absence"))
+    .WithName("UpdateAbsence");
+
+securedApi.MapDelete("/absences/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.AbsenceRequests.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (existing is null) return Results.NotFound();
+
+            if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+            {
+                // Employees can only cancel their own pending requests
+                if (existing.EmployeeId != userContext.EmployeeId)
+                    return Results.Forbid();
+                if (existing.Status != AbsenceStatus.Pending)
+                    return Results.BadRequest("Only pending requests can be cancelled.");
+
+                existing.Status = AbsenceStatus.Cancelled;
+                await db.SaveChangesAsync(ct);
+                return Results.Ok(existing);
+            }
+
+            if (!httpContext.User.IsOwner())
+                return Results.Forbid();
+
+            db.AbsenceRequests.Remove(existing);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        },
+        apiLogger,
+        "deleting an absence"))
+    .WithName("DeleteAbsence");
+
+securedApi.MapPost("/absences/{id:guid}/review", async (WorkitDbContext db, HttpContext httpContext, Guid id, AbsenceReviewPayload payload, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwner())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+            var existing = await db.AbsenceRequests.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+            if (existing is null) return Results.NotFound();
+
+            if (existing.Status != AbsenceStatus.Pending)
+                return Results.BadRequest("Only pending absences can be reviewed.");
+
+            if (payload.Status != AbsenceStatus.Approved && payload.Status != AbsenceStatus.Denied)
+                return Results.BadRequest("Status must be Approved or Denied.");
+
+            existing.Status = payload.Status;
+            existing.ReviewedBy = userContext.UserId;
+            existing.ReviewedAt = DateTime.UtcNow;
+            existing.ReviewNotes = payload.ReviewNotes ?? string.Empty;
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(existing);
+        },
+        apiLogger,
+        "reviewing an absence"))
+    .WithName("ReviewAbsence");
+
+// ── Work Duty ──────────────────────────────────────────────
+app.MapGet("/api/workduty", async (
+    int year,
+    int month,
+    WorkitDbContext db,
+    HttpContext httpContext) =>
+{
+    var userContext = httpContext.User.ToUserContext();
+
+    // Get company for standard hours
+    var company = await db.Companies.FindAsync(userContext.CompanyId);
+    var standardHours = company?.StandardHoursPerDay ?? 8m;
+
+    // Calculate work duty
+    var holidays = IcelandicHolidays.GetHolidaysInMonth(year, month);
+    var dutyHours = IcelandicHolidays.GetWorkDutyHours(year, month, standardHours);
+
+    // Get hours worked for the authenticated employee
+    var startDate = new DateOnly(year, month, 1);
+    var endDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+
+    decimal hoursWorked = 0;
+    if (userContext.EmployeeId is Guid empId)
+    {
+        hoursWorked = await db.TimeEntries
+            .Where(t => t.CompanyId == userContext.CompanyId
+                     && t.EmployeeId == empId
+                     && t.WorkDate >= startDate
+                     && t.WorkDate <= endDate)
+            .SumAsync(t => t.Hours + t.OvertimeHours);
+    }
+
+    // Count weekdays, holidays
+    var daysInMonth = DateTime.DaysInMonth(year, month);
+    int weekdays = 0;
+    for (int d = 1; d <= daysInMonth; d++)
+    {
+        var dow = new DateOnly(year, month, d).DayOfWeek;
+        if (dow != DayOfWeek.Saturday && dow != DayOfWeek.Sunday) weekdays++;
+    }
+
+    var fullHolidays = holidays.Count(h => !h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
+    var halfHolidays = holidays.Count(h => h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
+
+    var remaining = Math.Max(0, dutyHours - hoursWorked);
+    var pct = dutyHours > 0 ? Math.Round(hoursWorked / dutyHours * 100, 1) : 0;
+
+    return Results.Ok(new WorkDutyResponse
+    {
+        Year = year,
+        Month = month,
+        TotalCalendarDays = daysInMonth,
+        WeekdaysInMonth = weekdays,
+        FullHolidays = fullHolidays,
+        HalfHolidays = halfHolidays,
+        WorkDutyHours = dutyHours,
+        HoursWorked = hoursWorked,
+        HoursRemaining = remaining,
+        CompletionPercentage = pct,
+        Holidays = holidays.Select(h => new HolidayInfo
+        {
+            Date = h.Date.ToString("yyyy-MM-dd"),
+            Name = h.Name,
+            IsHalfDay = h.IsHalfDay
+        }).ToList()
+    });
+}).RequireAuthorization();
+
+app.MapPut("/api/company/standard-hours", async (
+    UpdateStandardHoursRequest req,
+    WorkitDbContext db,
+    HttpContext httpContext) =>
+{
+    var userContext = httpContext.User.ToUserContext();
+    var company = await db.Companies.FindAsync(userContext.CompanyId);
+    if (company is null) return Results.NotFound();
+    company.StandardHoursPerDay = req.StandardHoursPerDay;
+    await db.SaveChangesAsync();
+    return Results.Ok();
+}).RequireAuthorization();
+
 api.MapGet("/status/database", async (WorkitDbContext db, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
@@ -1413,3 +1671,4 @@ static async Task LogStartupDatabaseStatusAsync(
 }
 
 record UpdateDrivingRateRequest(decimal UnitPrice);
+record UpdateStandardHoursRequest(decimal StandardHoursPerDay);

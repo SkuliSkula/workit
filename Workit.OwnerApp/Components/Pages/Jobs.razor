@@ -15,11 +15,13 @@
         <FluentLabel Typo="Typography.PaneHeader">Jobs</FluentLabel>
         @if (company is not null)
         {
-            <div style="display:flex; align-items:center; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
                 <FluentLabel style="white-space:nowrap; font-size:0.85rem;">Driving rate</FluentLabel>
                 <FluentNumberField TValue="decimal" @bind-Value="drivingUnitPrice" Min="0" Step="1" style="width:100px;" />
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="SaveDrivingRateAsync" Disabled="@savingDrivingRate">
-                    @(savingDrivingRate ? "…" : "Save")
+                <FluentLabel style="white-space:nowrap; font-size:0.85rem;">Standard hours/day</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="standardHoursPerDay" Min="1" Max="24" Step="0.5" style="width:100px;" />
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="SaveCompanySettingsAsync" Disabled="@savingSettings">
+                    @(savingSettings ? "…" : "Save")
                 </FluentButton>
                 <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
                     @(showCreateForm ? "✕ Cancel" : "+ New")
@@ -37,9 +39,9 @@
     {
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
-    @if (!string.IsNullOrWhiteSpace(drivingRateError))
+    @if (!string.IsNullOrWhiteSpace(settingsError))
     {
-        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@drivingRateError</FluentLabel>
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@settingsError</FluentLabel>
     }
 </FluentCard>
 
@@ -356,10 +358,11 @@ else if (company is not null)
         showCreateForm = !showCreateForm;
     }
 
-    // ── Driving rate state ─────────────────────────────────────────────────────
+    // ── Company settings state ──────────────────────────────────────────────────
     private decimal drivingUnitPrice;
-    private bool    savingDrivingRate;
-    private string? drivingRateError;
+    private decimal standardHoursPerDay = 8m;
+    private bool    savingSettings;
+    private string? settingsError;
 
     // ── View models ────────────────────────────────────────────────────────────
     private sealed class JobDetail
@@ -409,6 +412,7 @@ else if (company is not null)
         company = companyResult.Value;
         if (!companyResult.IsSuccess || company is null) { loadError = companyResult.ErrorMessage; loading = false; return; }
         drivingUnitPrice = company.DrivingUnitPrice;
+        standardHoursPerDay = company.StandardHoursPerDay;
 
         var custTask = CustomersApi.GetCustomersAsync();
         var jobTask  = JobsApi.GetJobsAsync();
@@ -547,17 +551,26 @@ else if (company is not null)
 
     private void CancelJobEdit() { editingJob = null; editingCustomerId = null; }
 
-    // ── Driving rate ──────────────────────────────────────────────────────────
-    private async Task SaveDrivingRateAsync()
+    // ── Company settings ──────────────────────────────────────────────────────
+    private async Task SaveCompanySettingsAsync()
     {
-        savingDrivingRate = true;
-        drivingRateError  = null;
+        savingSettings = true;
+        settingsError  = null;
         try
         {
-            var result = await CompanyApi.UpdateDrivingRateAsync(drivingUnitPrice);
-            if (!result.IsSuccess) drivingRateError = result.ErrorMessage;
-            else if (company is not null) company.DrivingUnitPrice = drivingUnitPrice;
+            var rateResult  = await CompanyApi.UpdateDrivingRateAsync(drivingUnitPrice);
+            var hoursResult = await CompanyApi.UpdateStandardHoursAsync(standardHoursPerDay);
+
+            if (!rateResult.IsSuccess)
+                settingsError = rateResult.ErrorMessage;
+            else if (!hoursResult.IsSuccess)
+                settingsError = hoursResult.ErrorMessage;
+            else if (company is not null)
+            {
+                company.DrivingUnitPrice = drivingUnitPrice;
+                company.StandardHoursPerDay = standardHoursPerDay;
+            }
         }
-        finally { savingDrivingRate = false; }
+        finally { savingSettings = false; }
     }
 }

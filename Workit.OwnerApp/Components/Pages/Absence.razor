@@ -1,0 +1,404 @@
+@page "/absence"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IEmployeesApi EmployeesApi
+@inject IAbsenceApi AbsenceApi
+
+<PageTitle>Absence</PageTitle>
+
+@* ── Header ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Absence</FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+            @(showCreateForm ? "✕ Cancel" : "+ New")
+        </FluentButton>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Register absence form ── *@
+@if (showCreateForm)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Register Absence</strong></FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentLabel>Employee <span style="color:red">*</span></FluentLabel>
+                @if (employees.Count > 0)
+                {
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                        @foreach (var emp in employees)
+                        {
+                            <FluentOption TOption="string" Value="@emp.Id.ToString()">@emp.DisplayName</FluentOption>
+                        }
+                    </FluentSelect>
+                }
+                else
+                {
+                    <FluentLabel>No employees yet.</FluentLabel>
+                }
+            </div>
+            <div>
+                <FluentLabel>Type <span style="color:red">*</span></FluentLabel>
+                <FluentSelect TValue="string" TOption="string"
+                              Value="@newType.ToString()"
+                              ValueChanged="@(v => { if (Enum.TryParse<AbsenceType>(v, out var t)) newType = t; })"
+                              style="width:100%">
+                    @foreach (var t in Enum.GetValues<AbsenceType>())
+                    {
+                        <FluentOption TOption="string" Value="@t.ToString()">@FormatType(t)</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentLabel>Start date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="newStartDate" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>End date <span style="color:red">*</span></FluentLabel>
+                <FluentDatePicker @bind-Value="newEndDate" style="width:100%" />
+            </div>
+            <div style="grid-column: span 2">
+                <FluentLabel>Notes</FluentLabel>
+                <FluentTextField @bind-Value="newNotes" Placeholder="Optional notes" style="width:100%" />
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateAbsenceAsync"
+                          Disabled="@(!CanCreate || saving)">
+                @(saving ? "Saving…" : "Save")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(saveResult))
+        {
+            <FluentLabel style="margin-top:0.25rem;">@saveResult</FluentLabel>
+        }
+    </FluentCard>
+}
+
+@* ── Pending Requests ── *@
+@if (pendingRows.Count > 0)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Pending Requests (@pendingRows.Count)</strong></FluentLabel>
+
+        <FluentDataGrid TGridItem="AbsenceRow" Items="@pendingRows.AsQueryable()"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
+            <PropertyColumn Property="@(x => x.TypeLabel)" Title="Type" />
+            <PropertyColumn Property="@(x => x.StartDate)" Title="From" Format="dd MMM yyyy" />
+            <PropertyColumn Property="@(x => x.EndDate)" Title="To" Format="dd MMM yyyy" />
+            <PropertyColumn Property="@(x => x.Days)" Title="Days" />
+            <PropertyColumn Property="@(x => x.Notes)" Title="Notes" />
+            <TemplateColumn Title="Actions">
+                <div style="display:flex; gap:0.25rem;">
+                    <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Accent"
+                                  @onclick="@(() => ReviewAsync(context.Id, AbsenceStatus.Approved))">Approve</FluentButton>
+                    <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Outline"
+                                  @onclick="@(() => ReviewAsync(context.Id, AbsenceStatus.Denied))"
+                                  style="color:#c62828;">Deny</FluentButton>
+                </div>
+            </TemplateColumn>
+        </FluentDataGrid>
+    </FluentCard>
+}
+
+@* ── Filters + All Absences ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body"><strong>All Absences</strong></FluentLabel>
+
+    <div class="admin-grid">
+        <div>
+            <FluentLabel>Employee</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterEmployeeId" style="width:100%">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                @foreach (var emp in employees)
+                {
+                    <FluentOption TOption="string" Value="@emp.Id.ToString()">@emp.DisplayName</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+        <div>
+            <FluentLabel>Status</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterStatus" style="width:100%">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                @foreach (var s in Enum.GetValues<AbsenceStatus>())
+                {
+                    <FluentOption TOption="string" Value="@s.ToString()">@s</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+        <FluentDatePicker @bind-Value="filterFrom" Label="From" />
+        <FluentDatePicker @bind-Value="filterTo" Label="To" />
+        <div style="display:flex; align-items:flex-end;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="LoadAbsencesAsync" Disabled="@loading">
+                @(loading ? "Loading…" : "Load")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (absenceRows.Count > 0)
+    {
+        <FluentDataGrid TGridItem="AbsenceRow" Items="@absenceRows.AsQueryable()"
+                        DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
+            <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
+            <PropertyColumn Property="@(x => x.TypeLabel)" Title="Type" />
+            <PropertyColumn Property="@(x => x.StartDate)" Title="From" Format="dd MMM yyyy" />
+            <PropertyColumn Property="@(x => x.EndDate)" Title="To" Format="dd MMM yyyy" />
+            <PropertyColumn Property="@(x => x.Days)" Title="Days" />
+            <TemplateColumn Title="Status">
+                <span class="@GetStatusClass(context.Status)">@context.Status</span>
+            </TemplateColumn>
+            <PropertyColumn Property="@(x => x.Notes)" Title="Notes" />
+            <TemplateColumn Title="Actions">
+                @if (context.Status == AbsenceStatus.Pending)
+                {
+                    <div style="display:flex; gap:0.25rem;">
+                        <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Accent"
+                                      @onclick="@(() => ReviewAsync(context.Id, AbsenceStatus.Approved))">Approve</FluentButton>
+                        <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Outline"
+                                      @onclick="@(() => ReviewAsync(context.Id, AbsenceStatus.Denied))"
+                                      style="color:#c62828;">Deny</FluentButton>
+                    </div>
+                }
+                @if (context.Status != AbsenceStatus.Cancelled)
+                {
+                    <FluentButton Size="ButtonSize.Small" Appearance="Appearance.Stealth"
+                                  @onclick="@(() => DeleteAbsenceAsync(context.Id))"
+                                  style="color:#c62828;">Delete</FluentButton>
+                }
+            </TemplateColumn>
+        </FluentDataGrid>
+
+        <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
+            @absenceRows.Count absences
+            · @absenceRows.Sum(r => r.Days) total days
+        </FluentLabel>
+    }
+    else if (!loading && hasLoaded)
+    {
+        <FluentLabel style="margin-top:0.5rem;">No absences found.</FluentLabel>
+    }
+</FluentCard>
+
+<style>
+    .status-pending  { color: #e65100; font-weight: 600; }
+    .status-approved { color: #2e7d32; font-weight: 600; }
+    .status-denied   { color: #c62828; font-weight: 600; }
+    .status-cancelled { color: #757575; font-weight: 600; }
+</style>
+
+@code {
+    // ── Lookup data ──
+    private readonly List<Employee> employees = [];
+    private readonly Dictionary<Guid, string> employeeNames = new();
+
+    // ── Create form state ──
+    private bool showCreateForm;
+    private string? selectedEmployeeId;
+    private AbsenceType newType = AbsenceType.Vacation;
+    private DateTime? newStartDate = DateTime.Today;
+    private DateTime? newEndDate = DateTime.Today;
+    private string newNotes = string.Empty;
+    private bool saving;
+    private string? saveResult;
+    private string? loadError;
+
+    private bool CanCreate =>
+        Guid.TryParse(selectedEmployeeId, out _) &&
+        newStartDate is not null &&
+        newEndDate is not null &&
+        newEndDate >= newStartDate;
+
+    // ── Filter + list state ──
+    private string? filterEmployeeId;
+    private string? filterStatus;
+    private DateTime? filterFrom = new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime? filterTo = DateTime.Today.AddMonths(3);
+    private bool loading;
+    private bool hasLoaded;
+    private readonly List<AbsenceRow> absenceRows = [];
+    private readonly List<AbsenceRow> pendingRows = [];
+
+    private sealed class AbsenceRow
+    {
+        public Guid Id { get; set; }
+        public string EmployeeName { get; set; } = string.Empty;
+        public string TypeLabel { get; set; } = string.Empty;
+        public DateOnly StartDate { get; set; }
+        public DateOnly EndDate { get; set; }
+        public int Days { get; set; }
+        public AbsenceStatus Status { get; set; }
+        public string Notes { get; set; } = string.Empty;
+    }
+
+    // ── Lifecycle ──
+    protected override async Task OnInitializedAsync()
+    {
+        var empResult = await EmployeesApi.GetEmployeesAsync();
+        if (empResult.IsSuccess)
+        {
+            employees.AddRange(empResult.Value ?? []);
+            foreach (var e in employees)
+                employeeNames[e.Id] = e.DisplayName;
+            selectedEmployeeId = employees.FirstOrDefault()?.Id.ToString();
+        }
+        else
+        {
+            loadError = empResult.ErrorMessage;
+        }
+
+        await LoadAbsencesAsync();
+    }
+
+    private void ToggleCreateForm() => showCreateForm = !showCreateForm;
+
+    // ── Create ──
+    private async Task CreateAbsenceAsync()
+    {
+        if (!Guid.TryParse(selectedEmployeeId, out var empId)) return;
+        if (newStartDate is null || newEndDate is null) return;
+
+        saving = true;
+        saveResult = null;
+
+        try
+        {
+            var result = await AbsenceApi.CreateAbsenceAsync(new AbsenceRequest
+            {
+                EmployeeId = empId,
+                Type = newType,
+                StartDate = DateOnly.FromDateTime(newStartDate.Value),
+                EndDate = DateOnly.FromDateTime(newEndDate.Value),
+                Notes = newNotes.Trim()
+            });
+
+            if (result.IsSuccess)
+            {
+                saveResult = "✓ Absence registered.";
+                newNotes = string.Empty;
+                newType = AbsenceType.Vacation;
+                newStartDate = DateTime.Today;
+                newEndDate = DateTime.Today;
+                showCreateForm = false;
+                await LoadAbsencesAsync();
+            }
+            else
+            {
+                saveResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // ── Review ──
+    private async Task ReviewAsync(Guid id, AbsenceStatus status)
+    {
+        var result = await AbsenceApi.ReviewAbsenceAsync(id, status);
+        if (result.IsSuccess)
+        {
+            await LoadAbsencesAsync();
+        }
+        else
+        {
+            loadError = result.ErrorMessage;
+        }
+    }
+
+    // ── Delete ──
+    private async Task DeleteAbsenceAsync(Guid id)
+    {
+        var result = await AbsenceApi.DeleteAbsenceAsync(id);
+        if (result.IsSuccess)
+        {
+            await LoadAbsencesAsync();
+        }
+        else
+        {
+            loadError = result.ErrorMessage;
+        }
+    }
+
+    // ── Load ──
+    private async Task LoadAbsencesAsync()
+    {
+        loading = true;
+        hasLoaded = false;
+        absenceRows.Clear();
+        pendingRows.Clear();
+
+        try
+        {
+            Guid? empFilter = Guid.TryParse(filterEmployeeId, out var eid) ? eid : null;
+            AbsenceStatus? statusFilter = Enum.TryParse<AbsenceStatus>(filterStatus, out var sf) ? sf : null;
+            var from = filterFrom is not null ? DateOnly.FromDateTime(filterFrom.Value) : (DateOnly?)null;
+            var to = filterTo is not null ? DateOnly.FromDateTime(filterTo.Value) : (DateOnly?)null;
+
+            var result = await AbsenceApi.GetAbsencesAsync(empFilter, from, to, statusFilter);
+            if (!result.IsSuccess)
+            {
+                loadError = result.ErrorMessage;
+                return;
+            }
+
+            foreach (var a in result.Value ?? [])
+            {
+                var row = new AbsenceRow
+                {
+                    Id = a.Id,
+                    EmployeeName = employeeNames.GetValueOrDefault(a.EmployeeId, a.EmployeeId.ToString()),
+                    TypeLabel = FormatType(a.Type),
+                    StartDate = a.StartDate,
+                    EndDate = a.EndDate,
+                    Days = a.EndDate.DayNumber - a.StartDate.DayNumber + 1,
+                    Status = a.Status,
+                    Notes = a.Notes
+                };
+
+                absenceRows.Add(row);
+                if (a.Status == AbsenceStatus.Pending)
+                    pendingRows.Add(row);
+            }
+        }
+        finally
+        {
+            loading = false;
+            hasLoaded = true;
+        }
+    }
+
+    // ── Helpers ──
+    private static string FormatType(AbsenceType type) => type switch
+    {
+        AbsenceType.Vacation => "Vacation",
+        AbsenceType.SickLeave => "Sick Leave",
+        AbsenceType.ParentalLeave => "Parental Leave",
+        AbsenceType.PersonalLeave => "Personal Leave",
+        AbsenceType.Bereavement => "Bereavement",
+        AbsenceType.UnpaidLeave => "Unpaid Leave",
+        AbsenceType.PublicHoliday => "Public Holiday",
+        AbsenceType.WorkInjury => "Work Injury",
+        AbsenceType.UnionLeave => "Union Leave",
+        AbsenceType.StudyLeave => "Study Leave",
+        AbsenceType.SickChildLeave => "Sick Child Leave",
+        _ => type.ToString()
+    };
+
+    private static string GetStatusClass(AbsenceStatus status) => status switch
+    {
+        AbsenceStatus.Pending => "status-pending",
+        AbsenceStatus.Approved => "status-approved",
+        AbsenceStatus.Denied => "status-denied",
+        AbsenceStatus.Cancelled => "status-cancelled",
+        _ => string.Empty
+    };
+}

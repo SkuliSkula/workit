@@ -7,6 +7,7 @@ public interface ICompanyApi
     Task<ApiResult<Company?>> GetCompanyAsync();
     Task<ApiResult> CreateCompanyAsync(Company company);
     Task<ApiResult> UpdateDrivingRateAsync(decimal unitPrice);
+    Task<ApiResult> UpdateStandardHoursAsync(decimal standardHoursPerDay);
 }
 
 internal sealed class CompanyApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -20,4 +21,7 @@ internal sealed class CompanyApi(HttpClient httpClient, IAccessTokenAccessor acc
 
     public Task<ApiResult> UpdateDrivingRateAsync(decimal unitPrice) =>
         PutAsync("api/company/driving-rate", new { unitPrice }, "The driving rate could not be updated right now.");
+
+    public Task<ApiResult> UpdateStandardHoursAsync(decimal standardHoursPerDay) =>
+        PutAsync("api/company/standard-hours", new { standardHoursPerDay }, "The standard hours setting could not be updated right now.");
 }
