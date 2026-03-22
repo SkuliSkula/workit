@@ -1,0 +1,193 @@
+@page "/calendar"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@using Workit.Shared.Utilities
+
+<PageTitle>Calendar</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Calendar</FluentLabel>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="PreviousYear">
+                <FluentIcon Value="new Size24.ChevronLeft()" />
+            </FluentButton>
+            <span style="font-size:1.25rem; font-weight:700; color:#14304b; min-width:60px; text-align:center;">@selectedYear</span>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="NextYear">
+                <FluentIcon Value="new Size24.ChevronRight()" />
+            </FluentButton>
+        </div>
+    </div>
+</FluentCard>
+
+@* ── Year summary ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div class="year-summary">
+        <div class="year-stat">
+            <span class="year-stat-value">@totalHolidays</span>
+            <span class="year-stat-label">Public holidays</span>
+        </div>
+        <div class="year-stat">
+            <span class="year-stat-value">@halfDayHolidays</span>
+            <span class="year-stat-label">Half-day holidays</span>
+        </div>
+        <div class="year-stat">
+            <span class="year-stat-value">@totalWorkingDays</span>
+            <span class="year-stat-label">Working days</span>
+        </div>
+        <div class="year-stat">
+            <span class="year-stat-value year-stat-accent">@totalDutyHours</span>
+            <span class="year-stat-label">Duty hours (@standardHoursPerDay h/day)</span>
+        </div>
+    </div>
+</FluentCard>
+
+@* ── Month grid ── *@
+<div class="month-grid">
+    @for (int m = 1; m <= 12; m++)
+    {
+        var month = m;
+        var monthName = new DateOnly(selectedYear, month, 1).ToString("MMMM");
+        var holidaysInMonth = allHolidays.Where(h => h.Date.Month == month).ToList();
+        var workDays = IcelandicHolidays.GetWorkingDaysInMonth(selectedYear, month, standardHoursPerDay);
+        var dutyHours = workDays * standardHoursPerDay;
+        var isCurrentMonth = selectedYear == DateTime.Now.Year && month == DateTime.Now.Month;
+
+        <FluentCard Class="@($"admin-card month-card{(isCurrentMonth ? " month-card--current" : "")}")" AreaRestricted="false">
+            <div class="month-header">
+                <span class="month-name">@monthName</span>
+                <span class="month-meta">@workDays days · @dutyHours h</span>
+            </div>
+
+            @* ── Calendar table ── *@
+            @{
+                var firstDay = new DateOnly(selectedYear, month, 1);
+                var startOffset = ((int)firstDay.DayOfWeek + 6) % 7; // Mon=0 ... Sun=6
+                var daysInMonth = DateTime.DaysInMonth(selectedYear, month);
+                var holidayLookup = holidaysInMonth.ToDictionary(h => h.Date);
+                var totalCells = startOffset + daysInMonth;
+                var rows = (totalCells + 6) / 7;
+            }
+
+            <table class="cal-table">
+                <thead>
+                    <tr>
+                        <th>Mo</th>
+                        <th>Tu</th>
+                        <th>We</th>
+                        <th>Th</th>
+                        <th>Fr</th>
+                        <th class="cal-weekend-th">Sa</th>
+                        <th class="cal-weekend-th">Su</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var dayCounter = 1;
+                    }
+                    @for (int row = 0; row < rows; row++)
+                    {
+                        <tr>
+                            @for (int col = 0; col < 7; col++)
+                            {
+                                var cellIndex = row * 7 + col;
+                                if (cellIndex < startOffset || dayCounter > daysInMonth)
+                                {
+                                    <td></td>
+                                }
+                                else
+                                {
+                                    var d = dayCounter;
+                                    var date = new DateOnly(selectedYear, month, d);
+                                    var dow = date.DayOfWeek;
+                                    var isWeekend = dow == DayOfWeek.Saturday || dow == DayOfWeek.Sunday;
+                                    var isHoliday = holidayLookup.TryGetValue(date, out var holiday);
+                                    var isToday = date == DateOnly.FromDateTime(DateTime.Now);
+
+                                    var cls = "";
+                                    if (isToday) cls = "cal-today";
+                                    else if (isHoliday && !holiday!.IsHalfDay) cls = "cal-holiday";
+                                    else if (isHoliday && holiday!.IsHalfDay) cls = "cal-halfday";
+                                    else if (isWeekend) cls = "cal-weekend";
+
+                                    <td class="@cls"
+                                        title="@(isHoliday ? $"{holiday!.Name} ({holiday.NameIcelandic})" : "")">
+                                        @d
+                                    </td>
+
+                                    dayCounter++;
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @* ── Holiday list ── *@
+            @if (holidaysInMonth.Count > 0)
+            {
+                <div class="holiday-list">
+                    @foreach (var h in holidaysInMonth)
+                    {
+                        <div class="holiday-row">
+                            <span class="@(h.IsHalfDay ? "holiday-dot holiday-dot--half" : "holiday-dot")"></span>
+                            <span class="holiday-date">@h.Date.ToString("MMM d")</span>
+                            <span class="holiday-name">@h.Name</span>
+                            <span class="holiday-name-is">@h.NameIcelandic</span>
+                            @if (h.IsHalfDay)
+                            {
+                                <span class="holiday-badge">Half day</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="no-holidays">No holidays this month</div>
+            }
+        </FluentCard>
+    }
+</div>
+
+@code {
+    private int selectedYear = DateTime.Now.Year;
+    private decimal standardHoursPerDay = 8m;
+    private List<PublicHoliday> allHolidays = [];
+
+    private int totalHolidays => allHolidays.Count;
+    private int halfDayHolidays => allHolidays.Count(h => h.IsHalfDay);
+    private decimal totalWorkingDays => Enumerable.Range(1, 12)
+        .Sum(m => IcelandicHolidays.GetWorkingDaysInMonth(selectedYear, m, standardHoursPerDay));
+    private decimal totalDutyHours => totalWorkingDays * standardHoursPerDay;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await CompanyApi.GetCompanyAsync();
+        if (result.IsSuccess && result.Value is not null)
+        {
+            standardHoursPerDay = result.Value.StandardHoursPerDay > 0
+                ? result.Value.StandardHoursPerDay
+                : 8m;
+        }
+
+        LoadYear();
+    }
+
+    private void LoadYear()
+    {
+        allHolidays = IcelandicHolidays.GetHolidays(selectedYear);
+    }
+
+    private void PreviousYear()
+    {
+        selectedYear--;
+        LoadYear();
+    }
+
+    private void NextYear()
+    {
+        selectedYear++;
+        LoadYear();
+    }
+}
