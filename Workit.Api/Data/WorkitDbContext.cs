@@ -20,6 +20,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<EmailSettings> EmailSettings => Set<EmailSettings>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
+    public DbSet<UserCompany> UserCompanies => Set<UserCompany>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -112,5 +113,12 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .IsUnique();
         modelBuilder.Entity<RefreshToken>()
             .HasIndex(x => x.UserId);
+
+        modelBuilder.Entity<UserCompany>(e =>
+        {
+            e.ToTable("UserCompanies");
+            e.HasIndex(x => new { x.UserId, x.CompanyId }).IsUnique();
+            e.HasIndex(x => x.UserId);
+        });
     }
 }

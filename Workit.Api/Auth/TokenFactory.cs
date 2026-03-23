@@ -11,9 +11,10 @@ namespace Workit.Api.Auth;
 
 public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
 {
-    public LoginResponse CreateToken(AppUser user)
+    public LoginResponse CreateToken(AppUser user, Guid? companyIdOverride = null)
     {
         var options = jwtOptions.Value;
+        var companyId = companyIdOverride ?? user.CompanyId;
         var expires = DateTime.UtcNow.AddMinutes(options.ExpirationMinutes);
         var claims = new List<Claim>
         {
@@ -22,7 +23,7 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Role, user.Role),
-            new("company_id", user.CompanyId.ToString())
+            new("company_id", companyId.ToString())
         };
 
         if (user.EmployeeId is Guid employeeId)
@@ -45,7 +46,7 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
         {
             AccessToken = new JwtSecurityTokenHandler().WriteToken(token),
             UserId = user.Id,
-            CompanyId = user.CompanyId,
+            CompanyId = companyId,
             EmployeeId = user.EmployeeId,
             Role = user.Role,
             Email = user.Email

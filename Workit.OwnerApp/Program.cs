@@ -18,6 +18,7 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().Cre
 builder.Services.AddWorkitApiClients();
 builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
 builder.Services.AddScoped<AuthSessionService>();
+builder.Services.AddScoped<PaydayCredentialsInitializer>();
 builder.Services.AddPaydayApiClients(opts =>
     builder.Configuration.GetSection(PaydayOptions.SectionName).Bind(opts));
 

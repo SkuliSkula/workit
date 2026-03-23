@@ -58,3 +58,8 @@ public sealed class ResetPasswordRequest
 {
     public string NewPassword { get; set; } = string.Empty;
 }
+
+public sealed class SwitchCompanyRequest
+{
+    public Guid CompanyId { get; set; }
+}

@@ -11,4 +11,8 @@ public sealed class Company
     public string Owner { get; set; } = string.Empty;
     public decimal DrivingUnitPrice { get; set; }
     public decimal StandardHoursPerDay { get; set; } = 8m;
+
+    // Payday integration credentials (per-company)
+    public string? PaydayClientId { get; set; }
+    public string? PaydayClientSecret { get; set; }
 }

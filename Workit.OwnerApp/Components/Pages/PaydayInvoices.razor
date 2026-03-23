@@ -3,6 +3,7 @@
 @inject IPaydayInvoicesApi InvoicesApi
 @inject IPaydayCustomersApi CustomersApi
 @inject IJSRuntime JS
+@inject PaydayCredentialsInitializer PaydayInit
 
 <PageTitle>Payday Invoices</PageTitle>
 
@@ -495,6 +496,7 @@
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
+        await PaydayInit.InitializeAsync();
         var customersTask = CustomersApi.GetAllAsync(page: 1, perPage: 200);
         var invoicesTask  = FetchPageAsync(page: 1, append: false);
         await Task.WhenAll(customersTask, invoicesTask);

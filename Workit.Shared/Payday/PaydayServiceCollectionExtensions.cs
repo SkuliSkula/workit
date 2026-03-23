@@ -15,7 +15,7 @@ public static class PaydayServiceCollectionExtensions
             client.DefaultRequestHeaders.Add("Api-Version", "alpha");
         });
 
-        services.AddSingleton<IPaydayTokenService, PaydayTokenService>();
+        services.AddScoped<IPaydayTokenService, PaydayTokenService>();
         services.AddScoped<IPaydayUsersApi, PaydayUsersApi>();
         services.AddScoped<IPaydayCompaniesApi, PaydayCompaniesApi>();
         services.AddScoped<IPaydayCustomersApi, PaydayCustomersApi>();

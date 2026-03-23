@@ -1,0 +1,97 @@
+@page "/companies/new"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Add Company</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Add New Company</FluentLabel>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">← Back to Dashboard</FluentButton>
+    </div>
+</FluentCard>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div class="admin-grid" style="gap:1rem;">
+        <div>
+            <FluentLabel>Company Name <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Name" Style="width:100%" Placeholder="e.g. My Company ehf." />
+        </div>
+        <div>
+            <FluentLabel>SSN (Kennitala) <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Ssn" Style="width:100%" Placeholder="e.g. 1234567890" />
+        </div>
+        <div>
+            <FluentLabel>Email <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Email" Style="width:100%" Placeholder="e.g. info@company.is" />
+        </div>
+        <div>
+            <FluentLabel>Address <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Address" Style="width:100%" Placeholder="e.g. Laugavegur 1, 101 Reykjavík" />
+        </div>
+        <div>
+            <FluentLabel>Phone <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Phone" Style="width:100%" Placeholder="e.g. 555-1234" />
+        </div>
+        <div>
+            <FluentLabel>Owner Name <span style="color:red">*</span></FluentLabel>
+            <FluentTextField @bind-Value="newCompany.Owner" Style="width:100%" Placeholder="e.g. Jón Jónsson" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <FluentLabel Color="Color.Error" Style="margin-top:0.75rem;">@errorMessage</FluentLabel>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <FluentLabel Style="margin-top:0.75rem; color:#10b981; font-weight:600;">@successMessage</FluentLabel>
+    }
+
+    <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+        <FluentButton Appearance="Appearance.Accent"
+                      @onclick="CreateCompanyAsync"
+                      Disabled="@(!CanCreate || isSaving)">
+            @(isSaving ? "Creating…" : "Create Company")
+        </FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">Cancel</FluentButton>
+    </div>
+</FluentCard>
+
+@code {
+    private Company newCompany = new();
+    private bool isSaving;
+    private string? errorMessage;
+    private string? successMessage;
+
+    private bool CanCreate =>
+        !string.IsNullOrWhiteSpace(newCompany.Name) &&
+        !string.IsNullOrWhiteSpace(newCompany.Ssn) &&
+        !string.IsNullOrWhiteSpace(newCompany.Email) &&
+        !string.IsNullOrWhiteSpace(newCompany.Address) &&
+        !string.IsNullOrWhiteSpace(newCompany.Phone) &&
+        !string.IsNullOrWhiteSpace(newCompany.Owner);
+
+    private async Task CreateCompanyAsync()
+    {
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        var result = await CompanyApi.CreateCompanyAsync(newCompany);
+        if (result.IsSuccess)
+        {
+            successMessage = $"Company \"{newCompany.Name}\" created. You can now switch to it from the dashboard.";
+            newCompany = new();
+        }
+        else
+        {
+            errorMessage = result.ErrorMessage ?? "Could not create company.";
+        }
+
+        isSaving = false;
+    }
+}

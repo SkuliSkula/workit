@@ -1,6 +1,7 @@
 @page "/payday/expenses"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayExpensesApi ExpensesApi
+@inject PaydayCredentialsInitializer PaydayInit
 
 <PageTitle>Payday Expenses</PageTitle>
 
@@ -491,6 +492,7 @@
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
+        await PaydayInit.InitializeAsync();
         var accountsTask  = ExpensesApi.GetAccountsAsync();
         var expensesTask  = FetchPageAsync(page: 1, append: false);
         await Task.WhenAll(accountsTask, expensesTask);

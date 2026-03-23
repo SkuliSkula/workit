@@ -1,0 +1,217 @@
+@page "/payday/settings"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICompanyApi CompanyApi
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>Payday Connection</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Payday Connection</FluentLabel>
+            <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                Connect your Payday account to sync invoices, expenses, employees, and payroll.
+            </FluentLabel>
+        </div>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/payday"))">← Back to Payday</FluentButton>
+    </div>
+</FluentCard>
+
+@if (isLoading)
+{
+    <FluentCard Class="admin-card">
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            <FluentProgressRing />
+            <FluentLabel>Loading settings…</FluentLabel>
+        </div>
+    </FluentCard>
+}
+else
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">API Credentials</FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-bottom:1rem;">
+            Enter the Client ID and Client Secret from your Payday account.
+            You can find these in Payday under Settings → API / Integrations.
+        </FluentLabel>
+
+        <div style="display:grid; gap:1rem; max-width:500px;">
+            <div>
+                <FluentLabel>Client ID</FluentLabel>
+                <FluentTextField @bind-Value="clientId" Style="width:100%;" Placeholder="e.g. abc123-def456-..." />
+            </div>
+            <div>
+                <FluentLabel>Client Secret</FluentLabel>
+                <FluentTextField @bind-Value="clientSecret" Style="width:100%;" Placeholder="e.g. sk_live_..." TextFieldType="TextFieldType.Password" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(testMessage))
+        {
+            <div style="margin-top:1rem; padding:0.75rem 1rem; border-radius:10px; font-size:0.85rem;
+                         background:@(testSuccess ? "#ecfdf5" : "#fef2f2");
+                         color:@(testSuccess ? "#065f46" : "#991b1b");
+                         border: 1px solid @(testSuccess ? "#a7f3d0" : "#fecaca");">
+                @testMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(saveMessage))
+        {
+            <div style="margin-top:0.75rem; padding:0.75rem 1rem; border-radius:10px; font-size:0.85rem;
+                         background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">
+                @saveMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(saveError))
+        {
+            <div style="margin-top:0.75rem; padding:0.75rem 1rem; border-radius:10px; font-size:0.85rem;
+                         background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">
+                @saveError
+            </div>
+        }
+
+        <div style="display:flex; gap:0.75rem; margin-top:1.25rem; flex-wrap:wrap;">
+            <FluentButton Appearance="Appearance.Outline"
+                          @onclick="TestConnectionAsync"
+                          Disabled="@(isTesting || !HasCredentials)">
+                @(isTesting ? "Testing…" : "Test Connection")
+            </FluentButton>
+
+            <FluentButton Appearance="Appearance.Accent"
+                          @onclick="SaveCredentialsAsync"
+                          Disabled="@isSaving">
+                @(isSaving ? "Saving…" : "Save Credentials")
+            </FluentButton>
+
+            @if (hasExistingCredentials)
+            {
+                <FluentButton Appearance="Appearance.Stealth"
+                              @onclick="ClearCredentialsAsync"
+                              Disabled="@isSaving"
+                              Style="color:#dc2626;">
+                    Disconnect
+                </FluentButton>
+            }
+        </div>
+    </FluentCard>
+
+    @if (hasExistingCredentials)
+    {
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div style="width:10px; height:10px; border-radius:50%; background:#10b981;"></div>
+                <FluentLabel Style="font-weight:600; color:#065f46;">Connected</FluentLabel>
+            </div>
+            <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.25rem;">
+                This company has Payday credentials configured. Payday pages will use this connection.
+            </FluentLabel>
+        </FluentCard>
+    }
+    else
+    {
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div style="width:10px; height:10px; border-radius:50%; background:#f59e0b;"></div>
+                <FluentLabel Style="font-weight:600; color:#92400e;">Not Connected</FluentLabel>
+            </div>
+            <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.25rem;">
+                No Payday credentials configured for this company. Payday features will be unavailable.
+            </FluentLabel>
+        </FluentCard>
+    }
+}
+
+@code {
+    private bool isLoading = true;
+    private string clientId = "";
+    private string clientSecret = "";
+    private bool hasExistingCredentials;
+    private bool isTesting;
+    private bool isSaving;
+    private string? testMessage;
+    private bool testSuccess;
+    private string? saveMessage;
+    private string? saveError;
+
+    private bool HasCredentials => !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await CompanyApi.GetCompanyAsync();
+        if (result.IsSuccess && result.Value is not null)
+        {
+            clientId = result.Value.PaydayClientId ?? "";
+            clientSecret = result.Value.PaydayClientSecret ?? "";
+            hasExistingCredentials = !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+        }
+        isLoading = false;
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        isTesting = true;
+        testMessage = null;
+        saveMessage = null;
+        saveError = null;
+
+        var result = await CompanyApi.TestPaydayCredentialsAsync(clientId, clientSecret);
+        if (result.IsSuccess && result.Value is not null)
+        {
+            testSuccess = result.Value.Success;
+            testMessage = result.Value.Message;
+        }
+        else
+        {
+            testSuccess = false;
+            testMessage = result.ErrorMessage ?? "Connection test failed.";
+        }
+
+        isTesting = false;
+    }
+
+    private async Task SaveCredentialsAsync()
+    {
+        isSaving = true;
+        saveMessage = null;
+        saveError = null;
+
+        var result = await CompanyApi.UpdatePaydayCredentialsAsync(clientId, clientSecret);
+        if (result.IsSuccess)
+        {
+            saveMessage = "Payday credentials saved successfully.";
+            hasExistingCredentials = HasCredentials;
+        }
+        else
+        {
+            saveError = result.ErrorMessage ?? "Could not save credentials.";
+        }
+
+        isSaving = false;
+    }
+
+    private async Task ClearCredentialsAsync()
+    {
+        isSaving = true;
+        saveMessage = null;
+        saveError = null;
+        testMessage = null;
+
+        var result = await CompanyApi.UpdatePaydayCredentialsAsync(null, null);
+        if (result.IsSuccess)
+        {
+            clientId = "";
+            clientSecret = "";
+            hasExistingCredentials = false;
+            saveMessage = "Payday credentials removed.";
+        }
+        else
+        {
+            saveError = result.ErrorMessage ?? "Could not clear credentials.";
+        }
+
+        isSaving = false;
+    }
+}

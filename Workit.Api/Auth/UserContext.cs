@@ -31,6 +31,12 @@ public static class ClaimsPrincipalExtensions
     public static bool IsOwner(this ClaimsPrincipal user) =>
         string.Equals(user.FindFirstValue(ClaimTypes.Role), Workit.Shared.Auth.WorkitRoles.Owner, StringComparison.Ordinal);
 
+    public static bool IsAdmin(this ClaimsPrincipal user) =>
+        string.Equals(user.FindFirstValue(ClaimTypes.Role), Workit.Shared.Auth.WorkitRoles.Admin, StringComparison.Ordinal);
+
+    public static bool IsOwnerOrAdmin(this ClaimsPrincipal user) =>
+        IsOwner(user) || IsAdmin(user);
+
     private static Guid GetRequiredGuid(ClaimsPrincipal user, string claimType)
     {
         var rawValue = user.FindFirstValue(claimType);

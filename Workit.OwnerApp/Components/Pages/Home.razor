@@ -7,17 +7,49 @@
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
+@inject IAuthApi AuthApi
 
 <PageTitle>Home</PageTitle>
 
-@if (!string.IsNullOrWhiteSpace(loadError))
+@if (adminNeedsCompany)
+{
+    <FluentCard Class="dashboard-shell">
+        <FluentLabel Typo="Typography.PaneHeader">Welcome, Admin</FluentLabel>
+        <p>Select a company to view its dashboard, or go to the Admin page to register a new one.</p>
+        <div class="dashboard-actions" style="margin-bottom:1rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/admin"))">Manage Companies</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+        </div>
+
+        @if (userCompanies.Count > 0)
+        {
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.5rem;">Enter a company:</FluentLabel>
+            <div style="display:grid; gap:0.5rem; max-width:500px;">
+                @foreach (var c in userCompanies)
+                {
+                    <button type="button" class="switch-company-item" @onclick="@(() => SwitchToCompanyAsync(c.Id))">
+                        <div class="switch-company-info">
+                            <span class="switch-company-name">@c.Name</span>
+                            <span class="switch-company-detail">@c.Ssn · @c.Email</span>
+                        </div>
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <p style="color:#60758b;">No companies registered yet. Go to Admin to create one.</p>
+        }
+    </FluentCard>
+}
+else if (!string.IsNullOrWhiteSpace(loadError))
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
         <p>@loadError</p>
         <div class="dashboard-actions">
             <FluentButton Appearance="Appearance.Accent" @onclick="RetryOrLoginAsync">Retry</FluentButton>
-            <FluentButton Appearance="Appearance.Stealth" Href="/login">Login</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/login"))">Login</FluentButton>
         </div>
     </FluentCard>
 }
@@ -30,10 +62,9 @@ else if (isLoading)
 else if (!isOwnerSession)
 {
     <FluentCard Class="dashboard-shell">
-        <FluentLabel Typo="Typography.PaneHeader">Admin access</FluentLabel>
-        <p>The monthly dashboard is available for owner accounts. Admins can still register companies and manage setup.</p>
+        <FluentLabel Typo="Typography.PaneHeader">Access restricted</FluentLabel>
+        <p>The monthly dashboard is available for owner accounts.</p>
         <div class="dashboard-actions">
-            <FluentButton Appearance="Appearance.Accent" Href="/admin">Open Admin</FluentButton>
             <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
         </div>
     </FluentCard>
@@ -41,6 +72,20 @@ else if (!isOwnerSession)
 else
 {
     <section class="dashboard">
+        @if (isAdminSession)
+        {
+            <FluentCard Class="dashboard-shell" Style="background:#eff6ff; border:1px solid #93c5fd;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                    <FluentLabel Style="font-weight:700; color:#1e40af;">
+                        <FluentIcon Value="new Size24.Shield()" Style="vertical-align:middle;" /> Admin viewing: @(company?.Name ?? "Unknown")
+                    </FluentLabel>
+                    <div style="display:flex; gap:0.5rem;">
+                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => Navigation.NavigateTo("/admin"))">Manage Companies</FluentButton>
+                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="OpenSwitchCompanyDialog">Switch Company</FluentButton>
+                    </div>
+                </div>
+            </FluentCard>
+        }
         <FluentCard Class="dashboard-shell dashboard-hero">
             <div class="hero-copy">
                 <span class="eyebrow">Monthly view</span>
@@ -74,8 +119,14 @@ else
                 </div>
 
                 <div class="dashboard-actions">
-                    <FluentButton Appearance="Appearance.Outline" Href="/jobs">Manage Jobs</FluentButton>
-                    <FluentButton Appearance="Appearance.Outline" Href="/employees">Manage Employees</FluentButton>
+                    @if (userCompanies.Count > 1)
+                    {
+                        <FluentButton Appearance="Appearance.Accent" @onclick="OpenSwitchCompanyDialog">
+                            <FluentIcon Value="new Size24.ArrowSwap()" /> Switch Company
+                        </FluentButton>
+                    }
+                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Manage Jobs</FluentButton>
+                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/employees"))">Manage Employees</FluentButton>
                     <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
                 </div>
             </div>
@@ -330,11 +381,67 @@ else
     </section>
 }
 
+@* ── Switch Company Dialog ── *@
+@if (showSwitchDialog)
+{
+    <div class="switch-overlay" @onclick="CloseSwitchCompanyDialog">
+        <div class="switch-dialog" @onclick:stopPropagation="true">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                <h3 style="margin:0; color:#14304b;">Switch Company</h3>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="CloseSwitchCompanyDialog">✕</FluentButton>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(switchError))
+            {
+                <div style="color:#dc2626; font-size:0.85rem; margin-bottom:0.75rem;">@switchError</div>
+            }
+
+            <div class="switch-company-list">
+                @foreach (var c in userCompanies)
+                {
+                    var isCurrent = c.Id == session?.CompanyId;
+                    <button type="button"
+                            class="switch-company-item @(isCurrent ? "switch-company-item--current" : "")"
+                            disabled="@(isCurrent || isSwitching)"
+                            @onclick="@(() => SwitchToCompanyAsync(c.Id))">
+                        <div class="switch-company-info">
+                            <span class="switch-company-name">@c.Name</span>
+                            <span class="switch-company-detail">@c.Ssn · @c.Email</span>
+                        </div>
+                        @if (isCurrent)
+                        {
+                            <span class="switch-company-badge">Current</span>
+                        }
+                        else if (isSwitching && switchingToCompanyId == c.Id)
+                        {
+                            <span class="switch-company-badge switch-company-badge--loading">Switching…</span>
+                        }
+                    </button>
+                }
+            </div>
+
+            <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid #e5e7eb;">
+                <FluentButton Appearance="Appearance.Outline" @onclick="NavigateToCreateCompany" Style="width:100%;">
+                    <FluentIcon Value="new Size24.Add()" /> Add New Company
+                </FluentButton>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private LoginResponse? session;
     private Company? company;
     private bool isLoading = true;
     private string? loadError;
+
+    // Admin / switch company state
+    private bool adminNeedsCompany;
+    private List<Company> userCompanies = [];
+    private bool showSwitchDialog;
+    private bool isSwitching;
+    private Guid? switchingToCompanyId;
+    private string? switchError;
     private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
     private List<Customer> customers = [];
     private List<Employee> employees = [];
@@ -356,7 +463,9 @@ else
     private Guid? selectedJobId;
     private Guid? selectedEmployeeId;
 
-    private bool isOwnerSession => string.Equals(session?.Role, WorkitRoles.Owner, StringComparison.Ordinal);
+    private bool isOwnerSession => string.Equals(session?.Role, WorkitRoles.Owner, StringComparison.Ordinal)
+                                  || string.Equals(session?.Role, WorkitRoles.Admin, StringComparison.Ordinal);
+    private bool isAdminSession => string.Equals(session?.Role, WorkitRoles.Admin, StringComparison.Ordinal);
     private string selectedMonthValue => $"{selectedMonth.Year:D4}-{selectedMonth.Month:D2}";
     private string monthTitle => selectedMonth.ToDateTime(TimeOnly.MinValue).ToString("MMMM yyyy");
     private bool HasActiveFilters => selectedCustomerId is not null || selectedJobId is not null || selectedEmployeeId is not null;
@@ -408,9 +517,26 @@ else
                 return;
             }
 
+            // Admin without a real company — show pick-company landing
+            if (isAdminSession)
+            {
+                var adminCompaniesResult = await AuthApi.GetUserCompaniesAsync();
+                userCompanies = adminCompaniesResult.IsSuccess && adminCompaniesResult.Value is not null
+                    ? adminCompaniesResult.Value
+                    : [];
+            }
+
             var companyResult = await CompanyApi.GetCompanyAsync();
             if (!companyResult.IsSuccess || companyResult.Value is null)
             {
+                if (isAdminSession)
+                {
+                    // Admin hasn't entered a company yet — show landing instead of error
+                    adminNeedsCompany = true;
+                    ResetDashboard();
+                    return;
+                }
+
                 if (IsUnauthorized(companyResult.ErrorMessage))
                 {
                     await AuthSession.LogoutAsync();
@@ -424,6 +550,12 @@ else
             }
 
             company = companyResult.Value;
+
+            // Load all companies this user has access to
+            var companiesResult = await AuthApi.GetUserCompaniesAsync();
+            userCompanies = companiesResult.IsSuccess && companiesResult.Value is not null
+                ? companiesResult.Value
+                : [company];
 
             var customersResult = await CustomersApi.GetCustomersAsync();
             var employeesResult = await EmployeesApi.GetEmployeesAsync();
@@ -774,6 +906,44 @@ else
     }
     private bool EntryMatchesSelectedCustomerForJob(Job job) =>
         selectedCustomerId is null || job.CustomerId == selectedCustomerId;
+
+    private void OpenSwitchCompanyDialog()
+    {
+        switchError = null;
+        showSwitchDialog = true;
+    }
+
+    private void CloseSwitchCompanyDialog()
+    {
+        showSwitchDialog = false;
+    }
+
+    private async Task SwitchToCompanyAsync(Guid companyId)
+    {
+        isSwitching = true;
+        switchingToCompanyId = companyId;
+        switchError = null;
+
+        var result = await AuthSession.SwitchCompanyAsync(companyId);
+        if (result.IsSuccess)
+        {
+            showSwitchDialog = false;
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            switchError = result.ErrorMessage ?? "Failed to switch company.";
+        }
+
+        isSwitching = false;
+        switchingToCompanyId = null;
+    }
+
+    private void NavigateToCreateCompany()
+    {
+        showSwitchDialog = false;
+        Navigation.NavigateTo("/companies/new");
+    }
 
     private async Task LogoutAsync()
     {

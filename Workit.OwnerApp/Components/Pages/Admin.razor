@@ -1,76 +1,396 @@
 @page "/admin"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
-@inject ICompanyApi CompanyApi
 @inject AuthSessionService AuthSession
+@inject IAuthApi AuthApi
 @inject NavigationManager Navigation
 
 <PageTitle>Admin</PageTitle>
 
-<FluentCard Class="admin-card">
-    <FluentLabel Typo="Typography.PaneHeader">Company Setup</FluentLabel>
-
-    @if (company is null)
-    {
-        <p>No company was found for this logged-in owner account.</p>
-        <FluentButton Appearance="Appearance.Outline" Href="/register">Register Company</FluentButton>
-    }
-    else
-    {
-        <dl class="admin-grid">
-            <div><dt>Company</dt><dd>@company.Name</dd></div>
-            <div><dt>SSN</dt><dd>@company.Ssn</dd></div>
-            <div><dt>Owner</dt><dd>@company.Owner</dd></div>
-            <div><dt>Email</dt><dd>@company.Email</dd></div>
-            <div><dt>Phone</dt><dd>@company.Phone</dd></div>
-            <div><dt>Address</dt><dd>@company.Address</dd></div>
-        </dl>
-
-        <div class="admin-grid">
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
+@if (!isAdmin)
+{
+    <FluentCard Class="admin-card">
+        <FluentLabel Typo="Typography.PaneHeader">Access Denied</FluentLabel>
+        <p>This page is only available to administrators.</p>
+        <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/"))">Back to Home</FluentButton>
+    </FluentCard>
+}
+else
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+            <div>
+                <span class="eyebrow">Administration</span>
+                <h1 style="margin:0;">Company Management</h1>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="ToggleRegisterForm">
+                    @(showRegisterForm ? "Cancel" : "+ Register New Company")
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">← Dashboard</FluentButton>
+            </div>
         </div>
+    </FluentCard>
+
+    @* ── Register New Company Form ── *@
+    @if (showRegisterForm)
+    {
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Register New Company & Owner</FluentLabel>
+
+            <div class="register-grid">
+                <div class="register-section">
+                    <FluentLabel Style="font-weight:600; color:#60758b; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em;">Company Details</FluentLabel>
+                    <div class="form-fields">
+                        <div>
+                            <FluentLabel>Company Name *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Name" Style="width:100%;" Placeholder="e.g. Verkþjónustan ehf." />
+                        </div>
+                        <div>
+                            <FluentLabel>SSN (Kennitala) *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Ssn" Style="width:100%;" Placeholder="e.g. 5012345678" />
+                        </div>
+                        <div>
+                            <FluentLabel>Email *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Email" Style="width:100%;" Placeholder="e.g. info@company.is" />
+                        </div>
+                        <div>
+                            <FluentLabel>Address *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Address" Style="width:100%;" Placeholder="e.g. Laugavegur 1, 101 Reykjavík" />
+                        </div>
+                        <div>
+                            <FluentLabel>Phone *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Phone" Style="width:100%;" Placeholder="e.g. 555-1234" />
+                        </div>
+                        <div>
+                            <FluentLabel>Contact Person *</FluentLabel>
+                            <FluentTextField @bind-Value="regCompany.Owner" Style="width:100%;" Placeholder="e.g. Jón Jónsson" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="register-section">
+                    <FluentLabel Style="font-weight:600; color:#60758b; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em;">Owner Login Credentials</FluentLabel>
+                    <div class="form-fields">
+                        <div>
+                            <FluentLabel>Owner Email *</FluentLabel>
+                            <FluentTextField @bind-Value="regOwnerEmail" Style="width:100%;" Placeholder="e.g. jon@company.is" />
+                        </div>
+                        <div>
+                            <FluentLabel>Owner Password *</FluentLabel>
+                            <FluentTextField @bind-Value="regOwnerPassword" Style="width:100%;" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" />
+                        </div>
+                    </div>
+                    <FluentLabel Style="color:#60758b; font-size:0.8rem; margin-top:0.5rem;">
+                        These credentials will be given to the company owner so they can log in and manage their own data.
+                    </FluentLabel>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(registerError))
+            {
+                <div class="msg msg--error">@registerError</div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(registerSuccess))
+            {
+                <div class="msg msg--success">@registerSuccess</div>
+            }
+
+            <div style="display:flex; gap:0.75rem; margin-top:1.25rem;">
+                <FluentButton Appearance="Appearance.Accent"
+                              @onclick="RegisterCompanyAsync"
+                              Disabled="@(isRegistering || !CanRegister)">
+                    @(isRegistering ? "Registering…" : "Register Company")
+                </FluentButton>
+            </div>
+        </FluentCard>
     }
 
-    @if (!string.IsNullOrWhiteSpace(loadError))
-    {
-        <p>@loadError</p>
+    @* ── Companies List ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">
+                All Companies (@companies.Count)
+            </FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadCompaniesAsync" Disabled="@isLoadingCompanies">
+                @(isLoadingCompanies ? "Loading…" : "Refresh")
+            </FluentButton>
+        </div>
+
+        @if (isLoadingCompanies && companies.Count == 0)
+        {
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <FluentProgressRing />
+                <FluentLabel>Loading companies…</FluentLabel>
+            </div>
+        }
+        else if (companies.Count == 0)
+        {
+            <FluentLabel Style="color:#60758b;">No companies registered yet. Click "+ Register New Company" above to get started.</FluentLabel>
+        }
+        else
+        {
+            <div class="company-grid">
+                @foreach (var c in companies)
+                {
+                    <div class="company-card">
+                        <div class="company-card-header">
+                            <div>
+                                <span class="company-card-name">@c.Name</span>
+                                <span class="company-card-ssn">@c.Ssn</span>
+                            </div>
+                            <div style="display:flex; gap:0.35rem; align-items:center;">
+                                @if (c.HasPayday)
+                                {
+                                    <span class="badge badge--green" title="Payday connected">Payday</span>
+                                }
+                                <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
+                                              @onclick="@(() => SwitchToCompanyAsync(c.Id))"
+                                              Disabled="@isSwitching">
+                                    @(isSwitching && switchingTo == c.Id ? "Entering…" : "Enter")
+                                </FluentButton>
+                            </div>
+                        </div>
+                        <div class="company-card-details">
+                            <span><strong>Contact:</strong> @c.Owner</span>
+                            <span><strong>Owner login:</strong> @c.OwnerEmail</span>
+                            <span><strong>Email:</strong> @c.Email</span>
+                            <span><strong>Phone:</strong> @c.Phone</span>
+                            <span><strong>Address:</strong> @c.Address</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </FluentCard>
+}
+
+<style>
+    .eyebrow {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #60758b;
     }
-</FluentCard>
+
+    .register-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .register-section {
+        display: grid;
+        gap: 0.75rem;
+        align-content: start;
+    }
+
+    .form-fields {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .msg {
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-size: 0.85rem;
+    }
+
+    .msg--error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    .msg--success {
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+    }
+
+    .company-grid {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .company-card {
+        border: 1px solid rgba(20, 48, 75, 0.08);
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        background: #f9fafb;
+        transition: border-color 0.15s;
+    }
+
+    .company-card:hover {
+        border-color: #3b82f6;
+    }
+
+    .company-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .company-card-name {
+        font-weight: 700;
+        color: #14304b;
+        font-size: 1rem;
+    }
+
+    .company-card-ssn {
+        margin-left: 0.5rem;
+        font-size: 0.8rem;
+        color: #60758b;
+    }
+
+    .company-card-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 1.25rem;
+        font-size: 0.82rem;
+        color: #60758b;
+    }
+
+    .badge {
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .badge--green {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    @@media (max-width: 720px) {
+        .register-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 
 @code {
-    private Company? company;
-    private string? loadError;
     private bool isAdmin;
+    private bool isLoadingCompanies;
+    private bool showRegisterForm;
+    private bool isRegistering;
+    private bool isSwitching;
+    private Guid? switchingTo;
+    private List<AdminCompanyInfo> companies = [];
+
+    // Register form state
+    private Company regCompany = new();
+    private string regOwnerEmail = "";
+    private string regOwnerPassword = "";
+    private string? registerError;
+    private string? registerSuccess;
+
+    private bool CanRegister =>
+        !string.IsNullOrWhiteSpace(regCompany.Name) &&
+        !string.IsNullOrWhiteSpace(regCompany.Ssn) &&
+        !string.IsNullOrWhiteSpace(regCompany.Email) &&
+        !string.IsNullOrWhiteSpace(regCompany.Address) &&
+        !string.IsNullOrWhiteSpace(regCompany.Phone) &&
+        !string.IsNullOrWhiteSpace(regCompany.Owner) &&
+        !string.IsNullOrWhiteSpace(regOwnerEmail) &&
+        regOwnerPassword.Length >= 8;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-        {
-            return;
-        }
+        if (!firstRender) return;
 
         var session = await AuthSession.GetSessionAsync();
-        isAdmin = session?.Role == WorkitRoles.Admin;
-        if (!isAdmin)
+        if (session is null)
         {
-            Navigation.NavigateTo("/", forceLoad: true);
+            Navigation.NavigateTo("/login", forceLoad: true);
             return;
         }
 
-        await LoadCompanyAsync();
+        isAdmin = string.Equals(session.Role, WorkitRoles.Admin, StringComparison.Ordinal);
+        if (isAdmin)
+        {
+            await LoadCompaniesAsync();
+        }
+
         StateHasChanged();
     }
 
-    private async Task LoadCompanyAsync()
+    private async Task LoadCompaniesAsync()
     {
-        loadError = null;
-        var result = await CompanyApi.GetCompanyAsync();
-        company = result.Value;
-        loadError = result.IsSuccess ? null : result.ErrorMessage;
+        isLoadingCompanies = true;
+
+        try
+        {
+            var result = await AuthApi.GetAdminCompaniesAsync();
+            if (result.IsSuccess && result.Value is not null)
+            {
+                companies = result.Value;
+            }
+        }
+        finally
+        {
+            isLoadingCompanies = false;
+        }
     }
 
-    private async Task LogoutAsync()
+    private async Task RegisterCompanyAsync()
     {
-        await AuthSession.LogoutAsync();
-        Navigation.NavigateTo("/login", forceLoad: true);
+        isRegistering = true;
+        registerError = null;
+        registerSuccess = null;
+
+        var request = new RegisterCompanyRequest
+        {
+            Company = regCompany,
+            OwnerEmail = regOwnerEmail,
+            OwnerPassword = regOwnerPassword
+        };
+
+        var result = await AuthApi.RegisterCompanyAsync(request);
+        if (result.IsSuccess)
+        {
+            registerSuccess = $"Company \"{regCompany.Name}\" registered successfully. Owner can log in with {regOwnerEmail}.";
+            regCompany = new();
+            regOwnerEmail = "";
+            regOwnerPassword = "";
+            showRegisterForm = false;
+            await LoadCompaniesAsync();
+        }
+        else
+        {
+            registerError = result.ErrorMessage ?? "Registration failed.";
+        }
+
+        isRegistering = false;
     }
+
+    private async Task SwitchToCompanyAsync(Guid companyId)
+    {
+        isSwitching = true;
+        switchingTo = companyId;
+
+        var result = await AuthSession.SwitchCompanyAsync(companyId);
+        if (result.IsSuccess)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+        }
+
+        isSwitching = false;
+        switchingTo = null;
+    }
+
+    private void ToggleRegisterForm()
+    {
+        showRegisterForm = !showRegisterForm;
+        registerError = null;
+        registerSuccess = null;
+    }
+
 }

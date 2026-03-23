@@ -26,6 +26,16 @@ public sealed class AuthSessionService(IAuthApi authApi, IJSRuntime jsRuntime)
     public Task<ApiResult<LoginResponse>> RegisterCompanyAsync(RegisterCompanyRequest request) =>
         authApi.RegisterCompanyAsync(request);
 
+    public async Task<ApiResult<LoginResponse>> SwitchCompanyAsync(Guid companyId)
+    {
+        var result = await authApi.SwitchCompanyAsync(new SwitchCompanyRequest { CompanyId = companyId });
+        if (result.IsSuccess && result.Value is not null)
+        {
+            await SetSessionAsync(result.Value);
+        }
+        return result;
+    }
+
     public async Task LogoutAsync()
     {
         try

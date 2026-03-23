@@ -11,6 +11,7 @@
 @inject IEmployeesApi EmployeesApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IJobsApi JobsApi
+@inject PaydayCredentialsInitializer PaydayInit
 
 <PageTitle>Payday</PageTitle>
 
@@ -227,6 +228,7 @@
     {
         try
         {
+            await PaydayInit.InitializeAsync();
             var companyResult = await PaydayCompaniesApi.GetMeAsync();
             if (companyResult.IsSuccess)
                 paydayCompany = companyResult.Value;
