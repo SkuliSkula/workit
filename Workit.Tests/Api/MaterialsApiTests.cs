@@ -160,6 +160,9 @@ public class MaterialsApiTests
 
         public Task<ApiResult<MaterialUsage>> LogMaterialUsageAsync(MaterialUsage usage) =>
             PostForJsonAsync<MaterialUsage, MaterialUsage>("api/materials/usage", usage, "Material usage could not be logged right now.");
+
+        public Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request) =>
+            PostAsync("api/materials/usage/mark-invoiced", request, "Material usage could not be marked as invoiced.");
     }
 
     private class FakeTokenAccessor : IAccessTokenAccessor

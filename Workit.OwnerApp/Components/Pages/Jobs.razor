@@ -122,6 +122,19 @@ else if (jobs.Count > 0)
                     <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
                         @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
                     </span>
+                    @if (details is not null && !string.IsNullOrEmpty(details.InvoiceStatusLabel))
+                    {
+                        var fullyInv = details.InvoiceStatusLabel == "Fully invoiced";
+                        <span style="font-size:0.7rem; font-weight:600; padding:2px 6px; border-radius:4px;
+                                     background:@(fullyInv ? "#dcfce7" : "#fef3c7");
+                                     color:@(fullyInv ? "#166534" : "#92400e");">
+                            @(fullyInv ? "Invoiced" : "Partial")
+                            @if (details.InvoiceNumbers.Count > 0)
+                            {
+                                <text> #@string.Join(", #", details.InvoiceNumbers)</text>
+                            }
+                        </span>
+                    }
                 </button>
 
                 @* ── Expanded detail ── *@
@@ -168,6 +181,22 @@ else if (jobs.Count > 0)
                                     <div class="job-kpi job-kpi--materials">
                                         <span class="job-kpi-val">@details.MaterialCostExVat.ToString("N0") kr.</span>
                                         <span class="job-kpi-lbl">materials (ex. VAT)</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(details.InvoiceStatusLabel))
+                                {
+                                    var isFullyInvoiced = details.InvoiceStatusLabel == "Fully invoiced";
+                                    <div class="job-kpi" style="border-left:3px solid @(isFullyInvoiced ? "#10b981" : "#f59e0b"); padding-left:0.5rem;">
+                                        <span class="job-kpi-val" style="font-size:0.85rem; color:@(isFullyInvoiced ? "#065f46" : "#92400e");">
+                                            @details.InvoiceStatusLabel
+                                        </span>
+                                        <span class="job-kpi-lbl">
+                                            @details.InvoicedEntryCount/@details.EntryCount entries
+                                            @if (details.InvoiceNumbers.Count > 0)
+                                            {
+                                                <text> · #@string.Join(", #", details.InvoiceNumbers)</text>
+                                            }
+                                        </span>
                                     </div>
                                 }
                             </div>
@@ -374,8 +403,23 @@ else if (company is not null)
         public int     WorkerCount          { get; set; }
         public int     EntryCount           { get; set; }
         public int     TotalDrivingUnits    { get; set; }
+        public int     InvoicedEntryCount   { get; set; }
+        public int     InvoicedMaterialUsageCount { get; set; }
+        public List<int> InvoiceNumbers     { get; set; } = [];
         public List<EmployeeRow>   ByEmployee    { get; set; } = [];
         public List<MaterialRow>   ByMaterial    { get; set; } = [];
+
+        public string InvoiceStatusLabel
+        {
+            get
+            {
+                if (InvoicedEntryCount == 0 && InvoicedMaterialUsageCount == 0)
+                    return "";
+                if (InvoicedEntryCount == EntryCount)
+                    return "Fully invoiced";
+                return "Partially invoiced";
+            }
+        }
     }
 
     private sealed class EmployeeRow
@@ -501,6 +545,18 @@ else if (company is not null)
             })
             .ToList();
 
+        var invoicedEntries = entries.Where(e => e.IsInvoiced).ToList();
+        var invoicedUsages = usages.Where(u => u.IsInvoiced).ToList();
+        var invoiceNumbers = invoicedEntries
+            .Where(e => e.PaydayInvoiceNumber.HasValue)
+            .Select(e => e.PaydayInvoiceNumber!.Value)
+            .Union(invoicedUsages
+                .Where(u => u.PaydayInvoiceNumber.HasValue)
+                .Select(u => u.PaydayInvoiceNumber!.Value))
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+
         jobDetails[jobId] = new JobDetail
         {
             TotalHours           = entries.Sum(e => e.Hours),
@@ -510,6 +566,9 @@ else if (company is not null)
             MaterialCostExVat    = byMat.Sum(m => m.TotalCostExVat),
             MaterialCostInclVat  = byMat.Sum(m => m.TotalCostInclVat),
             TotalDrivingUnits    = byEmp.Sum(r => r.DrivingUnits),
+            InvoicedEntryCount   = invoicedEntries.Count,
+            InvoicedMaterialUsageCount = invoicedUsages.Count,
+            InvoiceNumbers       = invoiceNumbers,
             ByEmployee           = byEmp,
             ByMaterial           = byMat
         };

@@ -130,6 +130,14 @@
             <PropertyColumn Property="@(x => x.OvertimeHours)" Title="Overtime" Format="0.##" />
             <PropertyColumn Property="@(x => x.DrivingUnits)"  Title="Driving"  />
             <PropertyColumn Property="@(x => x.Notes)"         Title="Notes" />
+            <TemplateColumn Title="Invoiced">
+                @if (context.IsInvoiced)
+                {
+                    <span style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600; white-space:nowrap;">
+                        @(context.PaydayInvoiceNumber.HasValue ? $"#{context.PaydayInvoiceNumber}" : "✓")
+                    </span>
+                }
+            </TemplateColumn>
         </FluentDataGrid>
 
         <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
@@ -140,6 +148,11 @@
                 <span> · Driving: <strong>@entries.Sum(e => e.DrivingUnits) units</strong></span>
             }
             · across @entries.Count entries
+            @{ var invoicedCount = entries.Count(e => e.IsInvoiced); }
+            @if (invoicedCount > 0)
+            {
+                <span> · <strong>@invoicedCount</strong> invoiced</span>
+            }
         </FluentLabel>
     }
     else if (!loadingEntries && hasLoadedEntries)
@@ -191,6 +204,11 @@
         public decimal  OvertimeHours { get; set; }
         public int      DrivingUnits  { get; set; }
         public string   Notes         { get; set; } = string.Empty;
+        public bool     IsInvoiced    { get; set; }
+        public int?     PaydayInvoiceNumber { get; set; }
+        public string   InvoiceStatus => IsInvoiced
+            ? (PaydayInvoiceNumber.HasValue ? $"#{PaydayInvoiceNumber}" : "Yes")
+            : "";
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -307,7 +325,9 @@
                     Hours         = e.Hours,
                     OvertimeHours = e.OvertimeHours,
                     DrivingUnits  = e.DrivingUnits,
-                    Notes         = e.Notes
+                    Notes         = e.Notes,
+                    IsInvoiced    = e.IsInvoiced,
+                    PaydayInvoiceNumber = e.PaydayInvoiceNumber
                 });
 
             entries.AddRange(rows);

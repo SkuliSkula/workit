@@ -15,4 +15,13 @@ public sealed class MaterialUsage
     public DateTimeOffset UsedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public string Notes      { get; set; } = string.Empty;
+
+    /// <summary>Whether this usage has been included in a Payday invoice.</summary>
+    public bool IsInvoiced { get; set; }
+
+    /// <summary>When this usage was marked as invoiced (UTC).</summary>
+    public DateTimeOffset? InvoicedAt { get; set; }
+
+    /// <summary>The Payday invoice number this usage was billed on.</summary>
+    public int? PaydayInvoiceNumber { get; set; }
 }

@@ -10,6 +10,7 @@ using Serilog.Events;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Api.Services;
+using Workit.Shared.Api;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
 using Workit.Shared.Utilities;
@@ -679,6 +680,9 @@ securedApi.MapPut("/employees/{id:guid}", async (WorkitDbContext db, HttpContext
             existing.Email = normalizedEmail;
             existing.Phone = employee.Phone.Trim();
             existing.ContactPerson = employee.ContactPerson.Trim();
+            existing.EmploymentType = employee.EmploymentType;
+            existing.HourlySalary = employee.HourlySalary;
+            existing.HourlyBillableRate = employee.HourlyBillableRate;
 
             var appUser = await db.AppUsers.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
             if (appUser is not null)
@@ -904,6 +908,9 @@ securedApi.MapPut("/timeentries/{id:guid}", async (WorkitDbContext db, HttpConte
             existing.OvertimeHours = entry.OvertimeHours;
             existing.DrivingUnits  = entry.DrivingUnits;
             existing.Notes         = entry.Notes;
+            existing.IsInvoiced          = entry.IsInvoiced;
+            existing.InvoicedAt          = entry.InvoicedAt;
+            existing.PaydayInvoiceNumber = entry.PaydayInvoiceNumber;
 
             await db.SaveChangesAsync(ct);
             return Results.Ok(existing);
@@ -911,6 +918,66 @@ securedApi.MapPut("/timeentries/{id:guid}", async (WorkitDbContext db, HttpConte
         apiLogger,
         "updating a time entry"))
     .WithName("UpdateTimeEntry");
+
+securedApi.MapPost("/timeentries/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, MarkInvoicedRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+
+            if (request.Ids is null || request.Ids.Count == 0)
+                return Results.BadRequest("No time entry ids provided.");
+
+            var entries = await db.TimeEntries
+                .Where(x => x.CompanyId == userContext.CompanyId && request.Ids.Contains(x.Id))
+                .ToListAsync(ct);
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var entry in entries)
+            {
+                entry.IsInvoiced = true;
+                entry.InvoicedAt = now;
+                entry.PaydayInvoiceNumber = request.PaydayInvoiceNumber;
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { Marked = entries.Count });
+        },
+        apiLogger,
+        "marking time entries as invoiced"))
+    .WithName("MarkTimeEntriesInvoiced");
+
+securedApi.MapPost("/materials/usage/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, MarkInvoicedRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+
+            if (request.Ids is null || request.Ids.Count == 0)
+                return Results.BadRequest("No material usage ids provided.");
+
+            var usages = await db.MaterialUsages
+                .Where(x => x.CompanyId == userContext.CompanyId && request.Ids.Contains(x.Id))
+                .ToListAsync(ct);
+
+            var now = DateTimeOffset.UtcNow;
+            foreach (var usage in usages)
+            {
+                usage.IsInvoiced = true;
+                usage.InvoicedAt = now;
+                usage.PaydayInvoiceNumber = request.PaydayInvoiceNumber;
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { Marked = usages.Count });
+        },
+        apiLogger,
+        "marking material usage as invoiced"))
+    .WithName("MarkMaterialUsageInvoiced");
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
 
@@ -1384,6 +1451,30 @@ securedApi.MapPost("/invoices/scan", async (
 
 if (app.Environment.IsDevelopment())
 {
+    securedApi.MapPost("/dev/seed-test-data", async (
+            WorkitDbContext db,
+            HttpContext httpContext,
+            Guid? companyId,
+            CancellationToken ct) =>
+            await ExecuteDbAsync(async () =>
+            {
+                // In dev, admin can seed any company. Owner seeds their own.
+                var userContext = httpContext.User.ToUserContext();
+                var targetCompanyId = companyId ?? userContext.CompanyId;
+
+                if (targetCompanyId == Guid.Empty)
+                {
+                    // Auto-pick first company if admin has no company
+                    var first = await db.Companies.FirstOrDefaultAsync(ct);
+                    if (first is null) return Results.BadRequest("No companies exist. Create one first.");
+                    targetCompanyId = first.Id;
+                }
+
+                var result = await TestDataSeeder.SeedFebruaryAsync(db, targetCompanyId);
+                return Results.Ok(result);
+            }, apiLogger, "seeding test data"))
+        .WithName("SeedTestData");
+
     securedApi.MapPost("/invoices/scan-folder", async (
             WorkitDbContext db,
             HttpContext httpContext,

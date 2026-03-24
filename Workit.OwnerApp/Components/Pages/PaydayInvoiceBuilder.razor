@@ -1,0 +1,991 @@
+@page "/payday/invoice-builder"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICustomersApi CustomersApi
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
+@inject IMaterialsApi MaterialsApi
+@inject IEmployeesApi EmployeesApi
+@inject ICompanyApi CompanyApi
+@inject IPaydayCustomersApi PaydayCustomersApi
+@inject IPaydayInvoicesApi PaydayInvoicesApi
+@inject PaydayCredentialsInitializer PaydayInit
+@inject NavigationManager Navigation
+
+@using Workit.Shared.Api
+@using Workit.Shared.Models
+@using Workit.Shared.Payday
+
+<PageTitle>Invoice Builder</PageTitle>
+
+@* ── Header ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Invoice Builder</FluentLabel>
+            <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                Build invoices automatically from time entries, driving, and materials.
+            </FluentLabel>
+        </div>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/payday/invoices"))">← Payday Invoices</FluentButton>
+    </div>
+</FluentCard>
+
+@* ── Step indicator ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+        @foreach (var (step, label) in StepLabels)
+        {
+            var isCurrent = step == currentStep;
+            var isPast = step < currentStep;
+            <div style="display:flex; align-items:center; gap:0.25rem;">
+                <div style="width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem; font-weight:700;
+                            background:@(isCurrent ? "#3b82f6" : isPast ? "#10b981" : "#e2e8f0");
+                            color:@(isCurrent || isPast ? "white" : "#64748b");">
+                    @(isPast ? "✓" : ((int)step + 1).ToString())
+                </div>
+                <span style="font-size:0.85rem; font-weight:@(isCurrent ? "700" : "400"); color:@(isCurrent ? "#1e293b" : "#64748b");">@label</span>
+            </div>
+            @if (step != WizardStep.Done)
+            {
+                <span style="color:#cbd5e1; margin:0 0.25rem;">›</span>
+            }
+        }
+    </div>
+</FluentCard>
+
+@* ── Global error ── *@
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Color="Color.Error">@errorMessage</FluentLabel>
+    </FluentCard>
+}
+
+@* ── Step 1: Select Customer & Date Range ── *@
+@if (currentStep == WizardStep.SelectCustomer)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Select Customer & Billing Period</FluentLabel>
+
+        @if (initLoading)
+        {
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <FluentProgressRing />
+                <FluentLabel>Loading data…</FluentLabel>
+            </div>
+        }
+        else
+        {
+            <div class="admin-grid" style="gap:1rem;">
+                <div style="grid-column: span 2">
+                    <FluentLabel>Customer <span style="color:red">*</span></FluentLabel>
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerIdStr" Style="width:100%">
+                        <FluentOption TOption="string" Value="">— Select customer —</FluentOption>
+                        @foreach (var c in customersWithJobs)
+                        {
+                            <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
+                        }
+                    </FluentSelect>
+                </div>
+                <div>
+                    <FluentLabel>From <span style="color:red">*</span></FluentLabel>
+                    <FluentDatePicker @bind-Value="dateFrom" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel>To <span style="color:red">*</span></FluentLabel>
+                    <FluentDatePicker @bind-Value="dateTo" Style="width:100%" />
+                </div>
+            </div>
+
+            <div style="margin-top:1rem;">
+                <FluentButton Appearance="Appearance.Accent"
+                              @onclick="GoToSelectJobs"
+                              Disabled="@(!Guid.TryParse(selectedCustomerIdStr, out _) || dateFrom is null || dateTo is null)">
+                    Next →
+                </FluentButton>
+            </div>
+        }
+    </FluentCard>
+}
+
+@* ── Step 2: Select Jobs & Load Data ── *@
+@if (currentStep == WizardStep.SelectJobs)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Select Jobs for @(selectedCustomer?.Name ?? "Customer")</FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => currentStep = WizardStep.SelectCustomer)">← Back</FluentButton>
+        </div>
+
+        <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.25rem; margin-bottom:0.75rem;">
+            Period: @dateFrom?.ToString("dd MMM yyyy") — @dateTo?.ToString("dd MMM yyyy")
+        </FluentLabel>
+
+        @if (customerJobs.Count == 0)
+        {
+            <FluentLabel>No jobs found for this customer.</FluentLabel>
+        }
+        else
+        {
+            @foreach (var js in jobSelections)
+            {
+                <div style="display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0; border-bottom:1px solid #f1f5f9;">
+                    <FluentCheckbox @bind-Value="js.IsSelected" />
+                    <div style="flex:1;">
+                        <FluentLabel Style="font-weight:600;">@js.Job.Code — @js.Job.Name</FluentLabel>
+                        <FluentLabel Style="font-size:0.8rem; color:#64748b;">
+                            @(js.Job.BillingType == BillingType.FixedPrice ? "Fixed price" : "Hourly")
+                        </FluentLabel>
+                    </div>
+                </div>
+            }
+
+            <div style="display:flex; gap:0.75rem; margin-top:1rem; flex-wrap:wrap;">
+                <FluentButton Appearance="Appearance.Accent"
+                              @onclick="LoadJobDataAsync"
+                              Disabled="@(jobsLoading || !jobSelections.Any(j => j.IsSelected))">
+                    @(jobsLoading ? "Loading data…" : "Load Data")
+                </FluentButton>
+            </div>
+        }
+    </FluentCard>
+
+    @* ── Job data summary ── *@
+    @if (jobDataLoaded)
+    {
+        <FluentCard Class="admin-card" AreaRestricted="false">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Data Summary</FluentLabel>
+
+            @if (alreadyInvoicedTimeEntryCount > 0 || alreadyInvoicedMaterialUsageCount > 0)
+            {
+                <div style="padding:0.5rem 0.75rem; background:#dbeafe; border:1px solid #93c5fd; border-radius:8px; margin-bottom:0.75rem; font-size:0.85rem; color:#1e40af;">
+                    Already invoiced (excluded):
+                    @if (alreadyInvoicedTimeEntryCount > 0)
+                    {
+                        <strong>@alreadyInvoicedTimeEntryCount</strong> @(alreadyInvoicedTimeEntryCount == 1 ? "time entry" : "time entries")
+                    }
+                    @if (alreadyInvoicedTimeEntryCount > 0 && alreadyInvoicedMaterialUsageCount > 0)
+                    {
+                        <text>, </text>
+                    }
+                    @if (alreadyInvoicedMaterialUsageCount > 0)
+                    {
+                        <strong>@alreadyInvoicedMaterialUsageCount</strong> @(alreadyInvoicedMaterialUsageCount == 1 ? "material usage" : "material usages")
+                    }
+                </div>
+            }
+
+            @if (rateWarnings.Count > 0)
+            {
+                <div style="padding:0.5rem 0.75rem; background:#fef3c7; border:1px solid #fbbf24; border-radius:8px; margin-bottom:0.75rem; font-size:0.85rem; color:#92400e;">
+                    ⚠ Missing billable rates: @string.Join(", ", rateWarnings). Lines will generate with 0 price — adjust manually.
+                </div>
+            }
+
+            @if (lowStockWarnings.Count > 0)
+            {
+                <div style="padding:0.5rem 0.75rem; background:#fff7ed; border:1px solid #fdba74; border-radius:8px; margin-bottom:0.75rem; font-size:0.85rem; color:#9a3412;">
+                    ⚠ Low stock on @(lowStockWarnings.Count == 1 ? "material" : "materials"):
+                    <ul style="margin:0.25rem 0 0 1.25rem; padding:0;">
+                        @foreach (var w in lowStockWarnings)
+                        {
+                            <li>@w</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @foreach (var js in jobSelections.Where(j => j.IsSelected))
+            {
+                <div style="padding:0.75rem; background:#f8fafc; border-radius:8px; margin-bottom:0.5rem;">
+                    <FluentLabel Style="font-weight:700;">@js.Job.Code — @js.Job.Name</FluentLabel>
+                    @if (js.Job.BillingType == BillingType.FixedPrice)
+                    {
+                        <span style="font-size:0.75rem; background:#dbeafe; color:#1d4ed8; padding:1px 6px; border-radius:4px; margin-left:0.5rem;">Fixed price</span>
+                    }
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.5rem; margin-top:0.5rem; font-size:0.85rem;">
+                        <div>
+                            <span style="color:#64748b;">Hours:</span>
+                            <strong>@js.TotalHours.ToString("0.##")</strong>
+                        </div>
+                        <div>
+                            <span style="color:#64748b;">Overtime:</span>
+                            <strong>@js.TotalOvertimeHours.ToString("0.##")</strong>
+                        </div>
+                        <div>
+                            <span style="color:#64748b;">Driving:</span>
+                            <strong>@js.TotalDrivingUnits</strong> units
+                        </div>
+                        <div>
+                            <span style="color:#64748b;">Materials:</span>
+                            <strong>@js.Materials.Count</strong> items
+                            @if (js.Materials.Any(m => m.IsLowStock))
+                            {
+                                <span style="color:#dc2626; font-size:0.8rem;"> (⚠ low stock)</span>
+                            }
+                        </div>
+                        @if (js.Job.BillingType != BillingType.FixedPrice)
+                        {
+                            <div>
+                                <span style="color:#64748b;">Labor cost:</span>
+                                <strong>@js.TotalLaborCost.ToString("N0") ISK</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="GenerateInvoiceLines">Generate Invoice Lines →</FluentButton>
+            </div>
+        </FluentCard>
+    }
+}
+
+@* ── Step 3: Preview & Edit Invoice Lines ── *@
+@if (currentStep == WizardStep.PreviewLines)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Invoice Lines Preview</FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => { currentStep = WizardStep.SelectJobs; })">← Back</FluentButton>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:1rem; margin:0.75rem 0; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <FluentLabel Style="font-size:0.85rem;">Overtime multiplier:</FluentLabel>
+                <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1m" Style="width:80px;" />
+            </div>
+            <FluentButton Appearance="Appearance.Outline" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
+                Recalculate overtime
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => invoiceLines.Add(new InvoiceLineForm()))" Size="ButtonSize.Small">
+                + Add line
+            </FluentButton>
+        </div>
+
+        @for (var i = 0; i < invoiceLines.Count; i++)
+        {
+            var idx = i;
+            var line = invoiceLines[idx];
+            <div style="display:grid; grid-template-columns: 2.5fr 0.7fr 1.2fr 0.8fr 0.8fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
+                <div>
+                    <FluentLabel Style="font-size:0.75rem;">Description</FluentLabel>
+                    <FluentTextField @bind-Value="line.Description" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel Style="font-size:0.75rem;">Qty</FluentLabel>
+                    <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="0" Step="0.5m" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel Style="font-size:0.75rem;">Price ex VAT</FluentLabel>
+                    <FluentNumberField TValue="decimal" @bind-Value="line.UnitPriceExcludingVat" Min="0" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel Style="font-size:0.75rem;">VAT %</FluentLabel>
+                    <FluentSelect TValue="string" TOption="string"
+                                  Value="@line.VatPercentage.ToString()"
+                                  ValueChanged="@(v => line.VatPercentage = decimal.TryParse(v, out var d) ? d : 24m)"
+                                  Style="width:100%">
+                        <FluentOption TOption="string" Value="0">0%</FluentOption>
+                        <FluentOption TOption="string" Value="11">11%</FluentOption>
+                        <FluentOption TOption="string" Value="24">24%</FluentOption>
+                    </FluentSelect>
+                </div>
+                <div>
+                    <FluentLabel Style="font-size:0.75rem;">Disc %</FluentLabel>
+                    <FluentNumberField TValue="decimal" @bind-Value="line.DiscountPercentage" Min="0" Max="100" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentButton Appearance="Appearance.Stealth"
+                                  @onclick="@(() => invoiceLines.RemoveAt(idx))"
+                                  title="Remove line">✕</FluentButton>
+                </div>
+            </div>
+        }
+
+        @* ── Totals ── *@
+        @if (invoiceLines.Count > 0)
+        {
+            var totalExVat = invoiceLines.Sum(l => l.Quantity * l.UnitPriceExcludingVat * (1 - l.DiscountPercentage / 100m));
+            var totalVat = invoiceLines.Sum(l => l.Quantity * l.UnitPriceExcludingVat * (1 - l.DiscountPercentage / 100m) * l.VatPercentage / 100m);
+            var totalInclVat = totalExVat + totalVat;
+
+            <div style="display:flex; justify-content:flex-end; margin-top:1rem;">
+                <div style="background:#f8fafc; padding:0.75rem 1.5rem; border-radius:8px; text-align:right; font-size:0.9rem;">
+                    <div><span style="color:#64748b;">Ex VAT:</span> <strong>@totalExVat.ToString("N0") ISK</strong></div>
+                    <div><span style="color:#64748b;">VAT:</span> <strong>@totalVat.ToString("N0") ISK</strong></div>
+                    <div style="font-size:1.1rem; margin-top:0.25rem; border-top:1px solid #e2e8f0; padding-top:0.25rem;">
+                        <span style="color:#64748b;">Total:</span> <strong>@totalInclVat.ToString("N0") ISK</strong>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent"
+                          @onclick="GoToMapCustomer"
+                          Disabled="@(invoiceLines.Count == 0)">
+                Next →
+            </FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Step 4: Map Payday Customer & Dates ── *@
+@if (currentStep == WizardStep.MapCustomer)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Payday Customer & Invoice Dates</FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => currentStep = WizardStep.PreviewLines)">← Back</FluentButton>
+        </div>
+
+        @if (paydayLoading)
+        {
+            <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.5rem;">
+                <FluentProgressRing />
+                <FluentLabel>Loading Payday customers…</FluentLabel>
+            </div>
+        }
+        else
+        {
+            <div class="admin-grid" style="gap:1rem; margin-top:0.75rem;">
+                <div style="grid-column: span 2">
+                    <FluentLabel>Payday Customer <span style="color:red">*</span></FluentLabel>
+                    @if (paydayCustomerMatched)
+                    {
+                        <div style="padding:0.5rem 0.75rem; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; font-size:0.85rem; color:#065f46; margin-bottom:0.5rem;">
+                            ✓ Auto-matched by SSN: <strong>@paydayCustomers.FirstOrDefault(c => c.Id.ToString() == selectedPaydayCustomerIdStr)?.Name</strong>
+                        </div>
+                    }
+                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedPaydayCustomerIdStr" Style="width:100%">
+                        <FluentOption TOption="string" Value="">— Select Payday customer —</FluentOption>
+                        @foreach (var c in paydayCustomers)
+                        {
+                            <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name @(!string.IsNullOrWhiteSpace(c.Ssn) ? $"({c.Ssn})" : "")</FluentOption>
+                        }
+                    </FluentSelect>
+                </div>
+
+                <div>
+                    <FluentLabel>Invoice Date <span style="color:red">*</span></FluentLabel>
+                    <FluentDatePicker @bind-Value="invoiceDate" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel>Due Date <span style="color:red">*</span></FluentLabel>
+                    <FluentDatePicker @bind-Value="dueDate" Style="width:100%" />
+                </div>
+                <div>
+                    <FluentLabel>Final Due Date <span style="color:red">*</span></FluentLabel>
+                    <FluentDatePicker @bind-Value="finalDueDate" Style="width:100%" />
+                </div>
+                <div style="grid-column: span 2">
+                    <FluentLabel>Description (optional)</FluentLabel>
+                    <FluentTextField @bind-Value="invoiceDescription" Placeholder="e.g. Work performed March 2026" Style="width:100%" />
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(createError))
+            {
+                <FluentLabel Color="Color.Error" Style="margin-top:0.75rem;">@createError</FluentLabel>
+            }
+
+            <div style="display:flex; gap:0.75rem; margin-top:1.25rem;">
+                <FluentButton Appearance="Appearance.Accent"
+                              @onclick="CreateInvoiceInPaydayAsync"
+                              Disabled="@(!CanCreateInvoice || creating)">
+                    @(creating ? "Creating…" : "Create Invoice in Payday (DRAFT)")
+                </FluentButton>
+            </div>
+        }
+    </FluentCard>
+}
+
+@* ── Step 5: Done ── *@
+@if (currentStep == WizardStep.Done)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="text-align:center; padding:2rem 1rem;">
+            <div style="font-size:3rem; margin-bottom:0.5rem;">✓</div>
+            <FluentLabel Typo="Typography.PaneHeader" Style="color:#065f46;">Invoice Created!</FluentLabel>
+
+            @if (createdInvoice is not null)
+            {
+                <div style="margin-top:1rem; font-size:0.95rem;">
+                    <div>Invoice <strong>#@(createdInvoice.Number?.ToString() ?? "—")</strong></div>
+                    <div style="margin-top:0.25rem;">
+                        Amount: <strong>@createdInvoice.AmountIncludingVat.ToString("N0") @createdInvoice.CurrencyCode</strong>
+                    </div>
+                    <div style="margin-top:0.25rem;">
+                        Status: <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">DRAFT</span>
+                    </div>
+                </div>
+            }
+
+            <div style="display:flex; gap:0.75rem; justify-content:center; margin-top:1.5rem; flex-wrap:wrap;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/payday/invoices"))">
+                    View in Payday Invoices
+                </FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="ResetWizard">
+                    Build Another Invoice
+                </FluentButton>
+            </div>
+        </div>
+    </FluentCard>
+}
+
+@code {
+    // ── Wizard state ─────────────────────────────────────────────────────────
+    private enum WizardStep { SelectCustomer, SelectJobs, PreviewLines, MapCustomer, Done }
+
+    private static readonly (WizardStep step, string label)[] StepLabels =
+    [
+        (WizardStep.SelectCustomer, "Customer"),
+        (WizardStep.SelectJobs, "Jobs"),
+        (WizardStep.PreviewLines, "Lines"),
+        (WizardStep.MapCustomer, "Create"),
+        (WizardStep.Done, "Done")
+    ];
+
+    private WizardStep currentStep = WizardStep.SelectCustomer;
+    private string? errorMessage;
+
+    // ── Step 1 state ─────────────────────────────────────────────────────────
+    private bool initLoading = true;
+    private List<Customer> allCustomers = [];
+    private List<Customer> customersWithJobs = [];
+    private List<Job> allJobs = [];
+    private List<Employee> allEmployees = [];
+    private List<Material> allMaterials = [];
+    private Company? company;
+
+    private string selectedCustomerIdStr = string.Empty;
+    private DateTime? dateFrom;
+    private DateTime? dateTo;
+
+    private Customer? selectedCustomer => Guid.TryParse(selectedCustomerIdStr, out var id)
+        ? allCustomers.FirstOrDefault(c => c.Id == id)
+        : null;
+
+    // ── Step 2 state ─────────────────────────────────────────────────────────
+    private List<Job> customerJobs = [];
+    private List<JobSelection> jobSelections = [];
+    private bool jobsLoading;
+    private bool jobDataLoaded;
+    private List<string> rateWarnings = [];
+    private int alreadyInvoicedTimeEntryCount;
+    private int alreadyInvoicedMaterialUsageCount;
+    private List<string> lowStockWarnings = [];
+
+    // ── Invoiced tracking (IDs to mark after successful invoice creation) ──
+    private List<Guid> timeEntryIdsToMark = [];
+    private List<Guid> materialUsageIdsToMark = [];
+
+    // ── Step 3 state ─────────────────────────────────────────────────────────
+    private List<InvoiceLineForm> invoiceLines = [];
+    private decimal overtimeMultiplier = 1.8m;
+
+    // ── Step 4 state ─────────────────────────────────────────────────────────
+    private List<PaydayCustomer> paydayCustomers = [];
+    private bool paydayLoading;
+    private bool paydayCustomerMatched;
+    private string selectedPaydayCustomerIdStr = string.Empty;
+    private DateTime? invoiceDate = DateTime.Today;
+    private DateTime? dueDate = DateTime.Today.AddDays(14);
+    private DateTime? finalDueDate = DateTime.Today.AddDays(30);
+    private string invoiceDescription = string.Empty;
+    private bool creating;
+    private string? createError;
+
+    private bool CanCreateInvoice =>
+        Guid.TryParse(selectedPaydayCustomerIdStr, out _) &&
+        invoiceDate is not null &&
+        dueDate is not null &&
+        finalDueDate is not null &&
+        invoiceLines.Count > 0;
+
+    // ── Step 5 state ─────────────────────────────────────────────────────────
+    private PaydayInvoice? createdInvoice;
+
+    // ── Inner types ──────────────────────────────────────────────────────────
+    private sealed class JobSelection
+    {
+        public Job Job { get; set; } = null!;
+        public bool IsSelected { get; set; } = true;
+        public decimal TotalHours { get; set; }
+        public decimal TotalOvertimeHours { get; set; }
+        public int TotalDrivingUnits { get; set; }
+        public decimal TotalLaborCost { get; set; }
+        public decimal TotalOvertimeCost { get; set; }
+        public List<TimeEntry> TimeEntries { get; set; } = [];
+        public List<MaterialAggregate> Materials { get; set; } = [];
+        public List<EmployeeHours> EmployeeBreakdown { get; set; } = [];
+    }
+
+    private sealed class MaterialAggregate
+    {
+        public Guid MaterialId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Unit { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal VatRate { get; set; }
+        public decimal StockQuantity { get; set; }
+        public bool IsLowStock => StockQuantity < Quantity;
+    }
+
+    private sealed class InvoiceLineForm
+    {
+        public string Description { get; set; } = string.Empty;
+        public decimal Quantity { get; set; } = 1m;
+        public decimal UnitPriceExcludingVat { get; set; }
+        public decimal VatPercentage { get; set; } = 24m;
+        public decimal DiscountPercentage { get; set; }
+        public string LineType { get; set; } = string.Empty; // "labor", "overtime", "driving", "material", "manual"
+        public string JobCode { get; set; } = string.Empty;  // for regeneration
+        public Guid EmployeeId { get; set; }                 // for overtime regeneration
+    }
+
+    private sealed class EmployeeHours
+    {
+        public Guid EmployeeId { get; set; }
+        public string EmployeeName { get; set; } = string.Empty;
+        public decimal Hours { get; set; }
+        public decimal OvertimeHours { get; set; }
+        public decimal HourlyBillableRate { get; set; }
+    }
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        await PaydayInit.InitializeAsync();
+
+        // Default date range: previous month
+        var today = DateTime.Today;
+        var firstOfMonth = new DateTime(today.Year, today.Month, 1);
+        dateFrom = firstOfMonth.AddMonths(-1);
+        dateTo = firstOfMonth.AddDays(-1);
+
+        // Load all base data in parallel
+        var customersTask = CustomersApi.GetCustomersAsync();
+        var jobsTask = JobsApi.GetJobsAsync();
+        var employeesTask = EmployeesApi.GetEmployeesAsync();
+        var materialsTask = MaterialsApi.GetMaterialsAsync();
+        var companyTask = CompanyApi.GetCompanyAsync();
+
+        await Task.WhenAll(customersTask, jobsTask, employeesTask, materialsTask, companyTask);
+
+        var cr = await customersTask;
+        if (cr.IsSuccess) allCustomers = cr.Value ?? [];
+
+        var jr = await jobsTask;
+        if (jr.IsSuccess) allJobs = jr.Value ?? [];
+
+        var er = await employeesTask;
+        if (er.IsSuccess) allEmployees = er.Value ?? [];
+
+        var mr = await materialsTask;
+        if (mr.IsSuccess) allMaterials = mr.Value ?? [];
+
+        var cor = await companyTask;
+        if (cor.IsSuccess && cor.Value is not null) company = cor.Value;
+
+        // Only show customers that have at least one job
+        var customerIdsWithJobs = allJobs.Select(j => j.CustomerId).ToHashSet();
+        customersWithJobs = allCustomers.Where(c => customerIdsWithJobs.Contains(c.Id)).OrderBy(c => c.Name).ToList();
+
+        initLoading = false;
+    }
+
+    // ── Step 1 → 2 ──────────────────────────────────────────────────────────
+    private void GoToSelectJobs()
+    {
+        if (!Guid.TryParse(selectedCustomerIdStr, out var customerId)) return;
+
+        customerJobs = allJobs.Where(j => j.CustomerId == customerId).OrderBy(j => j.Code).ToList();
+        jobSelections = customerJobs.Select(j => new JobSelection { Job = j, IsSelected = true }).ToList();
+        jobDataLoaded = false;
+        currentStep = WizardStep.SelectJobs;
+    }
+
+    // ── Step 2: Load job data ────────────────────────────────────────────────
+    private async Task LoadJobDataAsync()
+    {
+        jobsLoading = true;
+        errorMessage = null;
+        rateWarnings = [];
+        jobDataLoaded = false;
+        alreadyInvoicedTimeEntryCount = 0;
+        alreadyInvoicedMaterialUsageCount = 0;
+        timeEntryIdsToMark = [];
+        materialUsageIdsToMark = [];
+
+        try
+        {
+            var fromDate = dateFrom.HasValue ? DateOnly.FromDateTime(dateFrom.Value) : (DateOnly?)null;
+            var toDate = dateTo.HasValue ? DateOnly.FromDateTime(dateTo.Value) : (DateOnly?)null;
+
+            var selectedJobs = jobSelections.Where(j => j.IsSelected).ToList();
+
+            // Fetch time entries and material usage for each selected job in parallel
+            var tasks = selectedJobs.Select(async js =>
+            {
+                var teResult = await TimeEntriesApi.GetTimeEntriesAsync(from: fromDate, to: toDate, jobId: js.Job.Id);
+                var muResult = await MaterialsApi.GetMaterialUsageAsync(jobId: js.Job.Id);
+
+                var allTimeEntries = teResult.IsSuccess ? teResult.Value ?? [] : [];
+                var allMaterialUsages = muResult.IsSuccess ? muResult.Value ?? [] : [];
+
+                // Client-side date filter for material usage
+                if (fromDate.HasValue)
+                    allMaterialUsages = allMaterialUsages.Where(u => DateOnly.FromDateTime(u.UsedAt.DateTime) >= fromDate.Value).ToList();
+                if (toDate.HasValue)
+                    allMaterialUsages = allMaterialUsages.Where(u => DateOnly.FromDateTime(u.UsedAt.DateTime) <= toDate.Value).ToList();
+
+                // Separate already-invoiced from available entries
+                var invoicedTe = allTimeEntries.Where(te => te.IsInvoiced).ToList();
+                var timeEntries = allTimeEntries.Where(te => !te.IsInvoiced).ToList();
+                var invoicedMu = allMaterialUsages.Where(mu => mu.IsInvoiced).ToList();
+                var materialUsages = allMaterialUsages.Where(mu => !mu.IsInvoiced).ToList();
+
+                return (js, timeEntries, materialUsages, invoicedTe.Count, invoicedMu.Count);
+            }).ToList();
+
+            var results = await Task.WhenAll(tasks);
+
+            var employeeMap = allEmployees.ToDictionary(e => e.Id);
+            var materialMap = allMaterials.ToDictionary(m => m.Id);
+            var warnedEmployees = new HashSet<Guid>();
+
+            foreach (var (js, timeEntries, materialUsages, invoicedTeCount, invoicedMuCount) in results)
+            {
+                alreadyInvoicedTimeEntryCount += invoicedTeCount;
+                alreadyInvoicedMaterialUsageCount += invoicedMuCount;
+            }
+
+            foreach (var (js, timeEntries, materialUsages, _, _) in results)
+            {
+                js.TimeEntries = timeEntries;
+                timeEntryIdsToMark.AddRange(timeEntries.Select(te => te.Id));
+                js.TotalHours = timeEntries.Sum(te => te.Hours);
+                js.TotalOvertimeHours = timeEntries.Sum(te => te.OvertimeHours);
+                js.TotalDrivingUnits = timeEntries.Sum(te => te.DrivingUnits);
+
+                // Build per-employee breakdown for invoice line generation
+                js.TotalLaborCost = 0;
+                js.TotalOvertimeCost = 0;
+                js.EmployeeBreakdown = [];
+                var byEmployee = timeEntries.GroupBy(te => te.EmployeeId);
+                foreach (var group in byEmployee)
+                {
+                    var hasEmp = employeeMap.TryGetValue(group.Key, out var emp);
+                    var rate = hasEmp ? emp!.HourlyBillableRate : 0;
+                    if (rate == 0 && !warnedEmployees.Contains(group.Key))
+                    {
+                        warnedEmployees.Add(group.Key);
+                        rateWarnings.Add(emp?.DisplayName ?? group.Key.ToString()[..8]);
+                    }
+                    var empHours = group.Sum(te => te.Hours);
+                    var empOtHours = group.Sum(te => te.OvertimeHours);
+                    js.TotalLaborCost += empHours * rate;
+                    js.TotalOvertimeCost += empOtHours * rate;
+                    js.EmployeeBreakdown.Add(new EmployeeHours
+                    {
+                        EmployeeId = group.Key,
+                        EmployeeName = emp?.DisplayName ?? group.Key.ToString()[..8],
+                        Hours = empHours,
+                        OvertimeHours = empOtHours,
+                        HourlyBillableRate = rate
+                    });
+                }
+
+                // Track material usage IDs for marking as invoiced
+                materialUsageIdsToMark.AddRange(materialUsages.Where(u => u.JobId.HasValue).Select(u => u.Id));
+
+                // Aggregate materials
+                js.Materials = materialUsages
+                    .Where(u => u.JobId.HasValue)
+                    .GroupBy(u => u.MaterialId)
+                    .Select(g =>
+                    {
+                        var mat = materialMap.GetValueOrDefault(g.Key);
+                        return new MaterialAggregate
+                        {
+                            MaterialId = g.Key,
+                            Name = mat?.Name ?? "Unknown material",
+                            Unit = mat?.Unit ?? "stk.",
+                            Quantity = g.Sum(u => u.Quantity),
+                            UnitPrice = mat?.UnitPrice ?? 0,
+                            VatRate = mat?.VatRate ?? 24m,
+                            StockQuantity = mat?.Quantity ?? 0
+                        };
+                    })
+                    .Where(m => m.Quantity > 0)
+                    .ToList();
+            }
+
+            // Collect low-stock warnings
+            lowStockWarnings = jobSelections
+                .Where(j => j.IsSelected)
+                .SelectMany(j => j.Materials)
+                .Where(m => m.IsLowStock)
+                .Select(m => $"{m.Name} (used {m.Quantity:0.##} {m.Unit}, stock: {m.StockQuantity:0.##} {m.Unit})")
+                .Distinct()
+                .ToList();
+
+            jobDataLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load job data: {ex.Message}";
+        }
+        finally
+        {
+            jobsLoading = false;
+        }
+    }
+
+    // ── Step 2 → 3: Generate invoice lines ───────────────────────────────────
+    private void GenerateInvoiceLines()
+    {
+        invoiceLines = [];
+        var drivingUnitPrice = company?.DrivingUnitPrice ?? 0;
+
+        foreach (var js in jobSelections.Where(j => j.IsSelected))
+        {
+            var code = js.Job.Code;
+            var name = js.Job.Name;
+            var isHourly = js.Job.BillingType != BillingType.FixedPrice;
+
+            if (isHourly)
+            {
+                foreach (var empHours in js.EmployeeBreakdown.Where(e => e.Hours > 0 || e.OvertimeHours > 0))
+                {
+                    // Labor line per employee
+                    if (empHours.Hours > 0)
+                    {
+                        invoiceLines.Add(new InvoiceLineForm
+                        {
+                            Description = $"Vinna — {code} {name} — {empHours.EmployeeName}",
+                            Quantity = empHours.Hours,
+                            UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate, 0, MidpointRounding.AwayFromZero),
+                            VatPercentage = 24m,
+                            LineType = "labor",
+                            JobCode = code,
+                            EmployeeId = empHours.EmployeeId
+                        });
+                    }
+
+                    // Overtime line per employee
+                    if (empHours.OvertimeHours > 0)
+                    {
+                        invoiceLines.Add(new InvoiceLineForm
+                        {
+                            Description = $"Yfirvinna — {code} {name} — {empHours.EmployeeName}",
+                            Quantity = empHours.OvertimeHours,
+                            UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
+                            VatPercentage = 24m,
+                            LineType = "overtime",
+                            JobCode = code,
+                            EmployeeId = empHours.EmployeeId
+                        });
+                    }
+                }
+            }
+
+            // Driving (one line per job — driving units are already an int)
+            if (js.TotalDrivingUnits > 0)
+            {
+                invoiceLines.Add(new InvoiceLineForm
+                {
+                    Description = $"Akstur — {code} {name}",
+                    Quantity = js.TotalDrivingUnits,
+                    UnitPriceExcludingVat = Math.Round(drivingUnitPrice, 0, MidpointRounding.AwayFromZero),
+                    VatPercentage = 24m,
+                    LineType = "driving",
+                    JobCode = code
+                });
+            }
+
+            // Materials — one line per material
+            foreach (var mat in js.Materials)
+            {
+                invoiceLines.Add(new InvoiceLineForm
+                {
+                    Description = $"Efni — {mat.Name} ({mat.Quantity:0.##} {mat.Unit})",
+                    Quantity = 1,
+                    UnitPriceExcludingVat = Math.Round(mat.Quantity * mat.UnitPrice, 0, MidpointRounding.AwayFromZero),
+                    VatPercentage = mat.VatRate,
+                    LineType = "material",
+                    JobCode = code
+                });
+            }
+        }
+
+        currentStep = WizardStep.PreviewLines;
+    }
+
+    // ── Recalculate overtime lines with new multiplier ───────────────────────
+    private void RegenerateOvertimeLines()
+    {
+        foreach (var js in jobSelections.Where(j => j.IsSelected))
+        {
+            foreach (var empHours in js.EmployeeBreakdown.Where(e => e.OvertimeHours > 0))
+            {
+                var otLine = invoiceLines.FirstOrDefault(l =>
+                    l.LineType == "overtime" &&
+                    l.JobCode == js.Job.Code &&
+                    l.EmployeeId == empHours.EmployeeId);
+
+                if (otLine is not null)
+                    otLine.UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero);
+            }
+        }
+    }
+
+    // ── Step 3 → 4 ──────────────────────────────────────────────────────────
+    private async Task GoToMapCustomer()
+    {
+        paydayLoading = true;
+        createError = null;
+        paydayCustomerMatched = false;
+        currentStep = WizardStep.MapCustomer;
+
+        try
+        {
+            var result = await PaydayCustomersApi.GetAllAsync(page: 1, perPage: 200);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                paydayCustomers = result.Value.Customers ?? [];
+            }
+            else
+            {
+                paydayCustomers = [];
+                createError = result.ErrorMessage ?? "Could not load Payday customers.";
+            }
+
+            // Auto-match by SSN
+            if (selectedCustomer is not null && !string.IsNullOrWhiteSpace(selectedCustomer.Ssn))
+            {
+                var normalized = selectedCustomer.Ssn.Replace("-", "").Trim();
+                var match = paydayCustomers.FirstOrDefault(pc =>
+                    !string.IsNullOrWhiteSpace(pc.Ssn) &&
+                    pc.Ssn.Replace("-", "").Trim() == normalized);
+
+                if (match is not null)
+                {
+                    selectedPaydayCustomerIdStr = match.Id.ToString();
+                    paydayCustomerMatched = true;
+                }
+            }
+
+            // Default description
+            if (string.IsNullOrWhiteSpace(invoiceDescription) && dateFrom.HasValue)
+            {
+                invoiceDescription = $"Vinna {dateFrom.Value:MMMM yyyy}";
+            }
+        }
+        finally
+        {
+            paydayLoading = false;
+        }
+    }
+
+    // ── Step 4 → 5: Create invoice ──────────────────────────────────────────
+    private async Task CreateInvoiceInPaydayAsync()
+    {
+        if (!Guid.TryParse(selectedPaydayCustomerIdStr, out var paydayCustomerId)) return;
+        if (invoiceDate is null || dueDate is null || finalDueDate is null) return;
+
+        creating = true;
+        createError = null;
+
+        try
+        {
+            var request = new CreateInvoiceRequest
+            {
+                Customer = new InvoiceCustomerRef { Id = paydayCustomerId },
+                Description = string.IsNullOrWhiteSpace(invoiceDescription) ? null : invoiceDescription.Trim(),
+                InvoiceDate = invoiceDate.Value.ToString("yyyy-MM-dd"),
+                DueDate = dueDate.Value.ToString("yyyy-MM-dd"),
+                FinalDueDate = finalDueDate.Value.ToString("yyyy-MM-dd"),
+                CurrencyCode = "ISK",
+                Status = "DRAFT",
+                Lines = invoiceLines.Select(l => new CreateInvoiceLineRequest
+                {
+                    Description = l.Description.Trim(),
+                    Quantity = l.Quantity,
+                    UnitPriceExcludingVat = l.UnitPriceExcludingVat,
+                    VatPercentage = l.VatPercentage,
+                    DiscountPercentage = l.DiscountPercentage
+                }).ToList()
+            };
+
+            var result = await PaydayInvoicesApi.CreateAsync(request);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                createdInvoice = result.Value;
+
+                // Mark time entries and material usages as invoiced with the Payday invoice number
+                var invoiceNumber = createdInvoice.Number;
+                var markTasks = new List<Task>();
+                if (timeEntryIdsToMark.Count > 0)
+                    markTasks.Add(TimeEntriesApi.MarkTimeEntriesInvoicedAsync(new MarkInvoicedRequest
+                    {
+                        Ids = timeEntryIdsToMark,
+                        PaydayInvoiceNumber = invoiceNumber
+                    }));
+                if (materialUsageIdsToMark.Count > 0)
+                    markTasks.Add(MaterialsApi.MarkMaterialUsageInvoicedAsync(new MarkInvoicedRequest
+                    {
+                        Ids = materialUsageIdsToMark,
+                        PaydayInvoiceNumber = invoiceNumber
+                    }));
+                if (markTasks.Count > 0)
+                    await Task.WhenAll(markTasks);
+
+                currentStep = WizardStep.Done;
+            }
+            else
+            {
+                createError = result.ErrorMessage ?? "Could not create invoice in Payday.";
+            }
+        }
+        finally
+        {
+            creating = false;
+        }
+    }
+
+    // ── Reset wizard ─────────────────────────────────────────────────────────
+    private void ResetWizard()
+    {
+        currentStep = WizardStep.SelectCustomer;
+        selectedCustomerIdStr = string.Empty;
+        jobSelections = [];
+        jobDataLoaded = false;
+        invoiceLines = [];
+        paydayCustomers = [];
+        paydayCustomerMatched = false;
+        selectedPaydayCustomerIdStr = string.Empty;
+        invoiceDescription = string.Empty;
+        createdInvoice = null;
+        errorMessage = null;
+        createError = null;
+        overtimeMultiplier = 1.8m;
+        timeEntryIdsToMark = [];
+        materialUsageIdsToMark = [];
+        alreadyInvoicedTimeEntryCount = 0;
+        alreadyInvoicedMaterialUsageCount = 0;
+        lowStockWarnings = [];
+
+        var today = DateTime.Today;
+        var firstOfMonth = new DateTime(today.Year, today.Month, 1);
+        dateFrom = firstOfMonth.AddMonths(-1);
+        dateTo = firstOfMonth.AddDays(-1);
+        invoiceDate = DateTime.Today;
+        dueDate = DateTime.Today.AddDays(14);
+        finalDueDate = DateTime.Today.AddDays(30);
+    }
+}

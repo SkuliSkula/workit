@@ -5,8 +5,8 @@ public sealed class CreateInvoiceLineRequest
     /// <summary>Required.</summary>
     public required string  Description           { get; set; }
     public string?          Comment               { get; set; }
-    /// <summary>Required.</summary>
-    public required int     Quantity              { get; set; }
+    /// <summary>Required. Payday accepts decimal quantities (e.g. hours).</summary>
+    public required decimal Quantity              { get; set; }
     /// <summary>If set, UnitPriceIncludingVat is ignored.</summary>
     public decimal?         UnitPriceExcludingVat { get; set; }
     /// <summary>If set, UnitPriceExcludingVat should be empty.</summary>

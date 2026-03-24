@@ -11,4 +11,13 @@ public sealed class TimeEntry
     public decimal OvertimeHours { get; set; }
     public int DrivingUnits { get; set; }
     public string Notes { get; set; } = string.Empty;
+
+    /// <summary>Whether this entry has been included in a Payday invoice.</summary>
+    public bool IsInvoiced { get; set; }
+
+    /// <summary>When this entry was marked as invoiced (UTC).</summary>
+    public DateTimeOffset? InvoicedAt { get; set; }
+
+    /// <summary>The Payday invoice number this entry was billed on.</summary>
+    public int? PaydayInvoiceNumber { get; set; }
 }

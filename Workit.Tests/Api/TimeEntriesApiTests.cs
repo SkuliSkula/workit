@@ -151,6 +151,9 @@ public class TimeEntriesApiTests
 
         public Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry) =>
             PutAsync($"api/timeentries/{timeEntry.Id}", timeEntry, "The time entry could not be updated right now.");
+
+        public Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request) =>
+            PostAsync("api/timeentries/mark-invoiced", request, "Time entries could not be marked as invoiced.");
     }
 
     private class FakeTokenAccessor : IAccessTokenAccessor
