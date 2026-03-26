@@ -61,6 +61,13 @@
     private string? errorMessage;
     private string? successMessage;
 
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await CompanyApi.GetCompanyAsync();
+        if (result.IsSuccess && result.Value is not null)
+            newCompany.Owner = result.Value.Owner;
+    }
+
     private bool CanCreate =>
         !string.IsNullOrWhiteSpace(newCompany.Name) &&
         !string.IsNullOrWhiteSpace(newCompany.Ssn) &&
@@ -79,7 +86,8 @@
         if (result.IsSuccess)
         {
             successMessage = $"Company \"{newCompany.Name}\" created. You can now switch to it from the dashboard.";
-            newCompany = new();
+            var ownerName = newCompany.Owner;
+            newCompany = new() { Owner = ownerName };
         }
         else
         {
