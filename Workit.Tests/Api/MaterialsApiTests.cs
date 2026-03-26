@@ -163,6 +163,9 @@ public class MaterialsApiTests
 
         public Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request) =>
             PostAsync("api/materials/usage/mark-invoiced", request, "Material usage could not be marked as invoiced.");
+
+        public Task<ApiResult> MarkMaterialUsageUninvoicedAsync(MarkUninvoicedRequest request) =>
+            PostAsync("api/materials/usage/mark-uninvoiced", request, "Material usage could not be unmarked as invoiced.");
     }
 
     private class FakeTokenAccessor : IAccessTokenAccessor

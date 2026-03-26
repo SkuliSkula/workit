@@ -12,6 +12,7 @@ public interface IMaterialsApi
     Task<ApiResult<List<MaterialUsage>>> GetMaterialUsageAsync(Guid? jobId = null);
     Task<ApiResult<MaterialUsage>> LogMaterialUsageAsync(MaterialUsage usage);
     Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request);
+    Task<ApiResult> MarkMaterialUsageUninvoicedAsync(MarkUninvoicedRequest request);
 }
 
 internal sealed class MaterialsApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -54,4 +55,7 @@ internal sealed class MaterialsApi(HttpClient httpClient, IAccessTokenAccessor a
 
     public Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request) =>
         PostAsync("api/materials/usage/mark-invoiced", request, "Material usage could not be marked as invoiced.");
+
+    public Task<ApiResult> MarkMaterialUsageUninvoicedAsync(MarkUninvoicedRequest request) =>
+        PostAsync("api/materials/usage/mark-uninvoiced", request, "Material usage could not be unmarked as invoiced.");
 }

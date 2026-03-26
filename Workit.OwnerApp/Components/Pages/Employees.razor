@@ -35,12 +35,10 @@
         <FluentLabel Typo="Typography.Body"><strong>New Employee</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
-                <FluentTextField @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
+                <FluentTextField Label="Name *" @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Trade</FluentLabel>
-                <FluentSelect TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
+                <FluentSelect Label="Trade" TValue="string" TOption="string" @bind-Value="newEmployeeTrade" style="width:100%">
                     @foreach (var trade in Trades)
                     {
                         <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
@@ -48,28 +46,22 @@
                 </FluentSelect>
             </div>
             <div>
-                <FluentLabel>SSN</FluentLabel>
-                <FluentTextField @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
+                <FluentTextField Label="SSN" @bind-Value="newEmployeeSsn" Placeholder="Social security number" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Email</FluentLabel>
-                <FluentTextField @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
+                <FluentTextField Label="Email" @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Password</FluentLabel>
-                <FluentTextField @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
+                <FluentTextField Label="Password" @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Phone</FluentLabel>
-                <FluentTextField @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
+                <FluentTextField Label="Phone" @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Contact person</FluentLabel>
-                <FluentTextField @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                <FluentTextField Label="Contact person" @bind-Value="newEmployeeContactPerson" Placeholder="Emergency contact" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Employment type</FluentLabel>
-                <FluentSelect TValue="string" TOption="string"
+                <FluentSelect Label="Employment type" TValue="string" TOption="string"
                               Value="@newEmploymentType.ToString()"
                               ValueChanged="@(v => newEmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
                               style="width:100%">
@@ -78,12 +70,10 @@
                 </FluentSelect>
             </div>
             <div>
-                <FluentLabel>Hourly salary</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="newHourlySalary" Min="0" Placeholder="0" style="width:100%" />
+                <FluentNumberField Label="Hourly salary" TValue="decimal" @bind-Value="newHourlySalary" Min="0" Placeholder="0" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Hourly billable rate</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="newHourlyBillableRate" Min="0" Placeholder="0" style="width:100%" />
+                <FluentNumberField Label="Hourly billable rate" TValue="decimal" @bind-Value="newHourlyBillableRate" Min="0" Placeholder="0" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -100,12 +90,10 @@
         <FluentLabel Typo="Typography.Body"><strong>Edit Employee</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
-                <FluentTextField @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
+                <FluentTextField Label="Name *" @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Trade</FluentLabel>
-                <FluentSelect TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
+                <FluentSelect Label="Trade" TValue="string" TOption="string" @bind-Value="editingEmployee.Trade" style="width:100%">
                     @foreach (var trade in Trades)
                     {
                         <FluentOption TOption="string" Value="@trade">@trade</FluentOption>
@@ -113,24 +101,19 @@
                 </FluentSelect>
             </div>
             <div>
-                <FluentLabel>SSN</FluentLabel>
-                <FluentTextField @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
+                <FluentTextField Label="SSN" @bind-Value="editingEmployee.Ssn" Placeholder="Social security number" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Email</FluentLabel>
-                <FluentTextField @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
+                <FluentTextField Label="Email" @bind-Value="editingEmployee.Email" Placeholder="employee@example.com" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Phone</FluentLabel>
-                <FluentTextField @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
+                <FluentTextField Label="Phone" @bind-Value="editingEmployee.Phone" Placeholder="Phone number" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Contact person</FluentLabel>
-                <FluentTextField @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
+                <FluentTextField Label="Contact person" @bind-Value="editingEmployee.ContactPerson" Placeholder="Emergency contact" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Employment type</FluentLabel>
-                <FluentSelect TValue="string" TOption="string"
+                <FluentSelect Label="Employment type" TValue="string" TOption="string"
                               Value="@editingEmployee.EmploymentType.ToString()"
                               ValueChanged="@(v => editingEmployee.EmploymentType = Enum.TryParse<EmploymentType>(v, out var e) ? e : EmploymentType.Employed)"
                               style="width:100%">
@@ -139,12 +122,10 @@
                 </FluentSelect>
             </div>
             <div>
-                <FluentLabel>Hourly salary</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlySalary" Min="0" style="width:100%" />
+                <FluentNumberField Label="Hourly salary" TValue="decimal" @bind-Value="editingEmployee.HourlySalary" Min="0" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Hourly billable rate</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="editingEmployee.HourlyBillableRate" Min="0" style="width:100%" />
+                <FluentNumberField Label="Hourly billable rate" TValue="decimal" @bind-Value="editingEmployee.HourlyBillableRate" Min="0" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">

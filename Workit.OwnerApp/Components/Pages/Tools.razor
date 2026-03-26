@@ -27,18 +27,15 @@
         <FluentLabel Typo="Typography.Body"><strong>New Tool</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
-                <FluentTextField @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
+                <FluentTextField Label="Name *" @bind-Value="newName" Placeholder="e.g. Angle grinder" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Serial number</FluentLabel>
-                <FluentTextField @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
+                <FluentTextField Label="Serial number" @bind-Value="newSerial" Placeholder="Optional" style="width:100%" />
             </div>
 
             <div style="grid-column: span 2">
-                <FluentLabel>Description</FluentLabel>
-                <FluentTextField @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
+                <FluentTextField Label="Description" @bind-Value="newDescription" Placeholder="Optional notes" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -63,18 +60,15 @@
         <FluentLabel Typo="Typography.PaneHeader">Edit Tool</FluentLabel>
         <div class="admin-grid">
             <div>
-                <FluentLabel>Name</FluentLabel>
-                <FluentTextField @bind-Value="editingTool.Name" style="width:100%" />
+                <FluentTextField Label="Name" @bind-Value="editingTool.Name" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Serial number</FluentLabel>
-                <FluentTextField @bind-Value="editingTool.SerialNumber" style="width:100%" />
+                <FluentTextField Label="Serial number" @bind-Value="editingTool.SerialNumber" style="width:100%" />
             </div>
 
             <div style="grid-column: span 2">
-                <FluentLabel>Description</FluentLabel>
-                <FluentTextField @bind-Value="editingTool.Description" style="width:100%" />
+                <FluentTextField Label="Description" @bind-Value="editingTool.Description" style="width:100%" />
             </div>
 
             <div style="display:flex; align-items:flex-end; gap:0.5rem;">

@@ -28,10 +28,9 @@
         <FluentLabel Typo="Typography.Body"><strong>New Time Entry</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Employee</FluentLabel>
                 @if (employees.Count > 0)
                 {
-                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                    <FluentSelect Label="Employee" TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
                         @foreach (var emp in employees)
                         {
                             <FluentOption TOption="string" Value="@emp.Id.ToString()">
@@ -47,10 +46,9 @@
             </div>
 
             <div>
-                <FluentLabel>Job</FluentLabel>
                 @if (jobs.Count > 0)
                 {
-                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
+                    <FluentSelect Label="Job" TValue="string" TOption="string" @bind-Value="selectedJobId" style="width:100%">
                         @foreach (var job in jobs)
                         {
                             <FluentOption TOption="string" Value="@job.Id.ToString()">
@@ -66,28 +64,23 @@
             </div>
 
             <div>
-                <FluentLabel>Date</FluentLabel>
-                <FluentDatePicker @bind-Value="workDate" style="width:100%" />
+                <FluentDatePicker Label="Date" @bind-Value="workDate" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Hours</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
+                <FluentNumberField Label="Hours" TValue="decimal" @bind-Value="hours" Step="0.5" Min="0" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Overtime hours</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
+                <FluentNumberField Label="Overtime hours" TValue="decimal" @bind-Value="overtimeHours" Step="0.5" Min="0" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Driving units</FluentLabel>
-                <FluentNumberField TValue="int" @bind-Value="drivingUnits" Min="0" style="width:100%" />
+                <FluentNumberField Label="Driving units" TValue="int" @bind-Value="drivingUnits" Min="0" style="width:100%" />
             </div>
 
             <div style="grid-column: span 2">
-                <FluentLabel>Notes</FluentLabel>
-                <FluentTextField @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
+                <FluentTextField Label="Notes" @bind-Value="notes" Placeholder="Optional notes" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -119,6 +112,11 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(editResult))
+    {
+        <FluentLabel style="margin-top:0.25rem;" Color="@(editResult.StartsWith("✓") ? Color.Success : Color.Error)">@editResult</FluentLabel>
+    }
+
     @if (entries.Count > 0)
     {
         <FluentDataGrid TGridItem="EntryRow" Items="@entries.AsQueryable()" AutoFit="true"
@@ -126,16 +124,72 @@
             <PropertyColumn Property="@(x => x.Date)"         Title="Date"     Format="dd MMM yyyy" />
             <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
             <PropertyColumn Property="@(x => x.JobName)"      Title="Job" />
-            <PropertyColumn Property="@(x => x.Hours)"         Title="Hours"    Format="0.##" />
-            <PropertyColumn Property="@(x => x.OvertimeHours)" Title="Overtime" Format="0.##" />
-            <PropertyColumn Property="@(x => x.DrivingUnits)"  Title="Driving"  />
-            <PropertyColumn Property="@(x => x.Notes)"         Title="Notes" />
-            <TemplateColumn Title="Invoiced">
-                @if (context.IsInvoiced)
+            <TemplateColumn Title="Hours">
+                @if (editingRow == context)
                 {
-                    <span style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600; white-space:nowrap;">
-                        @(context.PaydayInvoiceNumber.HasValue ? $"#{context.PaydayInvoiceNumber}" : "✓")
-                    </span>
+                    <FluentNumberField TValue="decimal" @bind-Value="editHours" Step="0.5" Min="0" style="width:5rem;" />
+                }
+                else
+                {
+                    @context.Hours.ToString("0.##")
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Overtime">
+                @if (editingRow == context)
+                {
+                    <FluentNumberField TValue="decimal" @bind-Value="editOvertimeHours" Step="0.5" Min="0" style="width:5rem;" />
+                }
+                else
+                {
+                    @context.OvertimeHours.ToString("0.##")
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Driving">
+                @if (editingRow == context)
+                {
+                    <FluentNumberField TValue="int" @bind-Value="editDrivingUnits" Min="0" style="width:4rem;" />
+                }
+                else
+                {
+                    @context.DrivingUnits
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Notes">
+                @if (editingRow == context)
+                {
+                    <FluentTextField @bind-Value="editNotes" style="width:100%;" />
+                }
+                else
+                {
+                    @context.Notes
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="Invoiced">
+                @if (context.IsInvoiced && context.PaydayInvoiceNumber.HasValue)
+                {
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  Style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600; min-width:auto; height:auto;"
+                                  Title="Click to uninvoice"
+                                  @onclick="@(() => ConfirmUninvoice(context.PaydayInvoiceNumber.Value))">
+                        #@context.PaydayInvoiceNumber
+                    </FluentButton>
+                }
+                else if (context.IsInvoiced)
+                {
+                    <span style="background:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">✓</span>
+                }
+            </TemplateColumn>
+            <TemplateColumn Title="">
+                @if (editingRow == context)
+                {
+                    <div style="display:flex; gap:0.25rem;">
+                        <FluentButton Appearance="Appearance.Accent" @onclick="SaveEditAsync" Disabled="@editSaving">Save</FluentButton>
+                        <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit">Cancel</FluentButton>
+                    </div>
+                }
+                else
+                {
+                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => StartEdit(context))">Edit</FluentButton>
                 }
             </TemplateColumn>
         </FluentDataGrid>
@@ -160,6 +214,29 @@
         <FluentLabel>No entries found for the selected period.</FluentLabel>
     }
 </FluentCard>
+
+@if (uninvoiceNumber.HasValue)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false" Style="border: 2px solid #f59e0b;">
+        <FluentLabel Typo="Typography.Body">
+            <strong>Reset invoice #@uninvoiceNumber?</strong>
+        </FluentLabel>
+        <FluentLabel style="margin-top:0.25rem;">
+            This will mark all time entries and material usages linked to invoice <strong>#@uninvoiceNumber</strong> as <em>not invoiced</em>,
+            so they can be included in a new invoice.
+        </FluentLabel>
+        @if (!string.IsNullOrWhiteSpace(uninvoiceResult))
+        {
+            <FluentLabel style="margin-top:0.25rem;" Color="@(uninvoiceResult.StartsWith("✓") ? Color.Success : Color.Error)">@uninvoiceResult</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" Style="background:#dc2626;" @onclick="ExecuteUninvoiceAsync" Disabled="@uninvoiceSaving">
+                @(uninvoiceSaving ? "Resetting…" : "Yes, reset")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelUninvoice">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
 
 @code {
 
@@ -197,6 +274,9 @@
 
     private sealed class EntryRow
     {
+        public Guid     Id            { get; set; }
+        public Guid     EmployeeId    { get; set; }
+        public Guid     JobId         { get; set; }
         public DateOnly Date          { get; set; }
         public string   EmployeeName  { get; set; } = string.Empty;
         public string   JobName       { get; set; } = string.Empty;
@@ -209,6 +289,118 @@
         public string   InvoiceStatus => IsInvoiced
             ? (PaydayInvoiceNumber.HasValue ? $"#{PaydayInvoiceNumber}" : "Yes")
             : "";
+    }
+
+    // ── Edit state ──────────────────────────────────────────────────────────
+    private EntryRow? editingRow;
+    private decimal editHours;
+    private decimal editOvertimeHours;
+    private int     editDrivingUnits;
+    private string  editNotes = string.Empty;
+    private bool    editSaving;
+    private string? editResult;
+
+    private void StartEdit(EntryRow row)
+    {
+        editingRow      = row;
+        editHours       = row.Hours;
+        editOvertimeHours = row.OvertimeHours;
+        editDrivingUnits  = row.DrivingUnits;
+        editNotes       = row.Notes;
+        editResult      = null;
+    }
+
+    private void CancelEdit()
+    {
+        editingRow = null;
+        editResult = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (editingRow is null) return;
+
+        editSaving = true;
+        editResult = null;
+
+        try
+        {
+            var updated = new TimeEntry
+            {
+                Id            = editingRow.Id,
+                EmployeeId    = editingRow.EmployeeId,
+                JobId         = editingRow.JobId,
+                WorkDate      = editingRow.Date,
+                Hours         = editHours,
+                OvertimeHours = editOvertimeHours,
+                DrivingUnits  = editDrivingUnits,
+                Notes         = editNotes.Trim()
+            };
+
+            var result = await TimeEntriesApi.UpdateTimeEntryAsync(updated);
+            if (result.IsSuccess)
+            {
+                editingRow.Hours         = editHours;
+                editingRow.OvertimeHours = editOvertimeHours;
+                editingRow.DrivingUnits  = editDrivingUnits;
+                editingRow.Notes         = editNotes.Trim();
+                editResult  = "✓ Entry updated";
+                editingRow  = null;
+            }
+            else
+            {
+                editResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            editSaving = false;
+        }
+    }
+
+    // ── Uninvoice state ─────────────────────────────────────────────────────
+    private int?   uninvoiceNumber;
+    private bool   uninvoiceSaving;
+    private string? uninvoiceResult;
+
+    private void ConfirmUninvoice(int invoiceNumber)
+    {
+        uninvoiceNumber = invoiceNumber;
+        uninvoiceResult = null;
+    }
+
+    private void CancelUninvoice()
+    {
+        uninvoiceNumber = null;
+        uninvoiceResult = null;
+    }
+
+    private async Task ExecuteUninvoiceAsync()
+    {
+        if (uninvoiceNumber is null) return;
+
+        uninvoiceSaving = true;
+        uninvoiceResult = null;
+
+        try
+        {
+            var request = new MarkUninvoicedRequest { PaydayInvoiceNumber = uninvoiceNumber.Value };
+
+            var teResult = await TimeEntriesApi.MarkTimeEntriesUninvoicedAsync(request);
+            if (!teResult.IsSuccess)
+            {
+                uninvoiceResult = $"Error resetting time entries: {teResult.ErrorMessage}";
+                return;
+            }
+
+            uninvoiceResult = $"✓ Invoice #{uninvoiceNumber} entries have been reset.";
+            uninvoiceNumber = null;
+            await LoadEntriesAsync();
+        }
+        finally
+        {
+            uninvoiceSaving = false;
+        }
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -319,6 +511,9 @@
                 .ThenBy(e => employeeNames.GetValueOrDefault(e.EmployeeId, string.Empty))
                 .Select(e => new EntryRow
                 {
+                    Id            = e.Id,
+                    EmployeeId    = e.EmployeeId,
+                    JobId         = e.JobId,
                     Date          = e.WorkDate,
                     EmployeeName  = employeeNames.GetValueOrDefault(e.EmployeeId, e.EmployeeId.ToString()),
                     JobName       = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),

@@ -97,19 +97,27 @@ h1:focus {
 
 .admin-grid {
     display: grid;
-    gap: 0.75rem;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem 1.25rem;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     align-items: end;
 }
 
 .admin-grid > * {
     min-width: 0;
+    max-width: 100%;
+    contain: inline-size;
 }
 
-.admin-grid fluent-date-picker {
+/* Force all FluentUI web-component inputs to respect cell width */
+.admin-grid fluent-text-field,
+.admin-grid fluent-number-field,
+.admin-grid fluent-select,
+.admin-grid fluent-date-picker,
+.admin-grid fluent-combobox {
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .admin-accordion {

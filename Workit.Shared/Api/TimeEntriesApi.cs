@@ -8,6 +8,7 @@ public interface ITimeEntriesApi
     Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry);
     Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry);
     Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request);
+    Task<ApiResult> MarkTimeEntriesUninvoicedAsync(MarkUninvoicedRequest request);
 }
 
 internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -41,4 +42,7 @@ internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor
 
     public Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request) =>
         PostAsync("api/timeentries/mark-invoiced", request, "Time entries could not be marked as invoiced.");
+
+    public Task<ApiResult> MarkTimeEntriesUninvoicedAsync(MarkUninvoicedRequest request) =>
+        PostAsync("api/timeentries/mark-uninvoiced", request, "Time entries could not be unmarked as invoiced.");
 }

@@ -38,12 +38,10 @@ else
 
         <div style="display:grid; gap:1rem; max-width:500px;">
             <div>
-                <FluentLabel>Client ID</FluentLabel>
-                <FluentTextField @bind-Value="clientId" Style="width:100%;" Placeholder="e.g. abc123-def456-..." />
+                <FluentTextField Label="Client ID" @bind-Value="clientId" Style="width:100%;" Placeholder="e.g. abc123-def456-..." />
             </div>
             <div>
-                <FluentLabel>Client Secret</FluentLabel>
-                <FluentTextField @bind-Value="clientSecret" Style="width:100%;" Placeholder="e.g. sk_live_..." TextFieldType="TextFieldType.Password" />
+                <FluentTextField Label="Client Secret" @bind-Value="clientSecret" Style="width:100%;" Placeholder="e.g. sk_live_..." TextFieldType="TextFieldType.Password" />
             </div>
         </div>
 

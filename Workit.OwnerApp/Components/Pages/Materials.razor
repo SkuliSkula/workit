@@ -26,18 +26,15 @@
         <FluentLabel Typo="Typography.Body"><strong>@(editingMaterial is not null ? "Edit Material" : "New Material")</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Name <span style="color:red">*</span></FluentLabel>
-                <FluentTextField @bind-Value="formName" Placeholder="e.g. N1XE-U 5G 16 Cu 1kV Aflstrengur" style="width:100%" />
+                <FluentTextField Label="Name *" @bind-Value="formName" Placeholder="e.g. N1XE-U 5G 16 Cu 1kV Aflstrengur" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Product code</FluentLabel>
-                <FluentTextField @bind-Value="formCode" Placeholder="e.g. N1XECU015G016" style="width:100%" />
+                <FluentTextField Label="Product code" @bind-Value="formCode" Placeholder="e.g. N1XECU015G016" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Category <span style="color:red">*</span></FluentLabel>
-                <FluentSelect TValue="string" TOption="string" @bind-Value="formCategory" style="width:100%">
+                <FluentSelect Label="Category *" TValue="string" TOption="string" @bind-Value="formCategory" style="width:100%">
                     @foreach (var cat in Categories)
                     {
                         <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
@@ -46,8 +43,7 @@
             </div>
 
             <div>
-                <FluentLabel>Unit</FluentLabel>
-                <FluentSelect TValue="string" TOption="string" @bind-Value="formUnit" style="width:100%">
+                <FluentSelect Label="Unit" TValue="string" TOption="string" @bind-Value="formUnit" style="width:100%">
                     @foreach (var u in Units)
                     {
                         <FluentOption TOption="string" Value="@u">@u</FluentOption>
@@ -56,20 +52,17 @@
             </div>
 
             <div>
-                <FluentLabel>Purchase price (ex. VAT)</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="formPurchasePrice" Min="0" Step="0.01" style="width:100%"
+                <FluentNumberField Label="Purchase price (ex. VAT)" TValue="decimal" @bind-Value="formPurchasePrice" Min="0" Step="0.01" style="width:100%"
                                    @bind-Value:after="RecalcSalePrice" Placeholder="What you pay the vendor" />
             </div>
 
             <div>
-                <FluentLabel>Markup factor</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="formMarkupFactor" Min="1" Step="0.05" style="width:100%"
+                <FluentNumberField Label="Markup factor" TValue="decimal" @bind-Value="formMarkupFactor" Min="1" Step="0.05" style="width:100%"
                                    @bind-Value:after="RecalcSalePrice" Placeholder="e.g. 1.5 = 50% markup" />
             </div>
 
             <div>
-                <FluentLabel>Sale price (ex. VAT)</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="formUnitPrice" Min="0" Step="0.01" style="width:100%" />
+                <FluentNumberField Label="Sale price (ex. VAT)" TValue="decimal" @bind-Value="formUnitPrice" Min="0" Step="0.01" style="width:100%" />
                 @if (formPurchasePrice > 0 && formMarkupFactor > 0)
                 {
                     <span style="font-size:0.82rem; color:#60758b; margin-top:0.2rem; display:block;">
@@ -79,19 +72,16 @@
             </div>
 
             <div>
-                <FluentLabel>VAT rate (%)</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="formVatRate" Min="0" Max="100" Step="0.5" style="width:100%" />
+                <FluentNumberField Label="VAT rate (%)" TValue="decimal" @bind-Value="formVatRate" Min="0" Max="100" Step="0.5" style="width:100%" />
             </div>
 
             <div>
-                <FluentLabel>Quantity in stock</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
+                <FluentNumberField Label="Quantity in stock" TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
                                    Placeholder="e.g. 500 (metres of cable)" />
             </div>
 
             <div style="grid-column: span 2">
-                <FluentLabel>Description</FluentLabel>
-                <FluentTextField @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
+                <FluentTextField Label="Description" @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">

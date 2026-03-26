@@ -27,10 +27,9 @@
         <FluentLabel Typo="Typography.Body"><strong>Register Absence</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Employee <span style="color:red">*</span></FluentLabel>
                 @if (employees.Count > 0)
                 {
-                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                    <FluentSelect Label="Employee *" TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
                         @foreach (var emp in employees)
                         {
                             <FluentOption TOption="string" Value="@emp.Id.ToString()">@emp.DisplayName</FluentOption>
@@ -43,8 +42,7 @@
                 }
             </div>
             <div>
-                <FluentLabel>Type <span style="color:red">*</span></FluentLabel>
-                <FluentSelect TValue="string" TOption="string"
+                <FluentSelect Label="Type *" TValue="string" TOption="string"
                               Value="@newType.ToString()"
                               ValueChanged="@(v => { if (Enum.TryParse<AbsenceType>(v, out var t)) newType = t; })"
                               style="width:100%">
@@ -55,16 +53,13 @@
                 </FluentSelect>
             </div>
             <div>
-                <FluentLabel>Start date <span style="color:red">*</span></FluentLabel>
-                <FluentDatePicker @bind-Value="newStartDate" style="width:100%" />
+                <FluentDatePicker Label="Start date *" @bind-Value="newStartDate" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>End date <span style="color:red">*</span></FluentLabel>
-                <FluentDatePicker @bind-Value="newEndDate" style="width:100%" />
+                <FluentDatePicker Label="End date *" @bind-Value="newEndDate" style="width:100%" />
             </div>
             <div style="grid-column: span 2">
-                <FluentLabel>Notes</FluentLabel>
-                <FluentTextField @bind-Value="newNotes" Placeholder="Optional notes" style="width:100%" />
+                <FluentTextField Label="Notes" @bind-Value="newNotes" Placeholder="Optional notes" style="width:100%" />
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -115,8 +110,7 @@
 
     <div class="admin-grid">
         <div>
-            <FluentLabel>Employee</FluentLabel>
-            <FluentSelect TValue="string" TOption="string" @bind-Value="filterEmployeeId" style="width:100%">
+            <FluentSelect Label="Employee" TValue="string" TOption="string" @bind-Value="filterEmployeeId" style="width:100%">
                 <FluentOption TOption="string" Value="">All</FluentOption>
                 @foreach (var emp in employees)
                 {
@@ -125,8 +119,7 @@
             </FluentSelect>
         </div>
         <div>
-            <FluentLabel>Status</FluentLabel>
-            <FluentSelect TValue="string" TOption="string" @bind-Value="filterStatus" style="width:100%">
+            <FluentSelect Label="Status" TValue="string" TOption="string" @bind-Value="filterStatus" style="width:100%">
                 <FluentOption TOption="string" Value="">All</FluentOption>
                 @foreach (var s in Enum.GetValues<AbsenceStatus>())
                 {

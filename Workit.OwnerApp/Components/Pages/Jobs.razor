@@ -52,10 +52,9 @@
         <FluentLabel Typo="Typography.Body"><strong>New Job</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
-                <FluentLabel>Customer <span style="color:red">*</span></FluentLabel>
                 @if (customers.Count > 0)
                 {
-                    <FluentSelect TValue="string" TOption="string" @bind-Value="selectedCustomerId" style="width:100%">
+                    <FluentSelect Label="Customer *" TValue="string" TOption="string" @bind-Value="selectedCustomerId" style="width:100%">
                         @foreach (var c in customers)
                         {
                             <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
@@ -65,16 +64,13 @@
                 else { <FluentLabel>No customers available yet.</FluentLabel> }
             </div>
             <div>
-                <FluentLabel>Job code</FluentLabel>
-                <FluentTextField @bind-Value="newJobCode" Placeholder="Auto-generated" style="width:100%" />
+                <FluentTextField Label="Job code" @bind-Value="newJobCode" Placeholder="Auto-generated" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Job name <span style="color:red">*</span></FluentLabel>
-                <FluentTextField @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
+                <FluentTextField Label="Job name *" @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
             </div>
             <div>
-                <FluentLabel>Billing type</FluentLabel>
-                <FluentSelect TValue="string" TOption="string"
+                <FluentSelect Label="Billing type" TValue="string" TOption="string"
                               Value="@newBillingType.ToString()"
                               ValueChanged="@(v => newBillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
                               style="width:100%">
@@ -291,8 +287,7 @@ else if (jobs.Count > 0)
                                     </div>
                                     <div class="admin-grid" style="margin-top:0.5rem;">
                                         <div>
-                                            <FluentLabel>Customer</FluentLabel>
-                                            <FluentSelect TValue="string" TOption="string" @bind-Value="editingCustomerId" style="width:100%">
+                                            <FluentSelect Label="Customer" TValue="string" TOption="string" @bind-Value="editingCustomerId" style="width:100%">
                                                 @foreach (var c in customers)
                                                 {
                                                     <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
@@ -300,16 +295,13 @@ else if (jobs.Count > 0)
                                             </FluentSelect>
                                         </div>
                                         <div>
-                                            <FluentLabel>Job code</FluentLabel>
-                                            <FluentTextField @bind-Value="editingJob.Code" style="width:100%" />
+                                            <FluentTextField Label="Job code" @bind-Value="editingJob.Code" style="width:100%" />
                                         </div>
                                         <div>
-                                            <FluentLabel>Job name</FluentLabel>
-                                            <FluentTextField @bind-Value="editingJob.Name" style="width:100%" />
+                                            <FluentTextField Label="Job name" @bind-Value="editingJob.Name" style="width:100%" />
                                         </div>
                                         <div>
-                                            <FluentLabel>Billing type</FluentLabel>
-                                            <FluentSelect TValue="string" TOption="string"
+                                            <FluentSelect Label="Billing type" TValue="string" TOption="string"
                                                           Value="@editingJob.BillingType.ToString()"
                                                           ValueChanged="@(v => editingJob.BillingType = Enum.TryParse<BillingType>(v, out var b) ? b : BillingType.Hourly)"
                                                           style="width:100%">

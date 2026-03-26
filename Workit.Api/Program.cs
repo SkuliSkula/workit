@@ -949,6 +949,34 @@ securedApi.MapPost("/timeentries/mark-invoiced", async (WorkitDbContext db, Http
         "marking time entries as invoiced"))
     .WithName("MarkTimeEntriesInvoiced");
 
+securedApi.MapPost("/timeentries/mark-uninvoiced", async (WorkitDbContext db, HttpContext httpContext, MarkUninvoicedRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+
+            var entries = await db.TimeEntries
+                .Where(x => x.CompanyId == userContext.CompanyId
+                          && x.IsInvoiced
+                          && x.PaydayInvoiceNumber == request.PaydayInvoiceNumber)
+                .ToListAsync(ct);
+
+            foreach (var entry in entries)
+            {
+                entry.IsInvoiced = false;
+                entry.InvoicedAt = null;
+                entry.PaydayInvoiceNumber = null;
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { Reset = entries.Count });
+        },
+        apiLogger,
+        "unmarking time entries as invoiced"))
+    .WithName("MarkTimeEntriesUninvoiced");
+
 securedApi.MapPost("/materials/usage/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, MarkInvoicedRequest request, CancellationToken ct) =>
         await ExecuteDbAsync(async () =>
         {
@@ -978,6 +1006,34 @@ securedApi.MapPost("/materials/usage/mark-invoiced", async (WorkitDbContext db, 
         apiLogger,
         "marking material usage as invoiced"))
     .WithName("MarkMaterialUsageInvoiced");
+
+securedApi.MapPost("/materials/usage/mark-uninvoiced", async (WorkitDbContext db, HttpContext httpContext, MarkUninvoicedRequest request, CancellationToken ct) =>
+        await ExecuteDbAsync(async () =>
+        {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
+            var userContext = httpContext.User.ToUserContext();
+
+            var usages = await db.MaterialUsages
+                .Where(x => x.CompanyId == userContext.CompanyId
+                          && x.IsInvoiced
+                          && x.PaydayInvoiceNumber == request.PaydayInvoiceNumber)
+                .ToListAsync(ct);
+
+            foreach (var usage in usages)
+            {
+                usage.IsInvoiced = false;
+                usage.InvoicedAt = null;
+                usage.PaydayInvoiceNumber = null;
+            }
+
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { Reset = usages.Count });
+        },
+        apiLogger,
+        "unmarking material usage as invoiced"))
+    .WithName("MarkMaterialUsageUninvoiced");
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
 

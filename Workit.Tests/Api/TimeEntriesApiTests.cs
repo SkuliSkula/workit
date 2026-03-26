@@ -154,6 +154,9 @@ public class TimeEntriesApiTests
 
         public Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request) =>
             PostAsync("api/timeentries/mark-invoiced", request, "Time entries could not be marked as invoiced.");
+
+        public Task<ApiResult> MarkTimeEntriesUninvoicedAsync(MarkUninvoicedRequest request) =>
+            PostAsync("api/timeentries/mark-uninvoiced", request, "Time entries could not be unmarked as invoiced.");
     }
 
     private class FakeTokenAccessor : IAccessTokenAccessor
