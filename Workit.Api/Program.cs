@@ -107,6 +107,12 @@ builder.Services.AddHttpClient("PaydayApi", client =>
 var app = builder.Build();
 Microsoft.Extensions.Logging.ILogger apiLogger = app.Logger;
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<WorkitDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
