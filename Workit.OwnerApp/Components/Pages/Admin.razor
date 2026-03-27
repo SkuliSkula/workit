@@ -24,65 +24,34 @@ else
             </div>
             <div style="display:flex; gap:0.5rem;">
                 <FluentButton Appearance="Appearance.Accent" @onclick="ToggleRegisterForm">
-                    @(showRegisterForm ? "Cancel" : "+ Register New Company")
+                    @(showRegisterForm ? "Cancel" : "+ Create Owner")
                 </FluentButton>
                 <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">← Dashboard</FluentButton>
             </div>
         </div>
     </FluentCard>
 
-    @* ── Register New Company Form ── *@
+    @* ── Create Owner Form ── *@
     @if (showRegisterForm)
     {
         <FluentCard Class="admin-card" AreaRestricted="false">
-            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Register New Company & Owner</FluentLabel>
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Create Owner Account</FluentLabel>
+            <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-bottom:0.5rem;">
+                The owner will log in and set up their company themselves on first login.
+            </FluentLabel>
 
-            <div class="register-grid">
-                <div class="register-section">
-                    <FluentLabel Style="font-weight:600; color:#60758b; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em;">Company Details</FluentLabel>
-                    <div class="form-fields">
-                        <div>
-                            <FluentLabel>Company Name *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Name" Style="width:100%;" Placeholder="e.g. Verkþjónustan ehf." />
-                        </div>
-                        <div>
-                            <FluentLabel>SSN (Kennitala) *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Ssn" Style="width:100%;" Placeholder="e.g. 5012345678" />
-                        </div>
-                        <div>
-                            <FluentLabel>Email *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Email" Style="width:100%;" Placeholder="e.g. info@company.is" />
-                        </div>
-                        <div>
-                            <FluentLabel>Address *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Address" Style="width:100%;" Placeholder="e.g. Laugavegur 1, 101 Reykjavík" />
-                        </div>
-                        <div>
-                            <FluentLabel>Phone *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Phone" Style="width:100%;" Placeholder="e.g. 555-1234" />
-                        </div>
-                        <div>
-                            <FluentLabel>Contact Person *</FluentLabel>
-                            <FluentTextField @bind-Value="regCompany.Owner" Style="width:100%;" Placeholder="e.g. Jón Jónsson" />
-                        </div>
-                    </div>
+            <div class="form-fields" style="max-width:480px; margin-top:0.75rem;">
+                <div>
+                    <FluentLabel>Full Name *</FluentLabel>
+                    <FluentTextField @bind-Value="regOwnerName" Style="width:100%;" Placeholder="e.g. Jón Jónsson" />
                 </div>
-
-                <div class="register-section">
-                    <FluentLabel Style="font-weight:600; color:#60758b; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em;">Owner Login Credentials</FluentLabel>
-                    <div class="form-fields">
-                        <div>
-                            <FluentLabel>Owner Email *</FluentLabel>
-                            <FluentTextField @bind-Value="regOwnerEmail" Style="width:100%;" Placeholder="e.g. jon@company.is" />
-                        </div>
-                        <div>
-                            <FluentLabel>Owner Password *</FluentLabel>
-                            <FluentTextField @bind-Value="regOwnerPassword" Style="width:100%;" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" />
-                        </div>
-                    </div>
-                    <FluentLabel Style="color:#60758b; font-size:0.8rem; margin-top:0.5rem;">
-                        These credentials will be given to the company owner so they can log in and manage their own data.
-                    </FluentLabel>
+                <div>
+                    <FluentLabel>Email *</FluentLabel>
+                    <FluentTextField @bind-Value="regOwnerEmail" Style="width:100%;" Placeholder="e.g. jon@company.is" />
+                </div>
+                <div>
+                    <FluentLabel>Password *</FluentLabel>
+                    <FluentTextField @bind-Value="regOwnerPassword" Style="width:100%;" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" />
                 </div>
             </div>
 
@@ -98,13 +67,61 @@ else
 
             <div style="display:flex; gap:0.75rem; margin-top:1.25rem;">
                 <FluentButton Appearance="Appearance.Accent"
-                              @onclick="RegisterCompanyAsync"
-                              Disabled="@(isRegistering || !CanRegister)">
-                    @(isRegistering ? "Registering…" : "Register Company")
+                              @onclick="CreateOwnerAsync"
+                              Disabled="@(isRegistering || !CanCreateOwner)">
+                    @(isRegistering ? "Creating…" : "Create Owner")
                 </FluentButton>
             </div>
         </FluentCard>
     }
+
+    @* ── Owners List ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">
+                Owners (@owners.Count)
+            </FluentLabel>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOwnersAsync" Disabled="@isLoadingOwners">
+                @(isLoadingOwners ? "Loading…" : "Refresh")
+            </FluentButton>
+        </div>
+
+        @if (isLoadingOwners && owners.Count == 0)
+        {
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <FluentProgressRing />
+                <FluentLabel>Loading owners…</FluentLabel>
+            </div>
+        }
+        else if (owners.Count == 0)
+        {
+            <FluentLabel Style="color:#60758b;">No owner accounts yet. Click "+ Create Owner" above to add one.</FluentLabel>
+        }
+        else
+        {
+            <div class="company-grid">
+                @foreach (var o in owners)
+                {
+                    <div class="company-card">
+                        <div class="company-card-header">
+                            <div>
+                                <span class="company-card-name">@o.Name</span>
+                                <span class="company-card-ssn">@o.Email</span>
+                            </div>
+                            @if (o.HasCompany)
+                            {
+                                <span class="badge badge--green">Active · @o.CompanyName</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge--amber">Setup Pending</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </FluentCard>
 
     @* ── Companies List ── *@
     <FluentCard Class="admin-card" AreaRestricted="false">
@@ -269,6 +286,11 @@ else
         color: #065f46;
     }
 
+    .badge--amber {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
     @@media (max-width: 720px) {
         .register-grid {
             grid-template-columns: 1fr;
@@ -279,26 +301,23 @@ else
 @code {
     private bool isAdmin;
     private bool isLoadingCompanies;
+    private bool isLoadingOwners;
     private bool showRegisterForm;
     private bool isRegistering;
     private bool isSwitching;
     private Guid? switchingTo;
     private List<AdminCompanyInfo> companies = [];
+    private List<AdminOwnerInfo> owners = [];
 
-    // Register form state
-    private Company regCompany = new();
+    // Create-owner form state
+    private string regOwnerName = "";
     private string regOwnerEmail = "";
     private string regOwnerPassword = "";
     private string? registerError;
     private string? registerSuccess;
 
-    private bool CanRegister =>
-        !string.IsNullOrWhiteSpace(regCompany.Name) &&
-        !string.IsNullOrWhiteSpace(regCompany.Ssn) &&
-        !string.IsNullOrWhiteSpace(regCompany.Email) &&
-        !string.IsNullOrWhiteSpace(regCompany.Address) &&
-        !string.IsNullOrWhiteSpace(regCompany.Phone) &&
-        !string.IsNullOrWhiteSpace(regCompany.Owner) &&
+    private bool CanCreateOwner =>
+        !string.IsNullOrWhiteSpace(regOwnerName) &&
         !string.IsNullOrWhiteSpace(regOwnerEmail) &&
         regOwnerPassword.Length >= 8;
 
@@ -316,7 +335,7 @@ else
         isAdmin = string.Equals(session.Role, WorkitRoles.Admin, StringComparison.Ordinal);
         if (isAdmin)
         {
-            await LoadCompaniesAsync();
+            await Task.WhenAll(LoadCompaniesAsync(), LoadOwnersAsync());
         }
 
         StateHasChanged();
@@ -325,47 +344,60 @@ else
     private async Task LoadCompaniesAsync()
     {
         isLoadingCompanies = true;
-
         try
         {
             var result = await AuthApi.GetAdminCompaniesAsync();
             if (result.IsSuccess && result.Value is not null)
-            {
                 companies = result.Value;
-            }
         }
         finally
         {
             isLoadingCompanies = false;
+            StateHasChanged();
         }
     }
 
-    private async Task RegisterCompanyAsync()
+    private async Task LoadOwnersAsync()
+    {
+        isLoadingOwners = true;
+        try
+        {
+            var result = await AuthApi.GetAdminOwnersAsync();
+            if (result.IsSuccess && result.Value is not null)
+                owners = result.Value;
+        }
+        finally
+        {
+            isLoadingOwners = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CreateOwnerAsync()
     {
         isRegistering = true;
         registerError = null;
         registerSuccess = null;
 
-        var request = new RegisterCompanyRequest
+        var result = await AuthApi.CreateOwnerAsync(new CreateOwnerRequest
         {
-            Company = regCompany,
-            OwnerEmail = regOwnerEmail,
-            OwnerPassword = regOwnerPassword
-        };
+            Name     = regOwnerName,
+            Email    = regOwnerEmail,
+            Password = regOwnerPassword
+        });
 
-        var result = await AuthApi.RegisterCompanyAsync(request);
         if (result.IsSuccess)
         {
-            registerSuccess = $"Company \"{regCompany.Name}\" registered successfully. Owner can log in with {regOwnerEmail}.";
-            regCompany = new();
+            registerSuccess = $"Owner account created for {regOwnerEmail}. They will set up their company on first login.";
+            regOwnerName = "";
             regOwnerEmail = "";
             regOwnerPassword = "";
             showRegisterForm = false;
-            await LoadCompaniesAsync();
+            await LoadOwnersAsync();
         }
         else
         {
-            registerError = result.ErrorMessage ?? "Registration failed.";
+            registerError = result.ErrorMessage ?? "Could not create owner account.";
         }
 
         isRegistering = false;

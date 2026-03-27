@@ -12,6 +12,9 @@ public interface IAuthApi
     Task<ApiResult<List<Company>?>> GetUserCompaniesAsync();
     Task<ApiResult<LoginResponse>> SwitchCompanyAsync(SwitchCompanyRequest request);
     Task<ApiResult<List<AdminCompanyInfo>?>> GetAdminCompaniesAsync();
+    Task<ApiResult> CreateOwnerAsync(CreateOwnerRequest request);
+    Task<ApiResult<List<AdminOwnerInfo>?>> GetAdminOwnersAsync();
+    Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request);
 }
 
 internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -37,6 +40,15 @@ internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor access
 
     public Task<ApiResult<List<AdminCompanyInfo>?>> GetAdminCompaniesAsync() =>
         GetAsync<List<AdminCompanyInfo>?>("api/auth/admin/companies", "Could not load admin company list.");
+
+    public Task<ApiResult> CreateOwnerAsync(CreateOwnerRequest request) =>
+        PostAsync("api/auth/admin/create-owner", request, "Could not create owner account.");
+
+    public Task<ApiResult<List<AdminOwnerInfo>?>> GetAdminOwnersAsync() =>
+        GetAsync<List<AdminOwnerInfo>?>("api/auth/admin/owners", "Could not load owners list.");
+
+    public Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request) =>
+        PostForJsonAsync<OwnerSetupCompanyRequest, LoginResponse>("api/auth/owner/setup-company", request, "Company setup failed.");
 }
 
 public sealed class AdminCompanyInfo

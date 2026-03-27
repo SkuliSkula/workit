@@ -52,7 +52,7 @@ public class TokenFactoryTests
         var result = factory.CreateToken(user);
 
         result.UserId.Should().Be(user.Id);
-        result.CompanyId.Should().Be(user.CompanyId);
+        result.CompanyId.Should().Be(user.CompanyId ?? Guid.Empty);
         result.Email.Should().Be(user.Email);
         result.Role.Should().Be(user.Role);
         result.EmployeeId.Should().BeNull();
@@ -100,7 +100,7 @@ public class TokenFactoryTests
 
         token.Claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Sub && c.Value == user.Id.ToString());
         token.Claims.Should().Contain(c => c.Type == JwtRegisteredClaimNames.Email && c.Value == user.Email);
-        token.Claims.Should().Contain(c => c.Type == "company_id" && c.Value == user.CompanyId.ToString());
+        token.Claims.Should().Contain(c => c.Type == "company_id" && c.Value == (user.CompanyId ?? Guid.Empty).ToString());
         token.Claims.Should().Contain(c => c.Type == ClaimTypes.Role && c.Value == user.Role);
     }
 
@@ -128,7 +128,7 @@ public class TokenFactoryTests
 
         var result = factory.CreateToken(user, null);
 
-        result.CompanyId.Should().Be(user.CompanyId);
+        result.CompanyId.Should().Be(user.CompanyId ?? Guid.Empty);
     }
 
     [Fact]

@@ -159,9 +159,10 @@ internal static class AuthEndpoints
                         .Where(x => x.Role == WorkitRoles.Owner)
                         .ToListAsync(ct);
 
-                    // Build owner lookup: companyId → owner email
+                    // Build owner lookup: companyId → owner email (skip owners with no company yet)
                     var ownerLookup = ownerUsers
-                        .GroupBy(x => x.CompanyId)
+                        .Where(x => x.CompanyId.HasValue && x.CompanyId.Value != Guid.Empty)
+                        .GroupBy(x => x.CompanyId!.Value)
                         .ToDictionary(g => g.Key, g => g.First().Email);
 
                     var result = companies.Select(c => new
@@ -237,6 +238,135 @@ internal static class AuthEndpoints
                 "registering a company"))
             .RequireAuthorization()
             .WithName("RegisterCompany");
+
+        // ── Admin: create an owner account with no company yet ──
+        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, CreateOwnerRequest request, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    if (string.IsNullOrWhiteSpace(request.Name))
+                        return Results.BadRequest("Owner name is required.");
+
+                    if (!IsValidCredentials(request.Email, request.Password))
+                        return Results.BadRequest("A valid email and a password of at least 8 characters are required.");
+
+                    var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                    if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail, ct))
+                        return Results.Conflict("That email address is already in use.");
+
+                    var owner = new AppUser
+                    {
+                        Name         = request.Name.Trim(),
+                        Email        = normalizedEmail,
+                        PasswordHash = PasswordHasher.HashPassword(request.Password),
+                        Role         = WorkitRoles.Owner,
+                        CompanyId    = null   // no company yet — owner will set it up on first login
+                    };
+
+                    db.AppUsers.Add(owner);
+                    await db.SaveChangesAsync(ct);
+
+                    return Results.Ok(new { owner.Id, owner.Email, owner.Name });
+                },
+                logger,
+                "creating an owner account"))
+            .RequireAuthorization()
+            .WithName("CreateOwner");
+
+        // ── Admin: list all owner accounts with company status ──
+        authApi.MapGet("/admin/owners", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    var owners = await db.AppUsers
+                        .Where(x => x.Role == WorkitRoles.Owner)
+                        .OrderBy(x => x.Name)
+                        .ToListAsync(ct);
+
+                    var companyIds = owners
+                        .Where(o => o.CompanyId.HasValue && o.CompanyId.Value != Guid.Empty)
+                        .Select(o => o.CompanyId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    var companyNames = await db.Companies
+                        .Where(c => companyIds.Contains(c.Id))
+                        .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+
+                    var result = owners.Select(o =>
+                    {
+                        var hasCompany = o.CompanyId.HasValue && o.CompanyId.Value != Guid.Empty;
+                        return new AdminOwnerInfo
+                        {
+                            Id          = o.Id,
+                            Name        = string.IsNullOrWhiteSpace(o.Name) ? o.Email : o.Name,
+                            Email       = o.Email,
+                            HasCompany  = hasCompany,
+                            CompanyName = hasCompany && companyNames.TryGetValue(o.CompanyId!.Value, out var cn) ? cn : string.Empty
+                        };
+                    });
+
+                    return Results.Ok(result);
+                },
+                logger,
+                "listing all owners for admin"))
+            .RequireAuthorization()
+            .WithName("GetAdminOwners");
+
+        // ── Owner: self-provision a company on first login ──
+        authApi.MapPost("/owner/setup-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, OwnerSetupCompanyRequest request, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsOwner())
+                        return Results.Forbid();
+
+                    var userContext = httpContext.User.ToUserContext();
+
+                    // Guard: only allowed while the owner has no company yet
+                    if (userContext.CompanyId != Guid.Empty)
+                        return Results.Conflict("You already have a company. Use the Companies page to add another.");
+
+                    if (!IsValidCompany(request.Company))
+                        return Results.BadRequest("Company name, SSN, email, address, phone, and owner are required.");
+
+                    var company = new Company
+                    {
+                        Name               = request.Company.Name.Trim(),
+                        Ssn                = request.Company.Ssn.Trim(),
+                        Email              = request.Company.Email.Trim(),
+                        Address            = request.Company.Address.Trim(),
+                        Phone              = request.Company.Phone.Trim(),
+                        Owner              = request.Company.Owner.Trim(),
+                        PaydayClientId     = request.PaydayClientId?.Trim(),
+                        PaydayClientSecret = request.PaydayClientSecret?.Trim()
+                    };
+
+                    var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == userContext.UserId, ct);
+                    if (user is null)
+                        return Results.Unauthorized();
+
+                    user.CompanyId = company.Id;
+
+                    db.Companies.Add(company);
+                    db.UserCompanies.Add(new UserCompany { UserId = user.Id, CompanyId = company.Id });
+                    await db.SaveChangesAsync(ct);
+
+                    // Issue a fresh token with the new company_id embedded
+                    var loginResponse = tokenFactory.CreateToken(user);
+                    var refreshToken  = tokenFactory.CreateRefreshToken(user.Id);
+                    db.RefreshTokens.Add(refreshToken);
+                    await db.SaveChangesAsync(ct);
+                    loginResponse.RefreshToken = refreshToken.Token;
+                    return Results.Ok(loginResponse);
+                },
+                logger,
+                "owner setting up company"))
+            .RequireAuthorization()
+            .WithName("OwnerSetupCompany");
 
         authApi.MapPost("/setup-company", async (WorkitDbContext db, HttpContext httpContext, SetupCompanyRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>

@@ -551,6 +551,7 @@
     {
         public Guid EmployeeId { get; set; }
         public string EmployeeName { get; set; } = string.Empty;
+        public string Trade { get; set; } = string.Empty;
         public decimal Hours { get; set; }
         public decimal OvertimeHours { get; set; }
         public decimal HourlyBillableRate { get; set; }
@@ -694,6 +695,7 @@
                     {
                         EmployeeId = group.Key,
                         EmployeeName = emp?.DisplayName ?? group.Key.ToString()[..8],
+                        Trade = emp?.Trade ?? string.Empty,
                         Hours = empHours,
                         OvertimeHours = empOtHours,
                         HourlyBillableRate = rate
@@ -767,7 +769,7 @@
                     {
                         invoiceLines.Add(new InvoiceLineForm
                         {
-                            Description = $"Vinna — {code} {name} — {empHours.EmployeeName}",
+                            Description = string.IsNullOrWhiteSpace(empHours.Trade) ? "Vinna" : $"Vinna {empHours.Trade}",
                             Quantity = empHours.Hours,
                             UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate, 0, MidpointRounding.AwayFromZero),
                             VatPercentage = 24m,
@@ -782,7 +784,7 @@
                     {
                         invoiceLines.Add(new InvoiceLineForm
                         {
-                            Description = $"Yfirvinna — {code} {name} — {empHours.EmployeeName}",
+                            Description = string.IsNullOrWhiteSpace(empHours.Trade) ? "Yfirvinna" : $"Yfirvinna {empHours.Trade}",
                             Quantity = empHours.OvertimeHours,
                             UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
                             VatPercentage = 24m,
@@ -799,7 +801,7 @@
             {
                 invoiceLines.Add(new InvoiceLineForm
                 {
-                    Description = $"Akstur — {code} {name}",
+                    Description = "Akstur",
                     Quantity = js.TotalDrivingUnits,
                     UnitPriceExcludingVat = Math.Round(drivingUnitPrice, 0, MidpointRounding.AwayFromZero),
                     VatPercentage = 24m,

@@ -101,7 +101,14 @@
                     return;
                 }
 
-                var target = result.Value.Role == WorkitRoles.Admin ? "/admin" : "/";
+                string target;
+                if (result.Value.Role == WorkitRoles.Admin)
+                    target = "/admin";
+                else if (result.Value.CompanyId == Guid.Empty)
+                    target = "/onboarding";
+                else
+                    target = "/";
+
                 Navigation.NavigateTo(target, forceLoad: true);
                 return;
             }

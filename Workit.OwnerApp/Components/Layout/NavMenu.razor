@@ -39,7 +39,17 @@
             </div>
         }
 
-        @if (isOwner)
+        @* Owner without a company — show only the onboarding link *@
+        @if (isOwner && !ownerHasCompany)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="onboarding" Match="NavLinkMatch.All">
+                    <FluentIcon Value="new Size24.BuildingFactory()" /> Set Up Company
+                </NavLink>
+            </div>
+        }
+
+        @if (isOwner && ownerHasCompany)
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="companies">
@@ -48,7 +58,7 @@
             </div>
         }
 
-        @if (isOwner || isAdmin)
+        @if ((isOwner && ownerHasCompany) || isAdmin)
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="customers">
@@ -203,6 +213,7 @@
 
     private bool isAdmin;
     private bool isOwner;
+    private bool ownerHasCompany;
     private bool isAuthenticated;
     private bool paydayExpanded;
 
@@ -215,20 +226,23 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         var session = await AuthSession.GetSessionAsync();
-        var nextIsAuthenticated = session is not null;
-        var nextIsAdmin  = session?.Role == WorkitRoles.Admin;
-        var nextIsOwner  = session?.Role == WorkitRoles.Owner;
+        var nextIsAuthenticated  = session is not null;
+        var nextIsAdmin          = session?.Role == WorkitRoles.Admin;
+        var nextIsOwner          = session?.Role == WorkitRoles.Owner;
+        var nextOwnerHasCompany  = nextIsOwner && session?.CompanyId != Guid.Empty;
 
         if (nextIsAuthenticated == isAuthenticated &&
-            nextIsAdmin  == isAdmin &&
-            nextIsOwner  == isOwner)
+            nextIsAdmin         == isAdmin         &&
+            nextIsOwner         == isOwner         &&
+            nextOwnerHasCompany == ownerHasCompany)
         {
             return;
         }
 
         isAuthenticated = nextIsAuthenticated;
-        isAdmin  = nextIsAdmin;
-        isOwner  = nextIsOwner;
+        isAdmin         = nextIsAdmin;
+        isOwner         = nextIsOwner;
+        ownerHasCompany = nextOwnerHasCompany;
         StateHasChanged();
     }
 

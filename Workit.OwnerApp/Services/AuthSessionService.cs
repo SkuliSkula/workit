@@ -26,6 +26,16 @@ public sealed class AuthSessionService(IAuthApi authApi, IJSRuntime jsRuntime)
     public Task<ApiResult<LoginResponse>> RegisterCompanyAsync(RegisterCompanyRequest request) =>
         authApi.RegisterCompanyAsync(request);
 
+    public async Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request)
+    {
+        var result = await authApi.SetupOwnerCompanyAsync(request);
+        if (result.IsSuccess && result.Value is not null)
+        {
+            await SetSessionAsync(result.Value);
+        }
+        return result;
+    }
+
     public async Task<ApiResult<LoginResponse>> SwitchCompanyAsync(Guid companyId)
     {
         var result = await authApi.SwitchCompanyAsync(new SwitchCompanyRequest { CompanyId = companyId });
@@ -115,7 +125,7 @@ public sealed class AuthSessionService(IAuthApi authApi, IJSRuntime jsRuntime)
         }
     }
 
-    private async Task SetSessionAsync(LoginResponse session)
+    public async Task SetSessionAsync(LoginResponse session)
     {
         await jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, session.AccessToken);
         await jsRuntime.InvokeVoidAsync("localStorage.setItem", SessionStorageKey, JsonSerializer.Serialize(session));

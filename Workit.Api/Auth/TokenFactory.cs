@@ -14,7 +14,8 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
     public LoginResponse CreateToken(AppUser user, Guid? companyIdOverride = null)
     {
         var options = jwtOptions.Value;
-        var companyId = companyIdOverride ?? user.CompanyId;
+        // Use Guid.Empty as the "no company yet" sentinel so the JWT claim is always present
+        var companyId = companyIdOverride ?? user.CompanyId ?? Guid.Empty;
         var expires = DateTime.UtcNow.AddMinutes(options.ExpirationMinutes);
         var claims = new List<Claim>
         {

@@ -40,6 +40,7 @@ public static class ClaimsPrincipalExtensions
     private static Guid GetRequiredGuid(ClaimsPrincipal user, string claimType)
     {
         var rawValue = user.FindFirstValue(claimType);
+        // company_id may be Guid.Empty for owners who haven't set up a company yet — that is valid
         if (!Guid.TryParse(rawValue, out var value))
         {
             throw new InvalidOperationException($"Missing required claim '{claimType}'.");
