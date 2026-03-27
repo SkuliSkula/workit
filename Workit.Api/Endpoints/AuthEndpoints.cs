@@ -337,6 +337,10 @@ internal static class AuthEndpoints
                     if (!IsValidCompany(request.Company))
                         return Results.BadRequest("Company name, SSN, email, address, phone, and owner are required.");
 
+                    var normalizedSsn = request.Company.Ssn.Trim();
+                    if (await db.Companies.AnyAsync(x => x.Ssn == normalizedSsn, ct))
+                        return Results.Conflict("A company with that SSN already exists.");
+
                     var company = new Company
                     {
                         Name               = request.Company.Name.Trim(),

@@ -43,6 +43,25 @@ internal static class CompanyEndpoints
 
                     var userContext = httpContext.User.ToUserContext();
 
+                    var normalizedSsn = request.Ssn.Trim();
+                    var existing = await db.Companies
+                        .FirstOrDefaultAsync(x => x.Ssn == normalizedSsn, ct);
+
+                    if (existing is not null)
+                    {
+                        // If the user already has access to this company, just return it
+                        var alreadyLinked = await db.UserCompanies
+                            .AnyAsync(x => x.UserId == userContext.UserId && x.CompanyId == existing.Id, ct);
+
+                        if (alreadyLinked)
+                            return Results.Conflict("You already have access to a company with that SSN.");
+
+                        // Otherwise link the user to the existing company record
+                        db.UserCompanies.Add(new UserCompany { UserId = userContext.UserId, CompanyId = existing.Id });
+                        await db.SaveChangesAsync(ct);
+                        return Results.Ok(existing);
+                    }
+
                     var company = new Company
                     {
                         Name               = request.Name.Trim(),
