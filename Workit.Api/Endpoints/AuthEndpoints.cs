@@ -293,9 +293,11 @@ internal static class AuthEndpoints
                         .Distinct()
                         .ToList();
 
-                    var companyNames = await db.Companies
-                        .Where(c => companyIds.Contains(c.Id))
-                        .ToDictionaryAsync(c => c.Id, c => c.Name, ct);
+                    var companyNames = companyIds.Count > 0
+                        ? await db.Companies
+                            .Where(c => companyIds.Contains(c.Id))
+                            .ToDictionaryAsync(c => c.Id, c => c.Name, ct)
+                        : new Dictionary<Guid, string>();
 
                     var result = owners.Select(o =>
                     {
