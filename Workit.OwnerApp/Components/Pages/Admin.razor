@@ -81,7 +81,7 @@ else
             <FluentLabel Typo="Typography.Body" Style="font-weight:700;">
                 Owners (@owners.Count)
             </FluentLabel>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadOwnersAsync" Disabled="@isLoadingOwners">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadOwnersAsync" Disabled="@isLoadingOwners">
                 @(isLoadingOwners ? "Loading…" : "Refresh")
             </FluentButton>
         </div>
@@ -134,7 +134,7 @@ else
             <FluentLabel Typo="Typography.Body" Style="font-weight:700;">
                 All Companies (@companies.Count)
             </FluentLabel>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="LoadCompaniesAsync" Disabled="@isLoadingCompanies">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadCompaniesAsync" Disabled="@isLoadingCompanies">
                 @(isLoadingCompanies ? "Loading…" : "Refresh")
             </FluentButton>
         </div>

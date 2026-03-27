@@ -27,7 +27,7 @@
             </FluentSelect>
         </div>
         <div style="display:flex; align-items:flex-end;">
-            <FluentButton Appearance="Appearance.Outline" @onclick="LoadExpensesAsync" Disabled="@isLoading">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadExpensesAsync" Disabled="@isLoading">
                 @(isLoading ? "Loading…" : "Load")
             </FluentButton>
         </div>
@@ -104,7 +104,7 @@
         <div style="margin-top:1rem;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <FluentLabel><strong>Lines</strong></FluentLabel>
-                <FluentButton Appearance="Appearance.Outline" @onclick="AddLine">+ Add line</FluentButton>
+                <FluentButton Appearance="Appearance.Accent" @onclick="AddLine">+ Add line</FluentButton>
             </div>
 
             @for (var i = 0; i < formLines.Count; i++)
@@ -182,7 +182,7 @@
                           Disabled="@(!CanSave || saving)">
                 @(saving ? "Saving…" : (editingExpense is not null ? "Update Expense" : "Create Expense"))
             </FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="ToggleCreateForm">Cancel</FluentButton>
         </div>
     </FluentCard>
 }
@@ -268,7 +268,7 @@
         @if (expenses.Count < totalExpenses)
         {
             <div style="margin-top:0.75rem; display:flex; align-items:center; gap:0.75rem;">
-                <FluentButton Appearance="Appearance.Outline" @onclick="LoadMoreAsync" Disabled="@loadingMore">
+                <FluentButton Appearance="Appearance.Accent" @onclick="LoadMoreAsync" Disabled="@loadingMore">
                     @(loadingMore ? "Loading…" : $"Load more ({totalExpenses - expenses.Count} remaining)")
                 </FluentButton>
             </div>
@@ -300,7 +300,7 @@
                 <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmMarkPaidAsync" Disabled="@markingPaid">
                     @(markingPaid ? "Saving…" : "Confirm")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelMarkPaid">Cancel</FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" @onclick="CancelMarkPaid">Cancel</FluentButton>
             </div>
         </div>
         @if (!string.IsNullOrWhiteSpace(markPaidError))

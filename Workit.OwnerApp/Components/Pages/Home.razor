@@ -81,7 +81,7 @@ else
                     </FluentLabel>
                     <div style="display:flex; gap:0.5rem;">
                         <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => Navigation.NavigateTo("/admin"))">Manage Companies</FluentButton>
-                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="OpenSwitchCompanyDialog">Switch Company</FluentButton>
+                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="OpenSwitchCompanyDialog">Switch Company</FluentButton>
                     </div>
                 </div>
             </FluentCard>
@@ -125,8 +125,8 @@ else
                             <FluentIcon Value="new Size24.ArrowSwap()" /> Switch Company
                         </FluentButton>
                     }
-                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Manage Jobs</FluentButton>
-                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/employees"))">Manage Employees</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Manage Jobs</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/employees"))">Manage Employees</FluentButton>
                     <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
                 </div>
             </div>
@@ -421,7 +421,7 @@ else
             </div>
 
             <div style="margin-top:1rem; padding-top:0.75rem; border-top:1px solid #e5e7eb;">
-                <FluentButton Appearance="Appearance.Outline" @onclick="NavigateToCreateCompany" Style="width:100%;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="NavigateToCreateCompany" Style="width:100%;">
                     <FluentIcon Value="new Size24.Add()" /> Add New Company
                 </FluentButton>
             </div>

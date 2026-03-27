@@ -15,11 +15,9 @@
     display: grid;
     gap: 1rem;
     border-radius: 24px;
-    background:
-        radial-gradient(circle at top left, rgba(59, 130, 246, 0.12), transparent 30%),
-        linear-gradient(145deg, #f0f7ff 0%, #f5f8fc 55%, #eef3f8 100%);
+    background: #f3f4f6;
     border: 1px solid rgba(22, 50, 79, 0.08);
-    box-shadow: 0 18px 40px rgba(18, 41, 63, 0.08);
+    box-shadow: 0 4px 16px rgba(18, 41, 63, 0.06);
 }
 
 .dashboard-hero {
@@ -69,7 +67,7 @@
     gap: 0.25rem;
     padding: 0.9rem 1rem;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.66);
+    background: #e8e9eb;
 }
 
 .welcome-points strong {
@@ -174,7 +172,7 @@
     min-width: 120px;
     padding: 0.85rem 1rem;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.72);
+    background: #e8e9eb;
 }
 
 .hero-meta strong,
@@ -191,18 +189,13 @@
 .kpi-card {
     padding: 1rem 1.1rem;
     border-radius: 22px;
-    background: #d7dbe0 !important;
+    background: #e8e9eb !important;
     color: #17212b !important;
     box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.35),
-        0 10px 24px rgba(17, 24, 39, 0.12);
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        0 4px 12px rgba(17, 24, 39, 0.07);
 }
 
-.kpi-card::part(control) {
-    background: #d7dbe0 !important;
-    border: 1px solid #bcc5cf !important;
-    color: #17212b !important;
-}
 
 .kpi-card strong {
     color: #0f1720 !important;
@@ -220,27 +213,11 @@
     color: #425468 !important;
 }
 
-/* Overtime KPI card — amber accent */
+/* Overtime KPI card — same light gray as other kpi cards */
 .kpi-card--overtime {
-    background: #fef3c7 !important;
+    background: #e8e9eb !important;
 }
 
-.kpi-card--overtime::part(control) {
-    background: #fef3c7 !important;
-    border: 1px solid #fcd34d !important;
-}
-
-.kpi-card--overtime strong {
-    color: #92400e !important;
-}
-
-.kpi-card--overtime .kpi-label {
-    color: #78350f !important;
-}
-
-.kpi-card--overtime .kpi-foot {
-    color: #b45309 !important;
-}
 
 .section-head {
     display: flex;
@@ -330,7 +307,7 @@
     width: 100%;
     border: 1px solid transparent;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.55);
+    background: #e8e9eb;
     padding: 0.8rem 0.9rem;
     text-align: left;
 }

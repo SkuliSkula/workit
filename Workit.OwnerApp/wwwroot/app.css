@@ -120,6 +120,20 @@ h1:focus {
     box-sizing: border-box !important;
 }
 
+
+/* ── FluentCard background overrides ──
+   FluentCard renders as a <div>. Its scoped CSS gets its own scope attribute,
+   so Home.razor.css selectors never match. Must use global CSS with !important. */
+.dashboard-shell {
+    background-color: #f3f4f6 !important;
+    border-color: rgba(22, 50, 79, 0.08) !important;
+}
+
+.kpi-card {
+    background-color: #e8e9eb !important;
+    border-color: #d1d5db !important;
+}
+
 .admin-accordion {
     margin: 1rem;
 }

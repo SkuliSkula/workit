@@ -88,7 +88,7 @@
                           Disabled="@(!CanAdd || saving)">
                 @(saving ? "Saving…" : "Save")
             </FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="ToggleCreateForm">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="ToggleCreateForm">Cancel</FluentButton>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(saveResult))
@@ -106,7 +106,7 @@
         <FluentDatePicker @bind-Value="filterFrom" Label="From" />
         <FluentDatePicker @bind-Value="filterTo"   Label="To" />
         <div style="display:flex; align-items:flex-end;">
-            <FluentButton Appearance="Appearance.Outline" @onclick="LoadEntriesAsync" Disabled="@loadingEntries">
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadEntriesAsync" Disabled="@loadingEntries">
                 @(loadingEntries ? "Loading…" : "Load")
             </FluentButton>
         </div>
@@ -184,7 +184,7 @@
                 {
                     <div style="display:flex; gap:0.25rem;">
                         <FluentButton Appearance="Appearance.Accent" @onclick="SaveEditAsync" Disabled="@editSaving">Save</FluentButton>
-                        <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit">Cancel</FluentButton>
+                        <FluentButton Appearance="Appearance.Neutral" @onclick="CancelEdit">Cancel</FluentButton>
                     </div>
                 }
                 else
@@ -233,7 +233,7 @@
             <FluentButton Appearance="Appearance.Accent" Style="background:#dc2626;" @onclick="ExecuteUninvoiceAsync" Disabled="@uninvoiceSaving">
                 @(uninvoiceSaving ? "Resetting…" : "Yes, reset")
             </FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="CancelUninvoice">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CancelUninvoice">Cancel</FluentButton>
         </div>
     </FluentCard>
 }

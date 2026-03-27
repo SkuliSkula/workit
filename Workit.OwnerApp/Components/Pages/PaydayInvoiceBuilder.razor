@@ -256,10 +256,10 @@
                 <FluentLabel Style="font-size:0.85rem;">Overtime multiplier:</FluentLabel>
                 <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1m" Style="width:80px;" />
             </div>
-            <FluentButton Appearance="Appearance.Outline" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
+            <FluentButton Appearance="Appearance.Accent" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
                 Recalculate overtime
             </FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => invoiceLines.Add(new InvoiceLineForm()))" Size="ButtonSize.Small">
+            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => invoiceLines.Add(new InvoiceLineForm()))" Size="ButtonSize.Small">
                 + Add line
             </FluentButton>
         </div>
@@ -427,7 +427,7 @@
                 <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/payday/invoices"))">
                     View in Payday Invoices
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="ResetWizard">
+                <FluentButton Appearance="Appearance.Accent" @onclick="ResetWizard">
                     Build Another Invoice
                 </FluentButton>
             </div>
