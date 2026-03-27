@@ -9,66 +9,191 @@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
         <FluentLabel Typo="Typography.PaneHeader">Add New Company</FluentLabel>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">← Back to Dashboard</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/companies"))">← Back</FluentButton>
+    </div>
+
+    @* ── Tab selector ── *@
+    <div class="tab-row" style="margin-top:1rem;">
+        <button class="tab-btn @(activeTab == Tab.Manual ? "active" : "")" @onclick="() => activeTab = Tab.Manual">
+            🏢 Set up manually
+        </button>
+        <button class="tab-btn @(activeTab == Tab.Payday ? "active" : "")" @onclick="() => { activeTab = Tab.Payday; paydayError = null; paydayCompany = null; }">
+            🔗 Import from Payday
+        </button>
     </div>
 </FluentCard>
 
-<FluentCard Class="admin-card" AreaRestricted="false">
-    <div class="admin-grid" style="gap:1rem;">
-        <div>
-            <FluentTextField Label="Company Name *" @bind-Value="newCompany.Name" Style="width:100%" Placeholder="e.g. My Company ehf." />
+@* ── Manual tab ── *@
+@if (activeTab == Tab.Manual)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div class="admin-grid" style="gap:1rem;">
+            <div>
+                <FluentTextField Label="Company Name *" @bind-Value="newCompany.Name" Style="width:100%" Placeholder="e.g. My Company ehf." />
+            </div>
+            <div>
+                <FluentTextField Label="SSN (Kennitala) *" @bind-Value="newCompany.Ssn" Style="width:100%" Placeholder="e.g. 1234567890" />
+            </div>
+            <div>
+                <FluentTextField Label="Email *" @bind-Value="newCompany.Email" Style="width:100%" Placeholder="e.g. info@company.is" />
+            </div>
+            <div>
+                <FluentTextField Label="Phone *" @bind-Value="newCompany.Phone" Style="width:100%" Placeholder="e.g. 555-1234" />
+            </div>
+            <div>
+                <FluentTextField Label="Address *" @bind-Value="newCompany.Address" Style="width:100%" Placeholder="e.g. Laugavegur 1, 101 Reykjavík" />
+            </div>
+            <div>
+                <FluentTextField Label="Contact person *" @bind-Value="newCompany.Owner" Style="width:100%" Placeholder="e.g. Jón Jónsson" />
+            </div>
         </div>
-        <div>
-            <FluentTextField Label="SSN (Kennitala) *" @bind-Value="newCompany.Ssn" Style="width:100%" Placeholder="e.g. 1234567890" />
-        </div>
-        <div>
-            <FluentTextField Label="Email *" @bind-Value="newCompany.Email" Style="width:100%" Placeholder="e.g. info@company.is" />
-        </div>
-        <div>
-            <FluentTextField Label="Address *" @bind-Value="newCompany.Address" Style="width:100%" Placeholder="e.g. Laugavegur 1, 101 Reykjavík" />
-        </div>
-        <div>
-            <FluentTextField Label="Phone *" @bind-Value="newCompany.Phone" Style="width:100%" Placeholder="e.g. 555-1234" />
-        </div>
-        <div>
-            <FluentTextField Label="Owner Name *" @bind-Value="newCompany.Owner" Style="width:100%" Placeholder="e.g. Jón Jónsson" />
-        </div>
-    </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <FluentLabel Color="Color.Error" Style="margin-top:0.75rem;">@errorMessage</FluentLabel>
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="msg msg--error" style="margin-top:0.75rem;">@errorMessage</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <div class="msg msg--success" style="margin-top:0.75rem;">@successMessage</div>
+        }
+
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent"
+                          @onclick="CreateManualAsync"
+                          Disabled="@(!CanCreateManual || isSaving)">
+                @(isSaving ? "Creating…" : "Create Company")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/companies"))">Cancel</FluentButton>
+        </div>
+    </FluentCard>
+}
+
+@* ── Payday tab ── *@
+@if (activeTab == Tab.Payday)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <h3 style="margin:0 0 0.25rem; color:#14304b;">Connect to Payday</h3>
+        <p style="margin:0 0 1.25rem; color:#60758b; font-size:0.875rem;">
+            Enter your Payday API credentials. Company info will be imported automatically.
+        </p>
+
+        <div style="display:grid; gap:0.75rem; max-width:480px;">
+            <div>
+                <FluentLabel>Client ID</FluentLabel>
+                <FluentTextField @bind-Value="paydayClientId" Placeholder="Payday client ID" style="width:100%" />
+            </div>
+            <div>
+                <FluentLabel>Client Secret</FluentLabel>
+                <FluentTextField @bind-Value="paydayClientSecret" Placeholder="Payday client secret"
+                                 TextFieldType="TextFieldType.Password" style="width:100%" />
+            </div>
+        </div>
+
+        <div style="margin-top:1.25rem;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="TestPaydayAsync"
+                          Disabled="@(testingPayday || string.IsNullOrWhiteSpace(paydayClientId) || string.IsNullOrWhiteSpace(paydayClientSecret))">
+                @(testingPayday ? "Testing…" : "Test Connection")
+            </FluentButton>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(paydayError))
+        {
+            <div class="msg msg--error" style="margin-top:0.75rem;">@paydayError</div>
+        }
+
+        @if (paydayCompany is not null)
+        {
+            <div class="msg msg--success" style="margin-top:0.75rem;">
+                ✓ Connected — <strong>@paydayCompany.Name</strong> (@paydayCompany.Ssn)
+            </div>
+
+            <div style="margin-top:1rem; max-width:480px;">
+                <FluentLabel>Contact person *</FluentLabel>
+                <FluentTextField @bind-Value="paydayCompany.Owner"
+                                 Placeholder="Your full name"
+                                 style="width:100%;" />
+                <p style="margin:0.4rem 0 0; color:#60758b; font-size:0.8rem;">Required — Payday doesn't provide this field.</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="msg msg--error" style="margin-top:0.75rem;">@errorMessage</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(successMessage))
+            {
+                <div class="msg msg--success" style="margin-top:0.75rem;">@successMessage</div>
+            }
+
+            <div style="margin-top:1rem;">
+                <FluentButton Appearance="Appearance.Accent" @onclick="CreateFromPaydayAsync"
+                              Disabled="@(isSaving || string.IsNullOrWhiteSpace(paydayCompany.Owner))">
+                    @(isSaving ? "Creating…" : "Create Company from Payday")
+                </FluentButton>
+            </div>
+        }
+    </FluentCard>
+}
+
+<style>
+    .tab-row {
+        display: flex;
+        gap: 0.5rem;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0;
     }
 
-    @if (!string.IsNullOrWhiteSpace(successMessage))
-    {
-        <FluentLabel Style="margin-top:0.75rem; color:#10b981; font-weight:600;">@successMessage</FluentLabel>
+    .tab-btn {
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 0.6rem 1.25rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #60758b;
+        margin-bottom: -2px;
+        transition: color 0.15s, border-color 0.15s;
     }
 
-    <div style="display:flex; gap:0.75rem; margin-top:1rem;">
-        <FluentButton Appearance="Appearance.Accent"
-                      @onclick="CreateCompanyAsync"
-                      Disabled="@(!CanCreate || isSaving)">
-            @(isSaving ? "Creating…" : "Create Company")
-        </FluentButton>
-        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/"))">Cancel</FluentButton>
-    </div>
-</FluentCard>
+    .tab-btn.active {
+        color: #14304b;
+        border-bottom-color: #14304b;
+    }
+
+    .tab-btn:hover:not(.active) {
+        color: #14304b;
+    }
+
+    .msg {
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-size: 0.85rem;
+    }
+
+    .msg--error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    .msg--success {
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+    }
+</style>
 
 @code {
+    private enum Tab { Manual, Payday }
+    private Tab activeTab = Tab.Manual;
+
+    // Manual form
     private Company newCompany = new();
     private bool isSaving;
     private string? errorMessage;
     private string? successMessage;
 
-    protected override async Task OnInitializedAsync()
-    {
-        var result = await CompanyApi.GetCompanyAsync();
-        if (result.IsSuccess && result.Value is not null)
-            newCompany.Owner = result.Value.Owner;
-    }
-
-    private bool CanCreate =>
+    private bool CanCreateManual =>
         !string.IsNullOrWhiteSpace(newCompany.Name) &&
         !string.IsNullOrWhiteSpace(newCompany.Ssn) &&
         !string.IsNullOrWhiteSpace(newCompany.Email) &&
@@ -76,7 +201,24 @@
         !string.IsNullOrWhiteSpace(newCompany.Phone) &&
         !string.IsNullOrWhiteSpace(newCompany.Owner);
 
-    private async Task CreateCompanyAsync()
+    // Payday form
+    private string paydayClientId = string.Empty;
+    private string paydayClientSecret = string.Empty;
+    private bool testingPayday;
+    private string? paydayError;
+    private Company? paydayCompany;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-fill contact person from the currently active company
+        var result = await CompanyApi.GetCompanyAsync();
+        if (result.IsSuccess && result.Value is not null)
+            newCompany.Owner = result.Value.Owner;
+    }
+
+    // ── Manual ──────────────────────────────────────────────────────────────────
+
+    private async Task CreateManualAsync()
     {
         isSaving = true;
         errorMessage = null;
@@ -85,9 +227,80 @@
         var result = await CompanyApi.CreateCompanyAsync(newCompany);
         if (result.IsSuccess)
         {
-            successMessage = $"Company \"{newCompany.Name}\" created. You can now switch to it from the dashboard.";
+            successMessage = $"Company \"{newCompany.Name}\" created. You can switch to it from the Companies page.";
             var ownerName = newCompany.Owner;
             newCompany = new() { Owner = ownerName };
+        }
+        else
+        {
+            errorMessage = result.ErrorMessage ?? "Could not create company.";
+        }
+
+        isSaving = false;
+    }
+
+    // ── Payday ──────────────────────────────────────────────────────────────────
+
+    private async Task TestPaydayAsync()
+    {
+        testingPayday = true;
+        paydayError   = null;
+        paydayCompany = null;
+
+        try
+        {
+            var result = await CompanyApi.TestPaydayCredentialsAsync(
+                paydayClientId.Trim(),
+                paydayClientSecret.Trim());
+
+            if (!result.IsSuccess)
+            {
+                paydayError = result.ErrorMessage ?? "Could not reach the Payday test endpoint.";
+                return;
+            }
+
+            var data = result.Value;
+            if (data is null || !data.Success)
+            {
+                paydayError = data?.Message ?? "Authentication failed. Check your credentials and try again.";
+                return;
+            }
+
+            paydayCompany = new Company
+            {
+                Name    = data.CompanyName    ?? string.Empty,
+                Ssn     = data.CompanySsn     ?? string.Empty,
+                Email   = data.CompanyEmail   ?? string.Empty,
+                Phone   = data.CompanyPhone   ?? string.Empty,
+                Address = data.CompanyAddress ?? string.Empty,
+                Owner   = string.Empty
+            };
+        }
+        finally
+        {
+            testingPayday = false;
+        }
+    }
+
+    private async Task CreateFromPaydayAsync()
+    {
+        if (paydayCompany is null) return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        // Embed the Payday credentials so the API can encrypt and store them
+        paydayCompany.PaydayClientId     = paydayClientId.Trim();
+        paydayCompany.PaydayClientSecret = paydayClientSecret.Trim();
+
+        var result = await CompanyApi.CreateCompanyAsync(paydayCompany);
+        if (result.IsSuccess)
+        {
+            successMessage = $"Company \"{paydayCompany.Name}\" created with Payday credentials. You can switch to it from the Companies page.";
+            paydayCompany      = null;
+            paydayClientId     = string.Empty;
+            paydayClientSecret = string.Empty;
         }
         else
         {
