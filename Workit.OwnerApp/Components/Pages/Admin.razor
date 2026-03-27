@@ -86,6 +86,11 @@ else
             </FluentButton>
         </div>
 
+        @if (!string.IsNullOrWhiteSpace(ownersLoadError))
+        {
+            <div class="msg msg--error">@ownersLoadError</div>
+        }
+
         @if (isLoadingOwners && owners.Count == 0)
         {
             <div style="display:flex; align-items:center; gap:0.75rem;">
@@ -308,6 +313,7 @@ else
     private Guid? switchingTo;
     private List<AdminCompanyInfo> companies = [];
     private List<AdminOwnerInfo> owners = [];
+    private string? ownersLoadError;
 
     // Create-owner form state
     private string regOwnerName = "";
@@ -344,32 +350,39 @@ else
     private async Task LoadCompaniesAsync()
     {
         isLoadingCompanies = true;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
             var result = await AuthApi.GetAdminCompaniesAsync();
-            if (result.IsSuccess && result.Value is not null)
-                companies = result.Value;
+            if (result.IsSuccess)
+                companies = result.Value ?? [];
         }
         finally
         {
             isLoadingCompanies = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 
     private async Task LoadOwnersAsync()
     {
         isLoadingOwners = true;
+        ownersLoadError = null;
+        await InvokeAsync(StateHasChanged);
+
         try
         {
             var result = await AuthApi.GetAdminOwnersAsync();
-            if (result.IsSuccess && result.Value is not null)
-                owners = result.Value;
+            if (result.IsSuccess)
+                owners = result.Value ?? [];
+            else
+                ownersLoadError = result.ErrorMessage ?? "Could not load owners.";
         }
         finally
         {
             isLoadingOwners = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 

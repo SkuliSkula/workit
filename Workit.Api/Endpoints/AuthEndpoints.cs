@@ -310,7 +310,7 @@ internal static class AuthEndpoints
                         };
                     });
 
-                    return Results.Ok(result);
+                    return Results.Ok(result.ToList());
                 },
                 logger,
                 "listing all owners for admin"))
