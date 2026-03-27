@@ -19,8 +19,7 @@ builder.Services.AddWorkitApiClients();
 builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
 builder.Services.AddScoped<AuthSessionService>();
 builder.Services.AddScoped<PaydayCredentialsInitializer>();
-builder.Services.AddPaydayApiClients(opts =>
-    builder.Configuration.GetSection(PaydayOptions.SectionName).Bind(opts));
+builder.Services.AddPaydayApiClients();
 
 var app = builder.Build();
 

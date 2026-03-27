@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Workit.Shared.Payday;
 
@@ -15,15 +14,6 @@ public class PaydayTokenServiceTests : IDisposable
     {
         // Clean up any cached tokens from our test
         PaydayTokenService.InvalidateCache(_testClientId);
-    }
-
-    private static IOptions<PaydayOptions> CreateOptions(string? clientId = null, string? clientSecret = null)
-    {
-        return Options.Create(new PaydayOptions
-        {
-            ClientId = clientId ?? "",
-            ClientSecret = clientSecret ?? ""
-        });
     }
 
     private static IHttpClientFactory CreateFactory(HttpMessageHandler handler)
@@ -58,7 +48,7 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task GetTokenAsync_WithSetCredentials_FetchesToken()
     {
         var handler = CreateSuccessHandler("fresh-token");
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
         service.SetCredentials(_testClientId, "secret");
 
         var token = await service.GetTokenAsync();
@@ -70,28 +60,11 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task GetTokenAsync_NoCredentials_ReturnsNull()
     {
         var handler = CreateSuccessHandler();
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
 
         var token = await service.GetTokenAsync();
 
         token.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task GetTokenAsync_UseFallbackOptions_WhenNoSetCredentials()
-    {
-        var fallbackClientId = $"fallback-{Guid.NewGuid()}";
-        var handler = CreateSuccessHandler("fallback-token");
-        var service = new PaydayTokenService(
-            CreateFactory(handler),
-            CreateOptions(fallbackClientId, "fallback-secret"));
-
-        var token = await service.GetTokenAsync();
-
-        token.Should().Be("fallback-token");
-
-        // cleanup
-        PaydayTokenService.InvalidateCache(fallbackClientId);
     }
 
     [Fact]
@@ -106,7 +79,7 @@ public class PaydayTokenServiceTests : IDisposable
                 Content = JsonContent.Create(new { accessToken = "cached-token" })
             };
         });
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
         service.SetCredentials(_testClientId, "secret");
 
         var token1 = await service.GetTokenAsync();
@@ -121,7 +94,7 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task GetTokenAsync_AuthFailure_ReturnsNull()
     {
         var handler = CreateFailureHandler();
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
         service.SetCredentials(_testClientId, "wrong-secret");
 
         var token = await service.GetTokenAsync();
@@ -133,7 +106,7 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task GetTokenAsync_NetworkError_ReturnsNull()
     {
         var handler = CreateThrowingHandler();
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
         service.SetCredentials(_testClientId, "secret");
 
         var token = await service.GetTokenAsync();
@@ -147,7 +120,7 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task TestCredentialsAsync_ValidCredentials_ReturnsToken()
     {
         var handler = CreateSuccessHandler("test-result-token");
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
 
         var token = await service.TestCredentialsAsync("any-client", "any-secret");
 
@@ -158,7 +131,7 @@ public class PaydayTokenServiceTests : IDisposable
     public async Task TestCredentialsAsync_InvalidCredentials_ReturnsNull()
     {
         var handler = CreateFailureHandler();
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
 
         var token = await service.TestCredentialsAsync("bad-client", "bad-secret");
 
@@ -177,7 +150,7 @@ public class PaydayTokenServiceTests : IDisposable
                 Content = JsonContent.Create(new { accessToken = $"token-{callCount}" })
             };
         });
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
 
         // TestCredentials should NOT cache
         await service.TestCredentialsAsync("test-only-client", "secret");
@@ -205,7 +178,7 @@ public class PaydayTokenServiceTests : IDisposable
                 Content = JsonContent.Create(new { accessToken = $"token-{callCount}" })
             };
         });
-        var service = new PaydayTokenService(CreateFactory(handler), CreateOptions());
+        var service = new PaydayTokenService(CreateFactory(handler));
         service.SetCredentials(_testClientId, "secret");
 
         await service.GetTokenAsync(); // call 1, cached

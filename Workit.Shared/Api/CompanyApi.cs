@@ -38,4 +38,11 @@ public sealed class PaydayTestResult
 {
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
+
+    // Populated on success — company data returned from Payday
+    public string? CompanyName    { get; set; }
+    public string? CompanySsn     { get; set; }
+    public string? CompanyEmail   { get; set; }
+    public string? CompanyPhone   { get; set; }
+    public string? CompanyAddress { get; set; }
 }

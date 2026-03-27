@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Models;
 using static Workit.Api.Endpoints.EndpointHelpers;
 
@@ -13,13 +14,22 @@ internal static class CompanyEndpoints
     {
         var securedApi = app.MapGroup("/api").RequireAuthorization().WithTags("Companies");
         var logger = app.Logger;
+        var credentialProtection = app.Services.GetRequiredService<ICredentialProtectionService>();
 
         securedApi.MapGet("/company", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
-                    var company = await db.Companies.FirstOrDefaultAsync(x => x.Id == userContext.CompanyId, ct);
-                    return company is null ? Results.NotFound() : Results.Ok(company);
+                    // AsNoTracking so decrypted values never accidentally get saved back
+                    var company = await db.Companies.AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.Id == userContext.CompanyId, ct);
+                    if (company is null) return Results.NotFound();
+
+                    // Decrypt Payday credentials before sending to client (transmitted over HTTPS)
+                    company.PaydayClientId     = credentialProtection.Unprotect(company.PaydayClientId);
+                    company.PaydayClientSecret = credentialProtection.Unprotect(company.PaydayClientSecret);
+
+                    return Results.Ok(company);
                 },
                 logger,
                 "loading company"))
@@ -35,12 +45,14 @@ internal static class CompanyEndpoints
 
                     var company = new Company
                     {
-                        Name = request.Name.Trim(),
-                        Ssn = request.Ssn.Trim(),
-                        Email = request.Email.Trim(),
-                        Address = request.Address.Trim(),
-                        Phone = request.Phone.Trim(),
-                        Owner = request.Owner.Trim()
+                        Name               = request.Name.Trim(),
+                        Ssn                = request.Ssn.Trim(),
+                        Email              = request.Email.Trim(),
+                        Address            = request.Address.Trim(),
+                        Phone              = request.Phone.Trim(),
+                        Owner              = request.Owner.Trim(),
+                        PaydayClientId     = string.IsNullOrWhiteSpace(request.PaydayClientId)     ? null : credentialProtection.Protect(request.PaydayClientId.Trim()),
+                        PaydayClientSecret = string.IsNullOrWhiteSpace(request.PaydayClientSecret) ? null : credentialProtection.Protect(request.PaydayClientSecret.Trim())
                     };
 
                     var userCompany = new UserCompany
@@ -104,8 +116,8 @@ internal static class CompanyEndpoints
             var company = await db.Companies.FindAsync(userContext.CompanyId);
             if (company is null) return Results.NotFound();
 
-            company.PaydayClientId = string.IsNullOrWhiteSpace(req.ClientId) ? null : req.ClientId.Trim();
-            company.PaydayClientSecret = string.IsNullOrWhiteSpace(req.ClientSecret) ? null : req.ClientSecret.Trim();
+            company.PaydayClientId     = string.IsNullOrWhiteSpace(req.ClientId)     ? null : credentialProtection.Protect(req.ClientId.Trim());
+            company.PaydayClientSecret = string.IsNullOrWhiteSpace(req.ClientSecret) ? null : credentialProtection.Protect(req.ClientSecret.Trim());
             await db.SaveChangesAsync();
             return Results.Ok();
         }).RequireAuthorization().WithTags("Companies");
@@ -144,11 +156,23 @@ internal static class CompanyEndpoints
                 {
                     var companyData = await companyResponse.Content.ReadFromJsonAsync<JsonElement>();
                     var companyName = companyData.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : "Unknown";
-                    var companySsn = companyData.TryGetProperty("ssn", out var ssnProp) ? ssnProp.GetString() : "";
-                    return Results.Json(new { success = true, message = $"Connected to Payday company: {companyName} ({companySsn})" });
+                    var companySsn  = companyData.TryGetProperty("ssn",  out var ssnProp)  ? ssnProp.GetString()  : "";
+                    var companyEmail   = companyData.TryGetProperty("email",   out var emailProp)   ? emailProp.GetString()   : "";
+                    var companyPhone   = companyData.TryGetProperty("phone",   out var phoneProp)   ? phoneProp.GetString()   : "";
+                    var companyAddress = companyData.TryGetProperty("address", out var addrProp)    ? addrProp.GetString()    : "";
+                    return Results.Json(new
+                    {
+                        success     = true,
+                        message     = $"Connected to Payday company: {companyName} ({companySsn})",
+                        companyName,
+                        companySsn,
+                        companyEmail,
+                        companyPhone,
+                        companyAddress
+                    });
                 }
 
-                return Results.Json(new { success = true, message = "Authentication successful, but could not fetch company details." });
+                return Results.Json(new { success = true, message = "Authentication successful, but could not fetch company details.", companyName = (string?)null, companySsn = (string?)null, companyEmail = (string?)null, companyPhone = (string?)null, companyAddress = (string?)null });
             }
             catch (Exception ex)
             {

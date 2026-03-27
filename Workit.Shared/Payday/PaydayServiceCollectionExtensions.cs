@@ -4,11 +4,8 @@ namespace Workit.Shared.Payday;
 
 public static class PaydayServiceCollectionExtensions
 {
-    public static IServiceCollection AddPaydayApiClients(this IServiceCollection services, Action<PaydayOptions>? configure = null)
+    public static IServiceCollection AddPaydayApiClients(this IServiceCollection services)
     {
-        if (configure is not null)
-            services.Configure(configure);
-
         services.AddHttpClient("PaydayApi", client =>
         {
             client.BaseAddress = new Uri("https://api.payday.is/");

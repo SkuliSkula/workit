@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
-using Microsoft.Extensions.Options;
 
 namespace Workit.Shared.Payday;
 
@@ -32,15 +31,13 @@ internal sealed class PaydayTokenService : IPaydayTokenService
     private static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(25); // refresh before Payday's expiry
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly PaydayOptions _fallbackOptions;
 
     private string? _clientId;
     private string? _clientSecret;
 
-    public PaydayTokenService(IHttpClientFactory httpClientFactory, IOptions<PaydayOptions> options)
+    public PaydayTokenService(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
-        _fallbackOptions = options.Value;
     }
 
     public void SetCredentials(string clientId, string clientSecret)
@@ -51,8 +48,8 @@ internal sealed class PaydayTokenService : IPaydayTokenService
 
     public async Task<string?> GetTokenAsync()
     {
-        var clientId = _clientId ?? _fallbackOptions.ClientId;
-        var clientSecret = _clientSecret ?? _fallbackOptions.ClientSecret;
+        var clientId = _clientId;
+        var clientSecret = _clientSecret;
 
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
             return null;

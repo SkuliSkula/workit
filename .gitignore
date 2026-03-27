@@ -271,6 +271,9 @@ Generated_Code/
 # Local dev runtime files
 .workit-dev/
 
+# ASP.NET Core Data Protection keys — contain encryption key material, must never be committed
+**/keys/*.xml
+
 # Local development secrets (use env vars in production)
 **/appsettings.Development.json
 

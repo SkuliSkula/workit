@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Api;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
@@ -14,6 +15,7 @@ internal static class AuthEndpoints
     {
         var authApi = app.MapGroup("/api/auth").WithTags("Auth");
         var logger = app.Logger;
+        var credentialProtection = app.Services.GetRequiredService<ICredentialProtectionService>();
 
         authApi.MapPost("/login", async (WorkitDbContext db, TokenFactory tokenFactory, LoginRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -343,8 +345,8 @@ internal static class AuthEndpoints
                         Address            = request.Company.Address.Trim(),
                         Phone              = request.Company.Phone.Trim(),
                         Owner              = request.Company.Owner.Trim(),
-                        PaydayClientId     = request.PaydayClientId?.Trim(),
-                        PaydayClientSecret = request.PaydayClientSecret?.Trim()
+                        PaydayClientId     = string.IsNullOrWhiteSpace(request.PaydayClientId)     ? null : credentialProtection.Protect(request.PaydayClientId.Trim()),
+                        PaydayClientSecret = string.IsNullOrWhiteSpace(request.PaydayClientSecret) ? null : credentialProtection.Protect(request.PaydayClientSecret.Trim())
                     };
 
                     var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == userContext.UserId, ct);

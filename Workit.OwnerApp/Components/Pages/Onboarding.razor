@@ -1,7 +1,7 @@
 @page "/onboarding"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AuthSessionService AuthSession
-@inject IAuthApi AuthApi
+@inject ICompanyApi CompanyApi
 @inject NavigationManager Navigation
 
 <PageTitle>Set Up Your Company — Workit</PageTitle>
@@ -104,26 +104,34 @@
                 <div class="msg msg--error" style="margin-top:0.75rem;">@paydayError</div>
             }
 
-            @if (paydayCompany is not null)
-            {
-                <div class="msg msg--success" style="margin-top:0.75rem;">
-                    ✓ Connected — <strong>@paydayCompany.Name</strong> (@paydayCompany.Ssn)
-                </div>
-            }
-
-            <div style="display:flex; gap:0.75rem; margin-top:1.25rem; flex-wrap:wrap;">
+            <div style="display:flex; gap:0.75rem; margin-top:1.25rem; flex-wrap:wrap; align-items:center;">
                 <FluentButton Appearance="Appearance.Outline" @onclick="TestPaydayAsync"
                               Disabled="@(testingPayday || string.IsNullOrWhiteSpace(paydayClientId) || string.IsNullOrWhiteSpace(paydayClientSecret))">
                     @(testingPayday ? "Testing…" : "Test Connection")
                 </FluentButton>
+            </div>
 
-                @if (paydayCompany is not null)
-                {
-                    <FluentButton Appearance="Appearance.Accent" @onclick="SetupFromPaydayAsync" Disabled="@saving">
+            @if (paydayCompany is not null)
+            {
+                <div class="msg msg--success" style="margin-top:1rem;">
+                    ✓ Connected — <strong>@paydayCompany.Name</strong> (@paydayCompany.Ssn)
+                </div>
+
+                <div style="margin-top:1rem;">
+                    <FluentLabel>Contact person *</FluentLabel>
+                    <FluentTextField @bind-Value="paydayCompany.Owner"
+                                     Placeholder="Your full name"
+                                     style="width:100%; max-width:480px;" />
+                    <p class="hint" style="margin-top:0.4rem;">Enter the contact person name to complete setup.</p>
+                </div>
+
+                <div style="margin-top:1rem;">
+                    <FluentButton Appearance="Appearance.Accent" @onclick="SetupFromPaydayAsync"
+                                  Disabled="@(saving || string.IsNullOrWhiteSpace(paydayCompany.Owner))">
                         @(saving ? "Setting up…" : "Create Company from Payday")
                     </FluentButton>
-                }
-            </div>
+                </div>
+            }
         </div>
     }
 </div>
@@ -317,17 +325,33 @@
 
         try
         {
-            // Use the Payday test endpoint to validate credentials and retrieve company data
-            var result = await AuthApi.SetupCompanyAsync(new SetupCompanyRequest
-            {
-                Company    = new Company(),
-                OwnerEmail = string.Empty
-            });
+            var result = await CompanyApi.TestPaydayCredentialsAsync(
+                paydayClientId.Trim(),
+                paydayClientSecret.Trim());
 
-            // The test-payday-credentials endpoint is on ICompanyApi, not IAuthApi.
-            // For now we use a direct HTTP test via the existing Payday test flow.
-            // This is a placeholder — inject ICompanyApi when available on this page.
-            paydayError = "Payday connection test: enter credentials and use Test Connection.";
+            if (!result.IsSuccess)
+            {
+                paydayError = result.ErrorMessage ?? "Could not reach the Payday test endpoint.";
+                return;
+            }
+
+            var data = result.Value;
+            if (data is null || !data.Success)
+            {
+                paydayError = data?.Message ?? "Authentication failed. Check your credentials and try again.";
+                return;
+            }
+
+            // Populate a Company object from the Payday response
+            paydayCompany = new Company
+            {
+                Name    = data.CompanyName    ?? string.Empty,
+                Ssn     = data.CompanySsn     ?? string.Empty,
+                Email   = data.CompanyEmail   ?? string.Empty,
+                Phone   = data.CompanyPhone   ?? string.Empty,
+                Address = data.CompanyAddress ?? string.Empty,
+                Owner   = string.Empty   // owner fills this in or edits after setup
+            };
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.Text;
 using Anthropic.SDK;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -78,6 +79,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<TokenFactory>();
+
+// Data Protection — encrypts credentials stored in the database.
+// Keys are persisted to a directory so they survive restarts.
+// In production set DataProtection:KeyPath in appsettings or an env-var.
+var keyPath = builder.Configuration["DataProtection:KeyPath"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "keys");
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keyPath))
+    .SetApplicationName("Workit");
+builder.Services.AddSingleton<ICredentialProtectionService, CredentialProtectionService>();
 
 builder.Services.AddDbContext<WorkitDbContext>(options =>
 {
