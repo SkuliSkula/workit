@@ -3,6 +3,8 @@
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
+@inject IJSRuntime JS
+@using ClosedXML.Excel
 
 <PageTitle>Time Entries</PageTitle>
 
@@ -10,9 +12,17 @@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
         <FluentLabel Typo="Typography.PaneHeader">Time Entries</FluentLabel>
-        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
-            @(showCreateForm ? "✕ Cancel" : "+ New")
-        </FluentButton>
+        <div style="display:flex; gap:0.5rem;">
+            @if (entries.Count > 0)
+            {
+                <FluentButton Appearance="Appearance.Accent" @onclick="ExportToExcelAsync" Disabled="@isExporting">
+                    @(isExporting ? "Exporting…" : "Export to Excel")
+                </FluentButton>
+            }
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New")
+            </FluentButton>
+        </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(loadError))
@@ -482,6 +492,80 @@
         finally
         {
             saving = false;
+        }
+    }
+
+    // ── Export ────────────────────────────────────────────────────────────────
+    private bool isExporting;
+
+    private async Task ExportToExcelAsync()
+    {
+        isExporting = true;
+        try
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("Time Entries");
+
+            // Header row
+            ws.Cell(1, 1).Value = "Date";
+            ws.Cell(1, 2).Value = "Employee";
+            ws.Cell(1, 3).Value = "Job";
+            ws.Cell(1, 4).Value = "Hours";
+            ws.Cell(1, 5).Value = "Overtime Hours";
+            ws.Cell(1, 6).Value = "Driving Units";
+            ws.Cell(1, 7).Value = "Notes";
+            ws.Cell(1, 8).Value = "Invoiced";
+            ws.Cell(1, 9).Value = "Invoice #";
+
+            var headerRow = ws.Row(1);
+            headerRow.Style.Font.Bold = true;
+            headerRow.Style.Fill.BackgroundColor = XLColor.FromHtml("#2563EB");
+            headerRow.Style.Font.FontColor = XLColor.White;
+
+            // Data rows
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var e   = entries[i];
+                var row = i + 2;
+                ws.Cell(row, 1).Value = e.Date.ToString("yyyy-MM-dd");
+                ws.Cell(row, 2).Value = e.EmployeeName;
+                ws.Cell(row, 3).Value = e.JobName;
+                ws.Cell(row, 4).Value = e.Hours;
+                ws.Cell(row, 5).Value = e.OvertimeHours;
+                ws.Cell(row, 6).Value = e.DrivingUnits;
+                ws.Cell(row, 7).Value = e.Notes;
+                ws.Cell(row, 8).Value = e.IsInvoiced ? "Yes" : "No";
+                ws.Cell(row, 9).Value = e.PaydayInvoiceNumber.HasValue ? e.PaydayInvoiceNumber.Value.ToString() : string.Empty;
+
+                if (i % 2 == 1)
+                    ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F1F5F9");
+            }
+
+            // Totals row
+            var totalRow = entries.Count + 2;
+            ws.Cell(totalRow, 1).Value = "Total";
+            ws.Cell(totalRow, 4).Value = entries.Sum(e => e.Hours);
+            ws.Cell(totalRow, 5).Value = entries.Sum(e => e.OvertimeHours);
+            ws.Cell(totalRow, 6).Value = entries.Sum(e => e.DrivingUnits);
+            ws.Row(totalRow).Style.Font.Bold = true;
+            ws.Row(totalRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#DBEAFE");
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+
+            var from = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : "all";
+            var to   = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : "all";
+            var filename = $"time-entries-{from}-to-{to}.xlsx";
+
+            await JS.InvokeVoidAsync("triggerFileDownload", filename, base64,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        finally
+        {
+            isExporting = false;
         }
     }
 
