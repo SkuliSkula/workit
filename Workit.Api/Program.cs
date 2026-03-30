@@ -145,6 +145,7 @@ app.MapInvoiceEndpoints();
 app.MapAbsenceEndpoints();
 app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
+app.MapDevSeedEndpoints();
 
 // ── Startup tasks ──────────────────────────────────────────────────────────────
 var isDesignTime = string.Equals(Environment.GetEnvironmentVariable("EF_DESIGN_TIME"), "true", StringComparison.OrdinalIgnoreCase);
