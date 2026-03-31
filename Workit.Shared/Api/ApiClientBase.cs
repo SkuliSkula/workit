@@ -39,6 +39,11 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
         return await SendAsync(HttpMethod.Put, requestUri, payload, defaultErrorMessage);
     }
 
+    protected async Task<ApiResult> PatchAsync<T>(string requestUri, T payload, string defaultErrorMessage)
+    {
+        return await SendAsync(HttpMethod.Patch, requestUri, payload, defaultErrorMessage);
+    }
+
     protected async Task<ApiResult<TResponse>> PostForJsonAsync<TRequest, TResponse>(string requestUri, TRequest payload, string defaultErrorMessage)
     {
         return await SendForJsonAsync<TRequest, TResponse>(HttpMethod.Post, requestUri, payload, defaultErrorMessage);

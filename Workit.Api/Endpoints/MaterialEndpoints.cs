@@ -139,41 +139,54 @@ internal static class MaterialEndpoints
                 "loading material usage"))
             .WithName("GetMaterialUsage");
 
-        securedApi.MapPost("/materials/usage", async (WorkitDbContext db, HttpContext httpContext, MaterialUsage usage, CancellationToken ct) =>
+        securedApi.MapPost("/materials/usage", async (WorkitDbContext db, HttpContext httpContext, LogMaterialUsageRequest req, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
 
+                    Guid companyId;
+                    Guid employeeId;
+
                     if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal)
                         || string.Equals(userContext.Role, WorkitRoles.Admin, StringComparison.Ordinal))
                     {
-                        usage.CompanyId = userContext.CompanyId;
-                        var employeeExists = await db.Employees.AnyAsync(x => x.Id == usage.EmployeeId && x.CompanyId == userContext.CompanyId, ct);
+                        companyId  = userContext.CompanyId;
+                        employeeId = req.EmployeeId ?? Guid.Empty;
+                        var employeeExists = await db.Employees.AnyAsync(x => x.Id == employeeId && x.CompanyId == companyId, ct);
                         if (!employeeExists)
                             return Results.BadRequest("Employee not found in this company.");
                     }
                     else if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
                              userContext.EmployeeId is Guid currentEmployeeId)
                     {
-                        usage.CompanyId  = userContext.CompanyId;
-                        usage.EmployeeId = currentEmployeeId;
+                        companyId  = userContext.CompanyId;
+                        employeeId = currentEmployeeId;
                     }
                     else
                     {
                         return Results.Forbid();
                     }
 
-                    var material = await db.Materials.FirstOrDefaultAsync(x => x.Id == usage.MaterialId && x.CompanyId == userContext.CompanyId, ct);
+                    var material = await db.Materials.FirstOrDefaultAsync(x => x.Id == req.MaterialId && x.CompanyId == companyId, ct);
                     if (material is null)
                         return Results.BadRequest("Material not found.");
 
-                    if (usage.Quantity <= 0)
+                    if (req.Quantity <= 0)
                         return Results.BadRequest("Quantity must be greater than zero.");
 
                     // Deduct from stock
-                    material.Quantity = Math.Max(0, material.Quantity - usage.Quantity);
+                    material.Quantity = Math.Max(0, material.Quantity - req.Quantity);
 
-                    usage.UsedAt = DateTimeOffset.UtcNow;
+                    var usage = new MaterialUsage
+                    {
+                        CompanyId  = companyId,
+                        EmployeeId = employeeId,
+                        MaterialId = req.MaterialId,
+                        JobId      = req.JobId,
+                        Quantity   = req.Quantity,
+                        Notes      = req.Notes ?? string.Empty,
+                        UsedAt     = req.UsedAt ?? DateTimeOffset.UtcNow,
+                    };
 
                     db.MaterialUsages.Add(usage);
                     await db.SaveChangesAsync(ct);
@@ -242,3 +255,16 @@ internal static class MaterialEndpoints
             .WithName("MarkMaterialUsageUninvoiced");
     }
 }
+
+/// <summary>
+/// Slim request DTO for logging material usage.
+/// UsedAt is optional — if omitted the server defaults to UtcNow.
+/// </summary>
+internal sealed record LogMaterialUsageRequest(
+    Guid              MaterialId,
+    decimal           Quantity,
+    Guid?             EmployeeId,
+    Guid?             JobId,
+    string?           Notes,
+    DateTimeOffset?   UsedAt
+);

@@ -253,15 +253,9 @@ else if (!isLoading && string.IsNullOrWhiteSpace(loadError))
         isSaving   = true;
         sheetError = string.Empty;
 
-        var usage = new MaterialUsage
-        {
-            MaterialId = sheetMaterial.Id,
-            Quantity   = sheetQuantity,
-            JobId      = Guid.TryParse(sheetJobId, out var jid) ? jid : null,
-            Notes      = sheetNotes.Trim()
-        };
-
-        var result = await MaterialsApi.LogMaterialUsageAsync(usage);
+        var jobId  = Guid.TryParse(sheetJobId, out var jid) ? jid : (Guid?)null;
+        var result = await MaterialsApi.LogMaterialUsageAsync(
+            sheetMaterial.Id, sheetQuantity, jobId, sheetNotes.Trim());
         if (result.IsSuccess)
         {
             actionError  = false;

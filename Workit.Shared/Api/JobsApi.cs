@@ -7,6 +7,7 @@ public interface IJobsApi
     Task<ApiResult<List<Job>>> GetJobsAsync();
     Task<ApiResult> CreateJobAsync(Job job);
     Task<ApiResult> UpdateJobAsync(Job job);
+    Task<ApiResult> UpdateKanbanStatusAsync(Guid jobId, KanbanStatus status, string? waitingReason);
 }
 
 internal sealed class JobsApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -28,4 +29,9 @@ internal sealed class JobsApi(HttpClient httpClient, IAccessTokenAccessor access
 
     public Task<ApiResult> UpdateJobAsync(Job job) =>
         PutAsync($"api/jobs/{job.Id}", job, "The job could not be updated right now.");
+
+    public Task<ApiResult> UpdateKanbanStatusAsync(Guid jobId, KanbanStatus status, string? waitingReason) =>
+        PatchAsync($"api/jobs/{jobId}/kanban-status",
+            new { Status = status, WaitingReason = waitingReason },
+            "The job status could not be updated right now.");
 }

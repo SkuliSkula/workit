@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Workit.Api.Data;
@@ -11,9 +12,11 @@ using Workit.Api.Data;
 namespace Workit.Api.Migrations
 {
     [DbContext(typeof(WorkitDbContext))]
-    partial class WorkitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260331072450_AddJobKanbanStatus")]
+    partial class AddJobKanbanStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -308,17 +311,8 @@ namespace Workit.Api.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTimeOffset?>("KanbanDoneAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("KanbanInProgressAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("KanbanStatus")
                         .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset?>("KanbanWaitingAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()

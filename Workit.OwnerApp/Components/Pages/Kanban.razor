@@ -1,0 +1,589 @@
+@page "/kanban"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
+@inject ICustomersApi CustomersApi
+
+<PageTitle>Kanban</PageTitle>
+
+@* ── Header ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <FluentLabel Typo="Typography.PaneHeader">Kanban</FluentLabel>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+            <span style="font-size:0.82rem; color:#6b7280;">@jobs.Count job@(jobs.Count == 1 ? "" : "s")</span>
+            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="LoadAsync" Disabled="@loading">
+                Refresh
+            </FluentButton>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(actionResult))
+    {
+        <FluentLabel Color="@(actionError ? Color.Error : Color.Success)" style="margin-top:0.5rem;">@actionResult</FluentLabel>
+    }
+</FluentCard>
+
+@if (loading)
+{
+    <PageLoader />
+}
+else
+{
+    @* ── Board ── *@
+    <div class="kanban-board">
+
+        @* BACKLOG *@
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-lane-header--backlog">
+                <span class="kanban-lane-title">Backlog</span>
+                <span class="kanban-lane-count">@BacklogJobs.Count</span>
+            </div>
+            <div class="kanban-cards">
+                @if (BacklogJobs.Count == 0)
+                {
+                    <div class="kanban-empty">No jobs</div>
+                }
+                @foreach (var job in BacklogJobs)
+                {
+                    <div class="kanban-card">
+                        <div class="kanban-card-code">@job.Code</div>
+                        <div class="kanban-card-name">@job.Name</div>
+                        <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* IN PROGRESS *@
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-lane-header--inprogress">
+                <span class="kanban-lane-title">In Progress</span>
+                <span class="kanban-lane-count">@InProgressJobs.Count</span>
+            </div>
+            <div class="kanban-cards">
+                @if (InProgressJobs.Count == 0)
+                {
+                    <div class="kanban-empty">No jobs</div>
+                }
+                @foreach (var job in InProgressJobs)
+                {
+                    <div class="kanban-card">
+                        <div class="kanban-card-code">@job.Code</div>
+                        <div class="kanban-card-name">@job.Name</div>
+                        <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        <div class="kanban-card-meta">
+                            <span>@EntryCount(job.Id) entr@(EntryCount(job.Id) == 1 ? "y" : "ies")</span>
+                            <span>@TotalHours(job.Id).ToString("0.#") h</span>
+                        </div>
+                        @if (job.KanbanInProgressAt.HasValue)
+                        {
+                            <div class="kanban-card-timestamp">
+                                <span class="kanban-ts-label">Started</span>
+                                <span class="kanban-ts-value">@FormatDate(job.KanbanInProgressAt.Value)</span>
+                                <span class="kanban-ts-age">@AgeSince(job.KanbanInProgressAt.Value)</span>
+                            </div>
+                        }
+                        <div class="kanban-card-actions">
+                            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
+                                          @onclick="@(() => OpenWaitingSheet(job))">
+                                Move to Waiting
+                            </FluentButton>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* WAITING *@
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-lane-header--waiting">
+                <span class="kanban-lane-title">Waiting</span>
+                <span class="kanban-lane-count">@WaitingJobs.Count</span>
+            </div>
+            <div class="kanban-cards">
+                @if (WaitingJobs.Count == 0)
+                {
+                    <div class="kanban-empty">No jobs</div>
+                }
+                @foreach (var job in WaitingJobs)
+                {
+                    <div class="kanban-card">
+                        <div class="kanban-card-code">@job.Code</div>
+                        <div class="kanban-card-name">@job.Name</div>
+                        <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        @if (!string.IsNullOrWhiteSpace(job.WaitingReason))
+                        {
+                            <div class="kanban-card-reason">@job.WaitingReason</div>
+                        }
+                        @if (job.KanbanInProgressAt.HasValue)
+                        {
+                            <div class="kanban-card-timestamp">
+                                <span class="kanban-ts-label">Started</span>
+                                <span class="kanban-ts-value">@FormatDate(job.KanbanInProgressAt.Value)</span>
+                            </div>
+                        }
+                        @if (job.KanbanWaitingAt.HasValue)
+                        {
+                            <div class="kanban-card-timestamp kanban-card-timestamp--waiting">
+                                <span class="kanban-ts-label">Waiting since</span>
+                                <span class="kanban-ts-value">@FormatDate(job.KanbanWaitingAt.Value)</span>
+                                <span class="kanban-ts-age">@AgeSince(job.KanbanWaitingAt.Value)</span>
+                            </div>
+                        }
+                        <div class="kanban-card-actions">
+                            <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
+                                          @onclick="@(() => MoveToInProgressAsync(job))">
+                                Resume
+                            </FluentButton>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* DONE *@
+        <div class="kanban-lane">
+            <div class="kanban-lane-header kanban-lane-header--done">
+                <span class="kanban-lane-title">Done</span>
+                <span class="kanban-lane-count">@DoneJobs.Count</span>
+            </div>
+            <div class="kanban-cards">
+                @if (DoneJobs.Count == 0)
+                {
+                    <div class="kanban-empty">No jobs</div>
+                }
+                @foreach (var job in DoneJobs)
+                {
+                    <div class="kanban-card kanban-card--done">
+                        <div class="kanban-card-code">@job.Code</div>
+                        <div class="kanban-card-name">@job.Name</div>
+                        <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        @if (job.KanbanInProgressAt.HasValue)
+                        {
+                            <div class="kanban-card-timestamp">
+                                <span class="kanban-ts-label">Started</span>
+                                <span class="kanban-ts-value">@FormatDate(job.KanbanInProgressAt.Value)</span>
+                            </div>
+                        }
+                        @if (job.KanbanDoneAt.HasValue)
+                        {
+                            <div class="kanban-card-timestamp kanban-card-timestamp--done">
+                                <span class="kanban-ts-label">Invoiced</span>
+                                <span class="kanban-ts-value">@FormatDate(job.KanbanDoneAt.Value)</span>
+                            </div>
+                        }
+                        @if (job.KanbanInProgressAt.HasValue && job.KanbanDoneAt.HasValue)
+                        {
+                            <div class="kanban-card-cycletime">
+                                Cycle time: <strong>@CycleTime(job.KanbanInProgressAt.Value, job.KanbanDoneAt.Value)</strong>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+}
+
+@* ── Waiting reason sheet ── *@
+@if (waitingJob is not null)
+{
+    <div class="kanban-sheet-backdrop" @onclick="CloseWaitingSheet"></div>
+    <div class="kanban-sheet">
+        <div class="kanban-sheet-handle"></div>
+        <div class="kanban-sheet-title">Move to Waiting</div>
+        <div class="kanban-sheet-subtitle">@waitingJob.Code — @waitingJob.Name</div>
+
+        <div style="margin-top:1rem;">
+            <FluentTextField Label="Reason (optional)"
+                             @bind-Value="waitingReason"
+                             Placeholder="e.g. Awaiting customer approval"
+                             style="width:100%" />
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(sheetError))
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@sheetError</FluentLabel>
+        }
+
+        <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmWaitingAsync" Disabled="@isSaving">
+                @(isSaving ? "Saving…" : "Confirm")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CloseWaitingSheet" Disabled="@isSaving">
+                Cancel
+            </FluentButton>
+        </div>
+    </div>
+}
+
+<style>
+    .kanban-board {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-top: 1rem;
+        align-items: start;
+    }
+
+    @@media (max-width: 900px) {
+        .kanban-board {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .kanban-board {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .kanban-lane {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .kanban-lane-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 0.85rem;
+        font-weight: 600;
+        font-size: 0.82rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .kanban-lane-header--backlog    { background: #f1f5f9; color: #475569; }
+    .kanban-lane-header--inprogress { background: #eff6ff; color: #1d4ed8; }
+    .kanban-lane-header--waiting    { background: #fffbeb; color: #b45309; }
+    .kanban-lane-header--done       { background: #f0fdf4; color: #15803d; }
+
+    .kanban-lane-count {
+        background: rgba(0,0,0,0.08);
+        border-radius: 99px;
+        padding: 1px 7px;
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+
+    .kanban-cards {
+        padding: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        min-height: 60px;
+    }
+
+    .kanban-empty {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        text-align: center;
+        padding: 0.75rem 0;
+    }
+
+    .kanban-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 7px;
+        padding: 0.65rem 0.75rem;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .kanban-card--done {
+        opacity: 0.75;
+    }
+
+    .kanban-card-code {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #6b7280;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 0.15rem;
+    }
+
+    .kanban-card-name {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 0.2rem;
+    }
+
+    .kanban-card-customer {
+        font-size: 0.78rem;
+        color: #6b7280;
+        margin-bottom: 0.3rem;
+    }
+
+    .kanban-card-meta {
+        display: flex;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+        color: #9ca3af;
+        margin-bottom: 0.35rem;
+    }
+
+    .kanban-card-reason {
+        font-size: 0.78rem;
+        color: #b45309;
+        background: #fffbeb;
+        border-radius: 4px;
+        padding: 3px 6px;
+        margin-bottom: 0.35rem;
+        font-style: italic;
+    }
+
+    /* Timestamp rows */
+    .kanban-card-timestamp {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.73rem;
+        color: #6b7280;
+        margin-bottom: 0.2rem;
+    }
+
+    .kanban-card-timestamp--waiting .kanban-ts-label { color: #b45309; }
+    .kanban-card-timestamp--done    .kanban-ts-label { color: #15803d; }
+
+    .kanban-ts-label {
+        font-weight: 600;
+        min-width: 4.5rem;
+    }
+
+    .kanban-ts-value {
+        color: #374151;
+    }
+
+    .kanban-ts-age {
+        margin-left: auto;
+        color: #9ca3af;
+        font-style: italic;
+        white-space: nowrap;
+    }
+
+    .kanban-card-cycletime {
+        font-size: 0.75rem;
+        color: #15803d;
+        background: #f0fdf4;
+        border-radius: 4px;
+        padding: 3px 6px;
+        margin-top: 0.3rem;
+    }
+
+    .kanban-card-actions {
+        margin-top: 0.5rem;
+    }
+
+    /* Sheet */
+    .kanban-sheet-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.35);
+        z-index: 200;
+    }
+
+    .kanban-sheet {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(480px, 100vw);
+        background: #fff;
+        border-radius: 16px 16px 0 0;
+        padding: 1.25rem 1.5rem 2rem;
+        z-index: 201;
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+    }
+
+    .kanban-sheet-handle {
+        width: 36px;
+        height: 4px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        margin: 0 auto 1rem;
+    }
+
+    .kanban-sheet-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 0.25rem;
+    }
+
+    .kanban-sheet-subtitle {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+</style>
+
+@code {
+    private bool    loading      = true;
+    private string? loadError;
+    private string  actionResult = string.Empty;
+    private bool    actionError;
+    private bool    isSaving;
+
+    private List<Job>       jobs       = [];
+    private List<TimeEntry> allEntries = [];
+    private readonly Dictionary<Guid, string> customerLookup = new();
+
+    // Waiting sheet state
+    private Job?   waitingJob;
+    private string waitingReason = string.Empty;
+    private string sheetError    = string.Empty;
+
+    // ── Lane derivation ────────────────────────────────────────────────────────
+
+    private List<Job> BacklogJobs    => jobs.Where(j => GetLane(j) == Lane.Backlog).ToList();
+    private List<Job> InProgressJobs => jobs.Where(j => GetLane(j) == Lane.InProgress).ToList();
+    private List<Job> WaitingJobs    => jobs.Where(j => GetLane(j) == Lane.Waiting).ToList();
+    private List<Job> DoneJobs       => jobs.Where(j => GetLane(j) == Lane.Done).OrderByDescending(j => j.KanbanDoneAt).ToList();
+
+    private enum Lane { Backlog, InProgress, Waiting, Done }
+
+    private Lane GetLane(Job job)
+    {
+        var entries = allEntries.Where(e => e.JobId == job.Id).ToList();
+        if (entries.Count == 0)                        return Lane.Backlog;
+        if (entries.All(e => e.IsInvoiced))            return Lane.Done;
+        if (job.KanbanStatus == KanbanStatus.Waiting)  return Lane.Waiting;
+        return Lane.InProgress;
+    }
+
+    private int     EntryCount(Guid jobId) => allEntries.Count(e => e.JobId == jobId);
+    private decimal TotalHours(Guid jobId) => allEntries.Where(e => e.JobId == jobId).Sum(e => e.Hours);
+
+    // ── Timestamp helpers ──────────────────────────────────────────────────────
+
+    private static string FormatDate(DateTimeOffset ts) =>
+        ts.ToLocalTime().ToString("dd MMM yyyy");
+
+    private static string AgeSince(DateTimeOffset ts)
+    {
+        var days = (DateTimeOffset.UtcNow - ts).TotalDays;
+        return days switch
+        {
+            < 1   => "today",
+            < 2   => "1 day",
+            < 7   => $"{(int)days} days",
+            < 14  => "1 week",
+            < 30  => $"{(int)(days / 7)} weeks",
+            < 60  => "1 month",
+            _     => $"{(int)(days / 30)} months"
+        };
+    }
+
+    private static string CycleTime(DateTimeOffset start, DateTimeOffset end)
+    {
+        var days = (end - start).TotalDays;
+        return days switch
+        {
+            < 1  => "< 1 day",
+            < 2  => "1 day",
+            < 7  => $"{(int)days} days",
+            < 14 => "1 week",
+            < 30 => $"{(int)(days / 7)} weeks",
+            < 60 => "1 month",
+            _    => $"{(int)(days / 30)} months"
+        };
+    }
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading      = true;
+        loadError    = null;
+        actionResult = string.Empty;
+        jobs.Clear();
+        allEntries.Clear();
+        customerLookup.Clear();
+
+        var jobsTask    = JobsApi.GetJobsAsync();
+        var entriesTask = TimeEntriesApi.GetTimeEntriesAsync();
+        var custTask    = CustomersApi.GetCustomersAsync();
+        await Task.WhenAll(jobsTask, entriesTask, custTask);
+
+        var jobsResult    = await jobsTask;
+        var entriesResult = await entriesTask;
+        var custResult    = await custTask;
+
+        if (!jobsResult.IsSuccess)    { loadError = jobsResult.ErrorMessage;    loading = false; return; }
+        if (!entriesResult.IsSuccess) { loadError = entriesResult.ErrorMessage; loading = false; return; }
+
+        jobs.AddRange(jobsResult.Value ?? []);
+        allEntries.AddRange(entriesResult.Value ?? []);
+
+        foreach (var c in custResult.Value ?? [])
+            customerLookup[c.Id] = c.Name;
+
+        loading = false;
+    }
+
+    // ── Actions ────────────────────────────────────────────────────────────────
+
+    private void OpenWaitingSheet(Job job)
+    {
+        waitingJob    = job;
+        waitingReason = job.WaitingReason ?? string.Empty;
+        sheetError    = string.Empty;
+        actionResult  = string.Empty;
+    }
+
+    private void CloseWaitingSheet() => waitingJob = null;
+
+    private async Task ConfirmWaitingAsync()
+    {
+        if (waitingJob is null) return;
+        isSaving   = true;
+        sheetError = string.Empty;
+
+        var result = await JobsApi.UpdateKanbanStatusAsync(waitingJob.Id, KanbanStatus.Waiting, waitingReason.Trim());
+        if (result.IsSuccess)
+        {
+            var job = jobs.First(j => j.Id == waitingJob.Id);
+            job.KanbanStatus   = KanbanStatus.Waiting;
+            job.WaitingReason  = string.IsNullOrWhiteSpace(waitingReason) ? null : waitingReason.Trim();
+            job.KanbanWaitingAt = DateTimeOffset.UtcNow;
+            actionError  = false;
+            actionResult = $"{job.Code} moved to Waiting.";
+            waitingJob   = null;
+        }
+        else
+        {
+            sheetError = result.ErrorMessage ?? "Could not update job status.";
+        }
+
+        isSaving = false;
+    }
+
+    private async Task MoveToInProgressAsync(Job job)
+    {
+        actionResult = string.Empty;
+        var result = await JobsApi.UpdateKanbanStatusAsync(job.Id, KanbanStatus.Active, null);
+        if (result.IsSuccess)
+        {
+            job.KanbanStatus   = KanbanStatus.Active;
+            job.WaitingReason  = null;
+            job.KanbanWaitingAt = null;
+            actionError  = false;
+            actionResult = $"{job.Code} resumed.";
+        }
+        else
+        {
+            actionError  = true;
+            actionResult = result.ErrorMessage ?? "Could not update job status.";
+        }
+    }
+}

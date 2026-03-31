@@ -98,6 +98,15 @@ internal static class TimeEntryEndpoints
                     }
 
                     db.TimeEntries.Add(entry);
+
+                    // Stamp the job as In Progress the first time a time entry is added.
+                    var job = await db.Jobs.FirstOrDefaultAsync(
+                        x => x.Id == entry.JobId && x.CompanyId == userContext.CompanyId, ct);
+                    if (job is not null && job.KanbanInProgressAt is null)
+                    {
+                        job.KanbanInProgressAt = DateTimeOffset.UtcNow;
+                    }
+
                     await db.SaveChangesAsync(ct);
                     return Results.Created($"/api/timeentries/{entry.Id}", entry);
                 },
@@ -161,6 +170,22 @@ internal static class TimeEntryEndpoints
                     }
 
                     await db.SaveChangesAsync(ct);
+
+                    // Stamp KanbanDoneAt on any job whose entries are now all invoiced.
+                    var affectedJobIds = entries.Select(e => e.JobId).Distinct().ToList();
+                    var affectedJobs = await db.Jobs
+                        .Where(j => affectedJobIds.Contains(j.Id) && j.CompanyId == userContext.CompanyId)
+                        .ToListAsync(ct);
+                    foreach (var job in affectedJobs)
+                    {
+                        var allInvoiced = await db.TimeEntries
+                            .Where(e => e.JobId == job.Id && e.CompanyId == userContext.CompanyId)
+                            .AllAsync(e => e.IsInvoiced, ct);
+                        if (allInvoiced)
+                            job.KanbanDoneAt = now;
+                    }
+
+                    await db.SaveChangesAsync(ct);
                     return Results.Ok(new { Marked = entries.Count });
                 },
                 logger,
@@ -181,12 +206,23 @@ internal static class TimeEntryEndpoints
                                   && x.PaydayInvoiceNumber == request.PaydayInvoiceNumber)
                         .ToListAsync(ct);
 
+                    var affectedJobIds = entries.Select(e => e.JobId).Distinct().ToList();
+
                     foreach (var entry in entries)
                     {
                         entry.IsInvoiced = false;
                         entry.InvoicedAt = null;
                         entry.PaydayInvoiceNumber = null;
                     }
+
+                    await db.SaveChangesAsync(ct);
+
+                    // Clear KanbanDoneAt for any job that is no longer fully invoiced.
+                    var affectedJobs = await db.Jobs
+                        .Where(j => affectedJobIds.Contains(j.Id) && j.CompanyId == userContext.CompanyId)
+                        .ToListAsync(ct);
+                    foreach (var job in affectedJobs)
+                        job.KanbanDoneAt = null;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(new { Reset = entries.Count });

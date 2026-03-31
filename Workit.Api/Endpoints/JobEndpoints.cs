@@ -6,6 +6,8 @@ using static Workit.Api.Endpoints.EndpointHelpers;
 
 namespace Workit.Api.Endpoints;
 
+internal sealed record UpdateKanbanStatusRequest(KanbanStatus Status, string? WaitingReason);
+
 internal static class JobEndpoints
 {
     internal static void MapJobEndpoints(this WebApplication app)
@@ -47,6 +49,41 @@ internal static class JobEndpoints
                 logger,
                 "creating a job"))
             .WithName("CreateJob");
+
+        securedApi.MapPatch("/jobs/{id:guid}/kanban-status", async (WorkitDbContext db, HttpContext httpContext, Guid id, UpdateKanbanStatusRequest req, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsOwnerOrAdmin())
+                    {
+                        return Results.Forbid();
+                    }
+
+                    var userContext = httpContext.User.ToUserContext();
+                    var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (existing is null)
+                    {
+                        return Results.NotFound();
+                    }
+
+                    var now = DateTimeOffset.UtcNow;
+                    existing.KanbanStatus  = req.Status;
+                    existing.WaitingReason = req.Status == KanbanStatus.Waiting ? req.WaitingReason?.Trim() : null;
+
+                    if (req.Status == KanbanStatus.Waiting)
+                    {
+                        existing.KanbanWaitingAt = now;
+                    }
+                    else
+                    {
+                        existing.KanbanWaitingAt = null;
+                    }
+
+                    await db.SaveChangesAsync(ct);
+                    return Results.Ok(existing);
+                },
+                logger,
+                "updating kanban status"))
+            .WithName("UpdateJobKanbanStatus");
 
         securedApi.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Job job, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
