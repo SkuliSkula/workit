@@ -65,7 +65,7 @@ main {
     main {
         margin-left: 250px;
         min-width: 0;
-        overflow-x: auto;
+        overflow: visible;
     }
 
     .top-row {

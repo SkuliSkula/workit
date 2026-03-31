@@ -8,6 +8,8 @@ public sealed class Job
     public string       Name          { get; set; } = string.Empty;
     public string       Code          { get; set; } = string.Empty;
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;
+    public JobCategory  Category      { get; set; } = JobCategory.NewInstallation;
+    public int          JobNumber     { get; set; }
     public KanbanStatus      KanbanStatus      { get; set; } = KanbanStatus.Active;
     public string?           WaitingReason     { get; set; }
     public DateTimeOffset?   KanbanInProgressAt { get; set; }

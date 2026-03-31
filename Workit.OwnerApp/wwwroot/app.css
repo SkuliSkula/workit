@@ -1,16 +1,16 @@
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 @media (min-width: 641px) {
     .page {
-        overflow: hidden !important;
+        overflow: visible !important;
         width: 100vw !important;
     }
 
     .page > main {
-        overflow: hidden !important;
+        overflow: visible !important;
         min-width: 0 !important;
         width: 0 !important;
         flex: 1 1 0% !important;
@@ -105,7 +105,6 @@ h1:focus {
 .admin-grid > * {
     min-width: 0;
     max-width: 100%;
-    contain: inline-size;
 }
 
 /* Force all FluentUI web-component inputs to respect cell width */

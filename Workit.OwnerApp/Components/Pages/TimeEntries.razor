@@ -115,6 +115,15 @@
     <div class="admin-grid">
         <FluentDatePicker @bind-Value="filterFrom" Label="From" />
         <FluentDatePicker @bind-Value="filterTo"   Label="To" />
+        <div>
+            <FluentSelect Label="Job" TValue="string" TOption="string" @bind-Value="filterJobId" style="width:100%">
+                <FluentOption TOption="string" Value="">— All jobs —</FluentOption>
+                @foreach (var job in jobs)
+                {
+                    <FluentOption TOption="string" Value="@job.Id.ToString()">@job.Code – @job.Name</FluentOption>
+                }
+            </FluentSelect>
+        </div>
         <div style="display:flex; align-items:flex-end;">
             <FluentButton Appearance="Appearance.Accent" @onclick="LoadEntriesAsync" Disabled="@loadingEntries">
                 @(loadingEntries ? "Loading…" : "Load")
@@ -276,8 +285,9 @@
         hours > 0;
 
     // ── Entry log state ───────────────────────────────────────────────────────
-    private DateTime? filterFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-    private DateTime? filterTo   = DateTime.Today;
+    private DateTime? filterFrom  = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? filterTo    = DateTime.Today;
+    private string    filterJobId = string.Empty;
     private bool loadingEntries;
     private bool hasLoadedEntries;
     private readonly List<EntryRow> entries = [];
@@ -556,9 +566,12 @@
             wb.SaveAs(ms);
             var base64 = Convert.ToBase64String(ms.ToArray());
 
-            var from = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : "all";
-            var to   = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : "all";
-            var filename = $"time-entries-{from}-to-{to}.xlsx";
+            var from    = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : "all";
+            var to      = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : "all";
+            var jobSlug = Guid.TryParse(filterJobId, out var exportJobId) && jobNames.TryGetValue(exportJobId, out var jName)
+                ? $"-{jName.Replace(" ", "-").Replace("–", "").Trim('-')}"
+                : string.Empty;
+            var filename = $"time-entries{jobSlug}-{from}-to-{to}.xlsx";
 
             await JS.InvokeVoidAsync("triggerFileDownload", filename, base64,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -580,10 +593,11 @@
 
         try
         {
-            var from = DateOnly.FromDateTime(filterFrom.Value);
-            var to   = DateOnly.FromDateTime(filterTo.Value);
+            var from  = DateOnly.FromDateTime(filterFrom.Value);
+            var to    = DateOnly.FromDateTime(filterTo.Value);
+            var jobId = Guid.TryParse(filterJobId, out var jid) ? jid : (Guid?)null;
 
-            var result = await TimeEntriesApi.GetTimeEntriesAsync(from, to);
+            var result = await TimeEntriesApi.GetTimeEntriesAsync(from, to, jobId: jobId);
             if (!result.IsSuccess)
             {
                 loadError ??= result.ErrorMessage;

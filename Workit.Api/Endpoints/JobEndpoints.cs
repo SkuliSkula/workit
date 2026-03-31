@@ -10,6 +10,29 @@ internal sealed record UpdateKanbanStatusRequest(KanbanStatus Status, string? Wa
 
 internal static class JobEndpoints
 {
+    private static string GetCategoryCode(JobCategory category) => category switch
+    {
+        JobCategory.NewInstallation => "NI",
+        JobCategory.Repair          => "REP",
+        JobCategory.InnerWork       => "IW",
+        JobCategory.Drawings        => "DWG",
+        JobCategory.Offer           => "OFF",
+        JobCategory.Maintenance     => "MNT",
+        JobCategory.Inspection      => "INS",
+        JobCategory.Consultation    => "CON",
+        _                           => "JOB"
+    };
+
+    private static string GetCustomerInitials(string customerName)
+    {
+        var words = customerName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 1)
+            return customerName.Length >= 3
+                ? customerName[..3].ToUpperInvariant()
+                : customerName.ToUpperInvariant();
+        return string.Concat(words.Take(3).Select(w => char.ToUpperInvariant(w[0])));
+    }
+
     internal static void MapJobEndpoints(this WebApplication app)
     {
         var securedApi = app.MapGroup("/api").RequireAuthorization().WithTags("Jobs");
@@ -39,8 +62,21 @@ internal static class JobEndpoints
 
                     var userContext = httpContext.User.ToUserContext();
                     job.CompanyId = userContext.CompanyId;
-                    job.Code = job.Code.Trim();
-                    job.Name = job.Name.Trim();
+                    job.Name      = job.Name.Trim();
+
+                    // Look up customer name for initials
+                    var customer = await db.Customers.FirstOrDefaultAsync(
+                        c => c.Id == job.CustomerId && c.CompanyId == userContext.CompanyId, ct);
+                    if (customer is null)
+                        return Results.BadRequest("Customer not found.");
+
+                    // Assign globally unique sequential job number for this company
+                    var nextNumber = (await db.Jobs
+                        .Where(j => j.CompanyId == userContext.CompanyId)
+                        .MaxAsync(j => (int?)j.JobNumber, ct) ?? 0) + 1;
+
+                    job.JobNumber = nextNumber;
+                    job.Code      = $"{GetCategoryCode(job.Category)}-{GetCustomerInitials(customer.Name)}-{nextNumber:D3}";
 
                     db.Jobs.Add(job);
                     await db.SaveChangesAsync(ct);
@@ -98,9 +134,9 @@ internal static class JobEndpoints
                         return Results.BadRequest("Job id mismatch.");
                     }
 
-                    if (string.IsNullOrWhiteSpace(job.Name) || string.IsNullOrWhiteSpace(job.Code))
+                    if (string.IsNullOrWhiteSpace(job.Name))
                     {
-                        return Results.BadRequest("Job name and code are required.");
+                        return Results.BadRequest("Job name is required.");
                     }
 
                     var userContext = httpContext.User.ToUserContext();
@@ -110,8 +146,8 @@ internal static class JobEndpoints
                         return Results.NotFound();
                     }
 
+                    // Code, Category and JobNumber are set at creation and never change.
                     existing.CustomerId  = job.CustomerId;
-                    existing.Code        = job.Code.Trim();
                     existing.Name        = job.Name.Trim();
                     existing.BillingType = job.BillingType;
 

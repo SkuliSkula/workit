@@ -200,10 +200,12 @@ else
         <div class="kanban-sheet-subtitle">@waitingJob.Code — @waitingJob.Name</div>
 
         <div style="margin-top:1rem;">
-            <FluentTextField Label="Reason (optional)"
-                             @bind-Value="waitingReason"
-                             Placeholder="e.g. Awaiting customer approval"
-                             style="width:100%" />
+            <FluentSelect Label="Reason" TValue="string" TOption="string" @bind-Value="waitingReason" style="width:100%">
+                <FluentOption TOption="string" Value="Waiting on Material">Waiting on Material</FluentOption>
+                <FluentOption TOption="string" Value="Waiting on Customer">Waiting on Customer</FluentOption>
+                <FluentOption TOption="string" Value="Waiting on Vendor">Waiting on Vendor</FluentOption>
+                <FluentOption TOption="string" Value="Other Reason">Other Reason</FluentOption>
+            </FluentSelect>
         </div>
 
         @if (!string.IsNullOrWhiteSpace(sheetError))
@@ -393,23 +395,19 @@ else
 
     .kanban-sheet {
         position: fixed;
-        bottom: 0;
+        top: 50%;
         left: 50%;
-        transform: translateX(-50%);
-        width: min(480px, 100vw);
+        transform: translate(-50%, -50%);
+        width: min(480px, calc(100vw - 2rem));
         background: #fff;
-        border-radius: 16px 16px 0 0;
-        padding: 1.25rem 1.5rem 2rem;
+        border-radius: 12px;
+        padding: 1.5rem;
         z-index: 201;
-        box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+        box-shadow: 0 8px 40px rgba(0,0,0,0.18);
     }
 
     .kanban-sheet-handle {
-        width: 36px;
-        height: 4px;
-        background: #e5e7eb;
-        border-radius: 2px;
-        margin: 0 auto 1rem;
+        display: none;
     }
 
     .kanban-sheet-title {
@@ -470,31 +468,25 @@ else
     private static string AgeSince(DateTimeOffset ts)
     {
         var days = (DateTimeOffset.UtcNow - ts).TotalDays;
-        return days switch
-        {
-            < 1   => "today",
-            < 2   => "1 day",
-            < 7   => $"{(int)days} days",
-            < 14  => "1 week",
-            < 30  => $"{(int)(days / 7)} weeks",
-            < 60  => "1 month",
-            _     => $"{(int)(days / 30)} months"
-        };
+        if (days < 1)  return "today";
+        if (days < 2)  return "1 day";
+        if (days < 7)  return $"{(int)days} days";
+        if (days < 14) return "1 week";
+        if (days < 30) return $"{(int)(days / 7)} weeks";
+        if (days < 60) return "1 month";
+        return $"{(int)(days / 30)} months";
     }
 
     private static string CycleTime(DateTimeOffset start, DateTimeOffset end)
     {
         var days = (end - start).TotalDays;
-        return days switch
-        {
-            < 1  => "< 1 day",
-            < 2  => "1 day",
-            < 7  => $"{(int)days} days",
-            < 14 => "1 week",
-            < 30 => $"{(int)(days / 7)} weeks",
-            < 60 => "1 month",
-            _    => $"{(int)(days / 30)} months"
-        };
+        if (days < 1)  return "under 1 day";
+        if (days < 2)  return "1 day";
+        if (days < 7)  return $"{(int)days} days";
+        if (days < 14) return "1 week";
+        if (days < 30) return $"{(int)(days / 7)} weeks";
+        if (days < 60) return "1 month";
+        return $"{(int)(days / 30)} months";
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -536,7 +528,7 @@ else
     private void OpenWaitingSheet(Job job)
     {
         waitingJob    = job;
-        waitingReason = job.WaitingReason ?? string.Empty;
+        waitingReason = job.WaitingReason ?? "Waiting on Material";
         sheetError    = string.Empty;
         actionResult  = string.Empty;
     }

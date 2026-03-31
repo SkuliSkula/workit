@@ -264,7 +264,7 @@
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(20, 48, 75, 0.09);
-    overflow: hidden;
+    overflow: visible;
     transition: box-shadow 0.15s;
 }
 
@@ -285,6 +285,7 @@
     border: none;
     cursor: pointer;
     text-align: left;
+    border-radius: 17px 17px 0 0;
 }
 
 .inv-card-meta {

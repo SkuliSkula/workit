@@ -44,7 +44,7 @@
     background: rgba(255, 255, 255, 0.82);
     border: 1px solid rgba(20, 48, 75, 0.09);
     border-radius: 16px;
-    overflow: hidden;
+    overflow: visible;
     transition: box-shadow 0.15s, border-color 0.15s;
     backdrop-filter: blur(4px);
 }
@@ -69,6 +69,7 @@
     cursor: pointer;
     text-align: left;
     transition: background 0.12s;
+    border-radius: 15px 15px 0 0;
 }
 
 .job-card-header:hover {
@@ -134,6 +135,11 @@
 .badge--fixed {
     background: rgba(22, 101, 52, 0.09);
     color: #166534;
+}
+
+.badge--category {
+    background: rgba(124, 58, 237, 0.09);
+    color: #5b21b6;
 }
 
 /* ── Detail panel ─────────────────────────────────────────────────────────── */

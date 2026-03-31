@@ -64,10 +64,22 @@
                 else { <FluentLabel>No customers available yet.</FluentLabel> }
             </div>
             <div>
-                <FluentTextField Label="Job code" @bind-Value="newJobCode" Placeholder="Auto-generated" style="width:100%" />
+                <FluentTextField Label="Job name *" @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
             </div>
             <div>
-                <FluentTextField Label="Job name *" @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
+                <FluentSelect Label="Category *" TValue="string" TOption="string"
+                              Value="@newCategory.ToString()"
+                              ValueChanged="@(v => newCategory = Enum.TryParse<JobCategory>(v, out var c) ? c : JobCategory.NewInstallation)"
+                              style="width:100%">
+                    <FluentOption TOption="string" Value="NewInstallation">New Installation</FluentOption>
+                    <FluentOption TOption="string" Value="Repair">Repair</FluentOption>
+                    <FluentOption TOption="string" Value="InnerWork">Inner Work</FluentOption>
+                    <FluentOption TOption="string" Value="Drawings">Drawings</FluentOption>
+                    <FluentOption TOption="string" Value="Offer">Offer</FluentOption>
+                    <FluentOption TOption="string" Value="Maintenance">Maintenance</FluentOption>
+                    <FluentOption TOption="string" Value="Inspection">Inspection</FluentOption>
+                    <FluentOption TOption="string" Value="Consultation">Consultation</FluentOption>
+                </FluentSelect>
             </div>
             <div>
                 <FluentSelect Label="Billing type" TValue="string" TOption="string"
@@ -115,6 +127,7 @@ else if (jobs.Count > 0)
                     <span class="job-code">@job.Code</span>
                     <span class="job-name">@job.Name</span>
                     <span class="job-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</span>
+                    <span class="job-billing-badge badge--category">@CategoryLabel(job.Category)</span>
                     <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
                         @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
                     </span>
@@ -295,10 +308,13 @@ else if (jobs.Count > 0)
                                             </FluentSelect>
                                         </div>
                                         <div>
-                                            <FluentTextField Label="Job code" @bind-Value="editingJob.Code" style="width:100%" />
+                                            <FluentTextField Label="Job name" @bind-Value="editingJob.Name" style="width:100%" />
                                         </div>
                                         <div>
-                                            <FluentTextField Label="Job name" @bind-Value="editingJob.Name" style="width:100%" />
+                                            <FluentTextField Label="Job code (auto-generated)" Value="@editingJob.Code" ReadOnly="true" style="width:100%; opacity:0.6;" />
+                                        </div>
+                                        <div>
+                                            <FluentTextField Label="Category (fixed at creation)" Value="@CategoryLabel(editingJob.Category)" ReadOnly="true" style="width:100%; opacity:0.6;" />
                                         </div>
                                         <div>
                                             <FluentSelect Label="Billing type" TValue="string" TOption="string"
@@ -356,23 +372,27 @@ else if (company is not null)
     private Guid?    expandedJobId;
     private Job?     editingJob;
     private string?  editingCustomerId;
-    private string?  selectedCustomerId;
-    private string   newJobCode     = string.Empty;
-    private string   newJobName     = string.Empty;
+    private string?     selectedCustomerId;
+    private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
+    private JobCategory newCategory    = JobCategory.NewInstallation;
     private string?  loadError;
 
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
     private bool HasEditingCustomer  => Guid.TryParse(editingCustomerId,  out _);
 
-    private string GetNextJobCode()
+    private static string CategoryLabel(JobCategory cat) => cat switch
     {
-        var maxCode = jobs
-            .Select(j => int.TryParse(j.Code, out var n) ? n : 0)
-            .DefaultIfEmpty(0)
-            .Max();
-        return (maxCode + 1).ToString();
-    }
+        JobCategory.NewInstallation => "New Installation",
+        JobCategory.Repair          => "Repair",
+        JobCategory.InnerWork       => "Inner Work",
+        JobCategory.Drawings        => "Drawings",
+        JobCategory.Offer           => "Offer",
+        JobCategory.Maintenance     => "Maintenance",
+        JobCategory.Inspection      => "Inspection",
+        JobCategory.Consultation    => "Consultation",
+        _                           => cat.ToString()
+    };
 
     private void ToggleCreateForm()
     {
@@ -469,7 +489,6 @@ else if (company is not null)
         foreach (var c in customers) customerLookup[c.Id] = c.Name;
 
         jobs.AddRange(jobR.Value ?? []);
-        newJobCode = GetNextJobCode();
 
         employees.AddRange(empR.Value ?? []);
         foreach (var e in employees) employeeLookup[e.Id] = e.DisplayName;
@@ -576,12 +595,12 @@ else if (company is not null)
         {
             CompanyId   = company.Id,
             CustomerId  = customerId,
-            Code        = newJobCode.Trim(),
             Name        = newJobName.Trim(),
-            BillingType = newBillingType
+            BillingType = newBillingType,
+            Category    = newCategory
         });
 
-        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; showCreateForm = false; await LoadAsync(); }
+        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; showCreateForm = false; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
