@@ -49,34 +49,51 @@
             </div>
         }
 
-        @if (isOwner && ownerHasCompany)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="companies">
-                    <FluentIcon Value="new Size24.Building()" /> Companies
-                </NavLink>
-            </div>
-        }
-
         @if ((isOwner && ownerHasCompany) || isAdmin)
         {
+            @* ── Owner expandable group ── *@
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="customers">
-                    <FluentIcon Value="new Size24.PeopleTeam()" /> Customers
-                </NavLink>
+                <button type="button" class="nav-link nav-link-button nav-group-toggle"
+                        @onclick="ToggleOwner">
+                    <FluentIcon Value="new Size24.Person()" />
+                    Owner
+                    <span class="nav-chevron @(ownerExpanded ? "expanded" : "")">&#8250;</span>
+                </button>
             </div>
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="employees">
-                    <FluentIcon Value="new Size24.Person()" /> Employees
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="jobs">
-                    <FluentIcon Value="new Size24.Briefcase()" /> Jobs
-                </NavLink>
-            </div>
+            @if (ownerExpanded)
+            {
+                <div class="nav-submenu">
+                    @if (isOwner && ownerHasCompany)
+                    {
+                        <div class="nav-item">
+                            <NavLink class="nav-link nav-sublink" href="companies">
+                                <FluentIcon Value="new Size24.Building()" /> Companies
+                            </NavLink>
+                        </div>
+                    }
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="customers">
+                            <FluentIcon Value="new Size24.PeopleTeam()" /> Customers
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="jobs">
+                            <FluentIcon Value="new Size24.Briefcase()" /> Jobs
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="employees">
+                            <FluentIcon Value="new Size24.Person()" /> Employees
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="timeentries">
+                            <FluentIcon Value="new Size24.Clock()" /> Time Entries
+                        </NavLink>
+                    </div>
+                </div>
+            }
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="kanban">
@@ -84,35 +101,41 @@
                 </NavLink>
             </div>
 
+            @* ── Resources expandable group ── *@
             <div class="nav-item px-3">
-                <NavLink class="nav-link" href="timeentries">
-                    <FluentIcon Value="new Size24.Clock()" /> Time Entries
-                </NavLink>
+                <button type="button" class="nav-link nav-link-button nav-group-toggle"
+                        @onclick="ToggleResources">
+                    <FluentIcon Value="new Size24.Toolbox()" />
+                    Resources
+                    <span class="nav-chevron @(resourcesExpanded ? "expanded" : "")">&#8250;</span>
+                </button>
             </div>
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="absence">
-                    <FluentIcon Value="new Size24.CalendarCancel()" /> Absence
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="calendar">
-                    <FluentIcon Value="new Size24.CalendarLtr()" /> Calendar
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="tools">
-                    <FluentIcon Value="new Size24.Wrench()" /> Tools
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="materials">
-                    <FluentIcon Value="new Size24.Box()" /> Materials
-                </NavLink>
-            </div>
+            @if (resourcesExpanded)
+            {
+                <div class="nav-submenu">
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="calendar">
+                            <FluentIcon Value="new Size24.CalendarLtr()" /> Calendar
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="absence">
+                            <FluentIcon Value="new Size24.CalendarCancel()" /> Absence
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="tools">
+                            <FluentIcon Value="new Size24.Wrench()" /> Tools
+                        </NavLink>
+                    </div>
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="materials">
+                            <FluentIcon Value="new Size24.Box()" /> Materials
+                        </NavLink>
+                    </div>
+                </div>
+            }
 
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="invoices">
@@ -222,10 +245,14 @@
     private bool ownerHasCompany;
     private bool isAuthenticated;
     private bool paydayExpanded;
+    private bool ownerExpanded;
+    private bool resourcesExpanded;
 
     protected override void OnInitialized()
     {
         paydayExpanded = IsOnPaydayRoute();
+        ownerExpanded = IsOnOwnerRoute();
+        resourcesExpanded = IsOnResourcesRoute();
         Navigation.LocationChanged += OnLocationChanged;
     }
 
@@ -256,15 +283,40 @@
     {
         if (IsOnPaydayRoute())
             paydayExpanded = true;
+        if (IsOnOwnerRoute())
+            ownerExpanded = true;
+        if (IsOnResourcesRoute())
+            resourcesExpanded = true;
         InvokeAsync(StateHasChanged);
     }
 
     private void TogglePayday() => paydayExpanded = !paydayExpanded;
+    private void ToggleOwner() => ownerExpanded = !ownerExpanded;
+    private void ToggleResources() => resourcesExpanded = !resourcesExpanded;
 
     private bool IsOnPaydayRoute()
     {
         var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimStart('/');
         return path.StartsWith("payday", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsOnOwnerRoute()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimStart('/');
+        return path.StartsWith("companies", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("customers", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("jobs", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("employees", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("timeentries", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsOnResourcesRoute()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimStart('/');
+        return path.StartsWith("calendar", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("absence", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("tools", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("materials", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ShowLogoutConfirm() => Layout?.ShowLogoutConfirm();
