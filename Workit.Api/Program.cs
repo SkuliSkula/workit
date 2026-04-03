@@ -118,6 +118,36 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<WorkitDbContext>();
     await db.Database.MigrateAsync();
+
+    // Ensure every Owner with a company has an Employee record
+    var ownersWithoutEmployee = await db.AppUsers
+        .Where(u => u.Role == WorkitRoles.Owner
+                  && u.CompanyId.HasValue && u.CompanyId.Value != Guid.Empty
+                  && u.EmployeeId == null)
+        .ToListAsync();
+
+    foreach (var owner in ownersWithoutEmployee)
+    {
+        // Check if an Employee already exists in this company with the same email
+        var existing = await db.Employees
+            .FirstOrDefaultAsync(e => e.CompanyId == owner.CompanyId!.Value && e.Email == owner.Email);
+
+        if (existing is not null)
+        {
+            owner.EmployeeId = existing.Id;
+        }
+        else
+        {
+            var emp = OwnerEmployeeHelper.CreateEmployeeForOwner(owner, owner.CompanyId!.Value);
+            db.Employees.Add(emp);
+        }
+    }
+
+    if (ownersWithoutEmployee.Count > 0)
+    {
+        await db.SaveChangesAsync();
+        apiLogger.LogInformation("Created Employee records for {Count} owner(s).", ownersWithoutEmployee.Count);
+    }
 }
 
 if (app.Environment.IsDevelopment())

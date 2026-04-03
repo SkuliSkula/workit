@@ -32,7 +32,17 @@ internal static class AuthEndpoints
                         return Results.Unauthorized();
                     }
 
-                    var loginResponse = tokenFactory.CreateToken(user);
+                    // For owners, resolve their Employee record in the current company
+                    Guid? employeeIdOverride = null;
+                    if (user.Role == WorkitRoles.Owner && user.CompanyId.HasValue && user.CompanyId.Value != Guid.Empty)
+                    {
+                        var employee = await db.Employees
+                            .FirstOrDefaultAsync(x => x.CompanyId == user.CompanyId.Value
+                                                   && x.Email == user.Email, ct);
+                        employeeIdOverride = employee?.Id;
+                    }
+
+                    var loginResponse = tokenFactory.CreateToken(user, employeeIdOverride: employeeIdOverride);
                     var refreshToken = tokenFactory.CreateRefreshToken(user.Id);
                     db.RefreshTokens.Add(refreshToken);
                     await db.SaveChangesAsync(ct);
@@ -65,7 +75,18 @@ internal static class AuthEndpoints
 
                     // Revoke old refresh token and issue new pair
                     stored.Revoked = true;
-                    var loginResponse = tokenFactory.CreateToken(user);
+
+                    // For owners, resolve their Employee record in the current company
+                    Guid? employeeIdOverride = null;
+                    if (user.Role == WorkitRoles.Owner && user.CompanyId.HasValue && user.CompanyId.Value != Guid.Empty)
+                    {
+                        var employee = await db.Employees
+                            .FirstOrDefaultAsync(x => x.CompanyId == user.CompanyId.Value
+                                                   && x.Email == user.Email, ct);
+                        employeeIdOverride = employee?.Id;
+                    }
+
+                    var loginResponse = tokenFactory.CreateToken(user, employeeIdOverride: employeeIdOverride);
                     var newRefreshToken = tokenFactory.CreateRefreshToken(user.Id);
                     db.RefreshTokens.Add(newRefreshToken);
                     await db.SaveChangesAsync(ct);
@@ -133,8 +154,13 @@ internal static class AuthEndpoints
                     if (user is null)
                         return Results.Unauthorized();
 
-                    // Issue new token with the selected company
-                    var loginResponse = tokenFactory.CreateToken(user, request.CompanyId);
+                    // Find the employee record in the target company by matching email
+                    var employee = await db.Employees
+                        .FirstOrDefaultAsync(x => x.CompanyId == request.CompanyId &&
+                                                  x.Email == user.Email, ct);
+
+                    // Issue new token with the selected company and resolved employee
+                    var loginResponse = tokenFactory.CreateToken(user, request.CompanyId, employee?.Id);
                     var refreshToken = tokenFactory.CreateRefreshToken(user.Id);
                     db.RefreshTokens.Add(refreshToken);
                     await db.SaveChangesAsync(ct);
@@ -229,8 +255,11 @@ internal static class AuthEndpoints
                         CompanyId = company.Id
                     };
 
+                    var ownerEmployee = OwnerEmployeeHelper.CreateEmployeeForOwner(ownerUser, company.Id);
+
                     db.Companies.Add(company);
                     db.AppUsers.Add(ownerUser);
+                    db.Employees.Add(ownerEmployee);
                     db.UserCompanies.Add(new UserCompany { UserId = ownerUser.Id, CompanyId = company.Id });
                     await db.SaveChangesAsync(ct);
 
@@ -359,11 +388,14 @@ internal static class AuthEndpoints
 
                     user.CompanyId = company.Id;
 
+                    var ownerEmployee = OwnerEmployeeHelper.CreateEmployeeForOwner(user, company.Id);
+
                     db.Companies.Add(company);
+                    db.Employees.Add(ownerEmployee);
                     db.UserCompanies.Add(new UserCompany { UserId = user.Id, CompanyId = company.Id });
                     await db.SaveChangesAsync(ct);
 
-                    // Issue a fresh token with the new company_id embedded
+                    // Issue a fresh token with the new company_id and employee_id embedded
                     var loginResponse = tokenFactory.CreateToken(user);
                     var refreshToken  = tokenFactory.CreateRefreshToken(user.Id);
                     db.RefreshTokens.Add(refreshToken);
@@ -425,7 +457,10 @@ internal static class AuthEndpoints
                         Role         = WorkitRoles.Owner,
                         CompanyId    = company.Id
                     };
+                    var ownerEmployee = OwnerEmployeeHelper.CreateEmployeeForOwner(setupOwner, company.Id);
+
                     db.AppUsers.Add(setupOwner);
+                    db.Employees.Add(ownerEmployee);
                     db.UserCompanies.Add(new UserCompany { UserId = setupOwner.Id, CompanyId = company.Id });
                     await db.SaveChangesAsync(ct);
 
@@ -443,3 +478,22 @@ internal static class AuthEndpoints
 }
 
 internal record SwitchCompanyRequest(Guid CompanyId);
+
+internal static class OwnerEmployeeHelper
+{
+    /// <summary>
+    /// Creates an Employee record for an owner in the given company and links it to their AppUser.
+    /// </summary>
+    internal static Employee CreateEmployeeForOwner(AppUser owner, Guid companyId)
+    {
+        var employee = new Employee
+        {
+            CompanyId = companyId,
+            DisplayName = string.IsNullOrWhiteSpace(owner.Name) ? owner.Email : owner.Name,
+            Email = owner.Email,
+            EmploymentType = EmploymentType.Employed
+        };
+        owner.EmployeeId = employee.Id;
+        return employee;
+    }
+}

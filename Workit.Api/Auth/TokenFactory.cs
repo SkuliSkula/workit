@@ -11,7 +11,7 @@ namespace Workit.Api.Auth;
 
 public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
 {
-    public LoginResponse CreateToken(AppUser user, Guid? companyIdOverride = null)
+    public LoginResponse CreateToken(AppUser user, Guid? companyIdOverride = null, Guid? employeeIdOverride = null)
     {
         var options = jwtOptions.Value;
         // Use Guid.Empty as the "no company yet" sentinel so the JWT claim is always present
@@ -27,9 +27,10 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
             new("company_id", companyId.ToString())
         };
 
-        if (user.EmployeeId is Guid employeeId)
+        var employeeId = employeeIdOverride ?? user.EmployeeId;
+        if (employeeId is Guid eid)
         {
-            claims.Add(new Claim("employee_id", employeeId.ToString()));
+            claims.Add(new Claim("employee_id", eid.ToString()));
         }
 
         var credentials = new SigningCredentials(
@@ -48,7 +49,7 @@ public sealed class TokenFactory(IOptions<JwtOptions> jwtOptions)
             AccessToken = new JwtSecurityTokenHandler().WriteToken(token),
             UserId = user.Id,
             CompanyId = companyId,
-            EmployeeId = user.EmployeeId,
+            EmployeeId = employeeId,
             Role = user.Role,
             Email = user.Email
         };

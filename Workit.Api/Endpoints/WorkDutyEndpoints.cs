@@ -1,3 +1,5 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
@@ -30,15 +32,30 @@ internal static class WorkDutyEndpoints
             var startDate = new DateOnly(year, month, 1);
             var endDate = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
 
+            // Resolve employee ID — use JWT claim first, fall back to email lookup for owners
+            var resolvedEmployeeId = userContext.EmployeeId;
+            if (resolvedEmployeeId is null)
+            {
+                var email = httpContext.User.FindFirstValue(ClaimTypes.Email)
+                         ?? httpContext.User.FindFirstValue(JwtRegisteredClaimNames.Email);
+                if (!string.IsNullOrEmpty(email))
+                {
+                    var emp = await db.Employees
+                        .FirstOrDefaultAsync(e => e.CompanyId == userContext.CompanyId
+                                               && e.Email == email);
+                    resolvedEmployeeId = emp?.Id;
+                }
+            }
+
             decimal hoursWorked = 0;
-            if (userContext.EmployeeId is Guid empId)
+            if (resolvedEmployeeId is Guid empId)
             {
                 hoursWorked = await db.TimeEntries
                     .Where(t => t.CompanyId == userContext.CompanyId
                              && t.EmployeeId == empId
                              && t.WorkDate >= startDate
                              && t.WorkDate <= endDate)
-                    .SumAsync(t => t.Hours + t.OvertimeHours);
+                    .SumAsync(t => t.Hours);
             }
 
             // Count weekdays, holidays

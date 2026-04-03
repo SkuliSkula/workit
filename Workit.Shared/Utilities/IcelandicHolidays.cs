@@ -14,7 +14,7 @@ public static class IcelandicHolidays
         {
             // Fixed-date holidays
             new(new DateOnly(year, 1, 1), "New Year's Day", "Nýársdagur", false),
-            new(new DateOnly(year, 1, 6), "Epiphany", "Þrettándinn", true),
+
             new(new DateOnly(year, 5, 1), "Labour Day", "Verkalýðsdagurinn", false),
             new(new DateOnly(year, 6, 17), "National Day", "Þjóðhátíðardagurinn", false),
             new(ComputeFirstMondayOfAugust(year), "Commerce Day", "Frídagur verslunarmanna", false),
