@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Api.Services;
@@ -17,7 +18,7 @@ internal static class AuthEndpoints
         var logger = app.Logger;
         var credentialProtection = app.Services.GetRequiredService<ICredentialProtectionService>();
 
-        authApi.MapPost("/login", async (WorkitDbContext db, TokenFactory tokenFactory, LoginRequest request, CancellationToken ct) =>
+        authApi.MapPost("/login", async (WorkitDbContext db, TokenFactory tokenFactory, IAnalyticsService analytics, LoginRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
@@ -47,6 +48,14 @@ internal static class AuthEndpoints
                     db.RefreshTokens.Add(refreshToken);
                     await db.SaveChangesAsync(ct);
                     loginResponse.RefreshToken = refreshToken.Token;
+
+                    analytics.Capture(user.Id.ToString(), "user_logged_in", new
+                    {
+                        role       = user.Role,
+                        company_id = user.CompanyId,
+                        source     = request.Source ?? "unknown",
+                    });
+
                     return Results.Ok(loginResponse);
                 },
                 logger,
@@ -213,7 +222,7 @@ internal static class AuthEndpoints
             .RequireAuthorization()
             .WithName("GetAdminCompanies");
 
-        authApi.MapPost("/register-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, RegisterCompanyRequest request, CancellationToken ct) =>
+        authApi.MapPost("/register-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, IAnalyticsService analytics, RegisterCompanyRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsAdmin())
@@ -262,6 +271,13 @@ internal static class AuthEndpoints
                     db.Employees.Add(ownerEmployee);
                     db.UserCompanies.Add(new UserCompany { UserId = ownerUser.Id, CompanyId = company.Id });
                     await db.SaveChangesAsync(ct);
+
+                    var userContext = httpContext.User.ToUserContext();
+                    analytics.Capture(userContext.UserId.ToString(), "company_registered", new
+                    {
+                        company_id   = company.Id,
+                        company_name = company.Name,
+                    });
 
                     return Results.Ok(tokenFactory.CreateToken(ownerUser));
                 },

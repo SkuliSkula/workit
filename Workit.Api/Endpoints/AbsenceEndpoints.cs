@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Shared.Api;
@@ -55,7 +56,7 @@ internal static class AbsenceEndpoints
             })
             .WithName("GetAbsences");
 
-        securedApi.MapPost("/absences", async (WorkitDbContext db, HttpContext httpContext, AbsenceRequest absence, CancellationToken ct) =>
+        securedApi.MapPost("/absences", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, AbsenceRequest absence, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
@@ -95,6 +96,15 @@ internal static class AbsenceEndpoints
                     absence.CreatedAt = DateTime.UtcNow;
                     db.AbsenceRequests.Add(absence);
                     await db.SaveChangesAsync(ct);
+
+                    analytics.Capture(userContext.UserId.ToString(), "absence_requested", new
+                    {
+                        company_id  = userContext.CompanyId,
+                        source      = userContext.Role,
+                        type        = absence.Type.ToString(),
+                        days        = (absence.EndDate.DayNumber - absence.StartDate.DayNumber) + 1,
+                    });
+
                     return Results.Created($"/api/absences/{absence.Id}", absence);
                 },
                 logger,

@@ -11,6 +11,8 @@ public sealed class LoginRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    /// <summary>Identifies the client app — e.g. "owner_web", "ios". Used for analytics only.</summary>
+    public string? Source { get; set; }
 }
 
 public sealed class LoginResponse

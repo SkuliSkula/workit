@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Shared.Api;
@@ -71,7 +72,7 @@ internal static class TimeEntryEndpoints
             })
             .WithName("GetTimeEntries");
 
-        securedApi.MapPost("/timeentries", async (WorkitDbContext db, HttpContext httpContext, TimeEntry entry, CancellationToken ct) =>
+        securedApi.MapPost("/timeentries", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, TimeEntry entry, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
@@ -108,6 +109,16 @@ internal static class TimeEntryEndpoints
                     }
 
                     await db.SaveChangesAsync(ct);
+
+                    analytics.Capture(userContext.UserId.ToString(), "time_entry_created", new
+                    {
+                        company_id    = userContext.CompanyId,
+                        source        = userContext.Role,
+                        hours         = entry.Hours,
+                        has_overtime  = entry.OvertimeHours > 0,
+                        has_driving   = entry.DrivingUnits > 0,
+                    });
+
                     return Results.Created($"/api/timeentries/{entry.Id}", entry);
                 },
                 logger,
@@ -146,7 +157,7 @@ internal static class TimeEntryEndpoints
                 "updating a time entry"))
             .WithName("UpdateTimeEntry");
 
-        securedApi.MapPost("/timeentries/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, MarkInvoicedRequest request, CancellationToken ct) =>
+        securedApi.MapPost("/timeentries/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, MarkInvoicedRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -186,6 +197,14 @@ internal static class TimeEntryEndpoints
                     }
 
                     await db.SaveChangesAsync(ct);
+
+                    analytics.Capture(userContext.UserId.ToString(), "time_entries_invoiced", new
+                    {
+                        company_id   = userContext.CompanyId,
+                        entry_count  = entries.Count,
+                        job_count    = entries.Select(e => e.JobId).Distinct().Count(),
+                    });
+
                     return Results.Ok(new { Marked = entries.Count });
                 },
                 logger,

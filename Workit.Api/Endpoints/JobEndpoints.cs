@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Shared.Models;
@@ -52,7 +53,7 @@ internal static class JobEndpoints
                 "loading jobs"))
             .WithName("GetJobs");
 
-        securedApi.MapPost("/jobs", async (WorkitDbContext db, HttpContext httpContext, Job job, CancellationToken ct) =>
+        securedApi.MapPost("/jobs", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, Job job, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -80,13 +81,21 @@ internal static class JobEndpoints
 
                     db.Jobs.Add(job);
                     await db.SaveChangesAsync(ct);
+
+                    analytics.Capture(userContext.UserId.ToString(), "job_created", new
+                    {
+                        company_id   = userContext.CompanyId,
+                        category     = job.Category.ToString(),
+                        billing_type = job.BillingType.ToString(),
+                    });
+
                     return Results.Created($"/api/jobs/{job.Id}", job);
                 },
                 logger,
                 "creating a job"))
             .WithName("CreateJob");
 
-        securedApi.MapPatch("/jobs/{id:guid}/kanban-status", async (WorkitDbContext db, HttpContext httpContext, Guid id, UpdateKanbanStatusRequest req, CancellationToken ct) =>
+        securedApi.MapPatch("/jobs/{id:guid}/kanban-status", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, Guid id, UpdateKanbanStatusRequest req, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -115,6 +124,15 @@ internal static class JobEndpoints
                     }
 
                     await db.SaveChangesAsync(ct);
+
+                    analytics.Capture(userContext.UserId.ToString(), "job_status_changed", new
+                    {
+                        company_id     = userContext.CompanyId,
+                        job_id         = id,
+                        new_status     = req.Status.ToString(),
+                        waiting_reason = req.WaitingReason,
+                    });
+
                     return Results.Ok(existing);
                 },
                 logger,

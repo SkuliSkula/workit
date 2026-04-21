@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using PostHog;
 using Serilog;
 using Serilog.Events;
+using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Api.Endpoints;
@@ -103,6 +105,24 @@ builder.Services.AddSingleton(_ => new AnthropicClient(new Anthropic.SDK.APIAuth
 builder.Services.AddScoped<InvoiceParserService>();
 builder.Services.AddScoped<EmailScanService>();
 builder.Services.AddHostedService<InvoiceScanBackgroundService>();
+
+// ── Analytics (PostHog) ────────────────────────────────────────────────────────
+var postHogApiKey = builder.Configuration["PostHog:ProjectApiKey"];
+if (!string.IsNullOrWhiteSpace(postHogApiKey))
+{
+    var postHogHost = builder.Configuration["PostHog:HostUrl"] ?? "https://eu.i.posthog.com/";
+    builder.Services.AddSingleton<IPostHogClient>(
+        _ => new PostHogClient(new PostHogOptions
+        {
+            ProjectApiKey = postHogApiKey,
+            HostUrl        = new Uri(postHogHost),
+        }));
+    builder.Services.AddSingleton<IAnalyticsService, PostHogAnalyticsService>();
+}
+else
+{
+    builder.Services.AddSingleton<IAnalyticsService, NullAnalyticsService>();
+}
 
 // Payday API HttpClient (for credential testing)
 builder.Services.AddHttpClient("PaydayApi", client =>
@@ -210,6 +230,15 @@ try
 }
 finally
 {
+    // Flush any queued PostHog events before process exits
+    var analytics = app.Services.GetService<IAnalyticsService>();
+    if (analytics is PostHogAnalyticsService)
+    {
+        var postHog = app.Services.GetService<IPostHogClient>();
+        if (postHog is not null)
+            await postHog.FlushAsync();
+    }
+
     Log.CloseAndFlush();
 }
 

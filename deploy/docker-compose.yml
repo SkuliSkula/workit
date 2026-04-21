@@ -37,16 +37,11 @@ services:
       Jwt__Audience: Workit.Apps
       AdminSeed__Email: ${ADMIN_EMAIL}
       AdminSeed__Password: ${ADMIN_PASSWORD}
-      Anthropic__ApiKey: ${Antrhopic__ApiKey}
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+      PostHog__ProjectApiKey: ${POSTHOG_API_KEY:-}
     networks:
       - internal
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.workit-api.rule=Host(`api.workit.is`)"
-      - "traefik.http.routers.workit-api.entrypoints=web"
-      - "traefik.http.services.workit-api.loadbalancer.server.port=8080"
-      - "traefik.docker.network=proxy"
+      - app
 
   # ── Owner App (Blazor Server) ───────────────────────────────────────────────
   workit-owner:
@@ -65,32 +60,7 @@ services:
       Payday__ClientId: ${PAYDAY_CLIENT_ID:-}
       Payday__ClientSecret: ${PAYDAY_CLIENT_SECRET:-}
     networks:
-      - internal
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.workit-owner.rule=Host(`admin.workit.is`)"
-      - "traefik.http.routers.workit-owner.entrypoints=web"
-      - "traefik.http.services.workit-owner.loadbalancer.server.port=8080"
-      - "traefik.docker.network=proxy"
-
-  # ── Employee App (Blazor WASM via nginx) ────────────────────────────────────
-  workit-employee:
-    build:
-      context: ..
-      dockerfile: Workit.EmployeeApp/Dockerfile
-    restart: unless-stopped
-    environment:
-      # Injected into appsettings.json at container startup by docker-entrypoint.sh
-      API_BASE_URL: "https://api.workit.is/"
-    networks:
-      - proxy
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.workit-employee.rule=Host(`app.workit.is`)"
-      - "traefik.http.routers.workit-employee.entrypoints=web"
-      - "traefik.http.services.workit-employee.loadbalancer.server.port=80"
-      - "traefik.docker.network=proxy"
+      - app
 
   # ── Cloudflare Tunnel ───────────────────────────────────────────────────────
   cloudflared:
@@ -100,13 +70,13 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     networks:
-      - proxy
+      - app
 
 networks:
-  proxy:
-    external: true   # Traefik's existing network
   internal:
-    internal: true   # Database-only network, not exposed to Traefik
+    internal: true   # DB-only — not reachable from cloudflared
+  app:
+    driver: bridge   # API + Owner app + cloudflared
 
 volumes:
   workit-db-data:
