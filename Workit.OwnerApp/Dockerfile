@@ -1,16 +1,5 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.201 AS build
-WORKDIR /src
-
-COPY ["Workit.Shared/Workit.Shared.csproj", "Workit.Shared/"]
-COPY ["Workit.OwnerApp/Workit.OwnerApp.csproj", "Workit.OwnerApp/"]
-RUN dotnet restore "Workit.OwnerApp/Workit.OwnerApp.csproj"
-
-COPY . .
-WORKDIR "/src/Workit.OwnerApp"
-RUN dotnet publish "Workit.OwnerApp.csproj" -c Release -o /app/publish
-
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY Workit.OwnerApp/publish/ .
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Workit.OwnerApp.dll"]
