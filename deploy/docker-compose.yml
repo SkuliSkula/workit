@@ -39,6 +39,9 @@ services:
       AdminSeed__Password: ${ADMIN_PASSWORD}
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
       PostHog__ProjectApiKey: ${POSTHOG_API_KEY:-}
+      Resend__ApiKey: ${RESEND_API_KEY}
+      Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
+      App__Url: ${APP_URL:-https://app.workit.is}
     networks:
       - internal
       - app
