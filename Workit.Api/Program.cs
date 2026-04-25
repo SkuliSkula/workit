@@ -131,6 +131,23 @@ builder.Services.AddHttpClient("PaydayApi", client =>
     client.DefaultRequestHeaders.Add("Api-Version", "alpha");
 });
 
+// ── Email (Resend) ─────────────────────────────────────────────────────────────
+var resendApiKey = builder.Configuration["Resend:ApiKey"];
+if (!string.IsNullOrWhiteSpace(resendApiKey))
+{
+    builder.Services.AddHttpClient("Resend", client =>
+    {
+        client.BaseAddress = new Uri("https://api.resend.com/");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", resendApiKey);
+    });
+    builder.Services.AddScoped<IEmailService, ResendEmailService>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailService, NullEmailService>();
+}
+
 var app = builder.Build();
 Microsoft.Extensions.Logging.ILogger apiLogger = app.Logger;
 

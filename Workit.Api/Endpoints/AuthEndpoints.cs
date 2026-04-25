@@ -287,7 +287,7 @@ internal static class AuthEndpoints
             .WithName("RegisterCompany");
 
         // ── Admin: create an owner account with no company yet ──
-        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, CreateOwnerRequest request, CancellationToken ct) =>
+        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, IEmailService emailService, CreateOwnerRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsAdmin())
@@ -314,6 +314,8 @@ internal static class AuthEndpoints
 
                     db.AppUsers.Add(owner);
                     await db.SaveChangesAsync(ct);
+
+                    await emailService.SendOwnerWelcomeAsync(owner.Name, owner.Email, request.Password);
 
                     return Results.Ok(new { owner.Id, owner.Email, owner.Name });
                 },
@@ -490,6 +492,71 @@ internal static class AuthEndpoints
                 "setting up company"))
             .RequireAuthorization()
             .WithName("SetupCompany");
+
+        // ── Forgot password — always returns 200 to avoid email enumeration ──
+        authApi.MapPost("/forgot-password", async (WorkitDbContext db, IEmailService emailService, IConfiguration config, ForgotPasswordRequest request, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return Results.BadRequest("Email is required.");
+
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Email == normalizedEmail, ct);
+
+            if (user is not null)
+            {
+                // Expire any existing unused tokens for this email
+                var existing = await db.PasswordResetTokens
+                    .Where(t => t.Email == normalizedEmail && !t.Used && t.ExpiresAt > DateTime.UtcNow)
+                    .ToListAsync(ct);
+                foreach (var t in existing) t.Used = true;
+
+                var rawToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+                db.PasswordResetTokens.Add(new PasswordResetToken
+                {
+                    Email     = normalizedEmail,
+                    Token     = rawToken,
+                    ExpiresAt = DateTime.UtcNow.AddHours(1)
+                });
+                await db.SaveChangesAsync(ct);
+
+                var appUrl = config["App:Url"]?.TrimEnd('/') ?? "https://app.workit.is";
+                var resetUrl = $"{appUrl}/reset-password?token={rawToken}";
+                await emailService.SendPasswordResetAsync(normalizedEmail, resetUrl);
+            }
+
+            return Results.Ok(new { message = "If that email is registered you will receive a reset link shortly." });
+        })
+        .WithName("ForgotPassword");
+
+        // ── Redeem a password-reset token ──
+        authApi.MapPost("/reset-password", async (WorkitDbContext db, RedeemPasswordResetRequest request, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (string.IsNullOrWhiteSpace(request.Token))
+                        return Results.BadRequest("Token is required.");
+
+                    if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+                        return Results.BadRequest("Password must be at least 8 characters.");
+
+                    var token = await db.PasswordResetTokens
+                        .FirstOrDefaultAsync(t => t.Token == request.Token && !t.Used && t.ExpiresAt > DateTime.UtcNow, ct);
+
+                    if (token is null)
+                        return Results.BadRequest("This reset link is invalid or has expired.");
+
+                    var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Email == token.Email, ct);
+                    if (user is null)
+                        return Results.BadRequest("This reset link is invalid or has expired.");
+
+                    user.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
+                    token.Used = true;
+                    await db.SaveChangesAsync(ct);
+
+                    return Results.Ok(new { message = "Password updated successfully." });
+                },
+                logger,
+                "redeeming a password reset token"))
+            .WithName("RedeemPasswordReset");
     }
 }
 

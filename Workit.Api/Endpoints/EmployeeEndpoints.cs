@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Api;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
@@ -46,6 +47,7 @@ internal static class EmployeeEndpoints
         securedApi.MapPost("/employees", async (
                 WorkitDbContext db,
                 HttpContext httpContext,
+                IEmailService emailService,
                 CreateEmployeeUserRequest request,
                 CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -95,6 +97,9 @@ internal static class EmployeeEndpoints
                     db.Employees.Add(employee);
                     db.AppUsers.Add(user);
                     await db.SaveChangesAsync(ct);
+
+                    await emailService.SendEmployeeWelcomeAsync(employee.DisplayName, employee.Email, request.Password);
+
                     return Results.Created($"/api/employees/{employee.Id}", employee);
                 },
                 logger,

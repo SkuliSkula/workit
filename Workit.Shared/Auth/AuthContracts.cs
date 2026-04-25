@@ -62,6 +62,17 @@ public sealed class ResetPasswordRequest
     public string NewPassword { get; set; } = string.Empty;
 }
 
+public sealed class ForgotPasswordRequest
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public sealed class RedeemPasswordResetRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public sealed class SwitchCompanyRequest
 {
     public Guid CompanyId { get; set; }

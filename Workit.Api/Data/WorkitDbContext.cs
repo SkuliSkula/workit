@@ -21,6 +21,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
     public DbSet<UserCompany> UserCompanies => Set<UserCompany>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -120,5 +121,12 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             e.HasIndex(x => new { x.UserId, x.CompanyId }).IsUnique();
             e.HasIndex(x => x.UserId);
         });
+
+        modelBuilder.Entity<PasswordResetToken>().ToTable("PasswordResetTokens");
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(x => x.Token)
+            .IsUnique();
+        modelBuilder.Entity<PasswordResetToken>()
+            .HasIndex(x => x.Email);
     }
 }

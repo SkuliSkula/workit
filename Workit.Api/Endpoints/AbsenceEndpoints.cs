@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Api;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
@@ -56,7 +57,7 @@ internal static class AbsenceEndpoints
             })
             .WithName("GetAbsences");
 
-        securedApi.MapPost("/absences", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, AbsenceRequest absence, CancellationToken ct) =>
+        securedApi.MapPost("/absences", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, IEmailService emailService, AbsenceRequest absence, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
@@ -104,6 +105,23 @@ internal static class AbsenceEndpoints
                         type        = absence.Type.ToString(),
                         days        = (absence.EndDate.DayNumber - absence.StartDate.DayNumber) + 1,
                     });
+
+                    // Notify the owner when an employee submits a pending request
+                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+                    {
+                        var ownerEmail = await db.AppUsers
+                            .Where(u => u.Role == WorkitRoles.Owner && u.CompanyId == absence.CompanyId)
+                            .Select(u => u.Email)
+                            .FirstOrDefaultAsync(ct);
+
+                        var employeeName = await db.Employees
+                            .Where(e => e.Id == absence.EmployeeId)
+                            .Select(e => e.DisplayName)
+                            .FirstOrDefaultAsync(ct);
+
+                        if (ownerEmail is not null && employeeName is not null)
+                            await emailService.SendAbsenceRequestedAsync(ownerEmail, employeeName, absence.Type.ToString(), absence.StartDate, absence.EndDate);
+                    }
 
                     return Results.Created($"/api/absences/{absence.Id}", absence);
                 },
@@ -173,7 +191,7 @@ internal static class AbsenceEndpoints
                 "deleting an absence"))
             .WithName("DeleteAbsence");
 
-        securedApi.MapPost("/absences/{id:guid}/review", async (WorkitDbContext db, HttpContext httpContext, Guid id, AbsenceReviewPayload payload, CancellationToken ct) =>
+        securedApi.MapPost("/absences/{id:guid}/review", async (WorkitDbContext db, HttpContext httpContext, IEmailService emailService, Guid id, AbsenceReviewPayload payload, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -195,6 +213,15 @@ internal static class AbsenceEndpoints
                     existing.ReviewNotes = payload.ReviewNotes ?? string.Empty;
 
                     await db.SaveChangesAsync(ct);
+
+                    var employee = await db.Employees.FirstOrDefaultAsync(e => e.Id == existing.EmployeeId, ct);
+                    if (employee is not null)
+                        await emailService.SendAbsenceReviewedAsync(
+                            employee.Email, employee.DisplayName, existing.Type.ToString(),
+                            existing.StartDate, existing.EndDate,
+                            existing.Status == AbsenceStatus.Approved,
+                            existing.ReviewNotes);
+
                     return Results.Ok(existing);
                 },
                 logger,
