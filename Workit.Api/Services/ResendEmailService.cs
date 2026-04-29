@@ -23,7 +23,7 @@ internal sealed class ResendEmailService : IEmailService
             <p><strong>Email:</strong> {H(email)}</p>
             <p><strong>Password:</strong> {H(password)}</p>
             <p>Please change your password after your first login.</p>
-            <p><a href="https://app.workit.is">Log in to Workit</a></p>
+            <p><a href="https://admin.workit.is">Log in to Workit</a></p>
             """);
 
     public Task SendEmployeeWelcomeAsync(string name, string email, string password) =>
@@ -33,7 +33,7 @@ internal sealed class ResendEmailService : IEmailService
             <p><strong>Email:</strong> {H(email)}</p>
             <p><strong>Password:</strong> {H(password)}</p>
             <p>Please change your password after your first login.</p>
-            <p><a href="https://app.workit.is">Log in to Workit</a></p>
+            <p><a href="https://admin.workit.is">Log in to Workit</a></p>
             """);
 
     public Task SendPasswordResetAsync(string email, string resetUrl) =>
@@ -53,7 +53,7 @@ internal sealed class ResendEmailService : IEmailService
               <tr><td><strong>From:</strong></td><td>{start:dd MMM yyyy}</td></tr>
               <tr><td><strong>To:</strong></td><td>{end:dd MMM yyyy}</td></tr>
             </table>
-            <p><a href="https://app.workit.is">Review in Workit</a></p>
+            <p><a href="https://admin.workit.is">Review in Workit</a></p>
             """);
 
     public Task SendAbsenceReviewedAsync(string employeeEmail, string employeeName, string absenceType, DateOnly start, DateOnly end, bool approved, string reviewNotes) =>
@@ -67,7 +67,7 @@ internal sealed class ResendEmailService : IEmailService
               <tr><td><strong>To:</strong></td><td>{end:dd MMM yyyy}</td></tr>
             </table>
             {(string.IsNullOrWhiteSpace(reviewNotes) ? "" : $"<p><strong>Notes:</strong> {H(reviewNotes)}</p>")}
-            <p><a href="https://app.workit.is">View in Workit</a></p>
+            <p><a href="https://admin.workit.is">View in Workit</a></p>
             """);
 
     private async Task SendAsync(string to, string subject, string html)

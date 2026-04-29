@@ -41,7 +41,7 @@ services:
       PostHog__ProjectApiKey: ${POSTHOG_API_KEY:-}
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
-      App__Url: ${APP_URL:-https://app.workit.is}
+      App__Url: ${APP_URL:-https://admin.workit.is}
     networks:
       - internal
       - app
