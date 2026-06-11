@@ -20,4 +20,7 @@ public sealed class TimeEntry
 
     /// <summary>The Payday invoice number this entry was billed on.</summary>
     public int? PaydayInvoiceNumber { get; set; }
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }

@@ -14,6 +14,9 @@ public sealed class AbsenceRequest
     public DateTime? ReviewedAt { get; set; }
     public string ReviewNotes { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }
 
 public sealed class AbsenceReviewPayload

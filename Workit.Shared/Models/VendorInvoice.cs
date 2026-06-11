@@ -16,5 +16,8 @@ public sealed class VendorInvoice
     public string SourceEmailMessageId  { get; set; } = string.Empty;
     public DateTimeOffset ReceivedAt    { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
+
     public List<VendorInvoiceLineItem> LineItems { get; set; } = [];
 }

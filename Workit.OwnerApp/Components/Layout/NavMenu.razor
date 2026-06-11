@@ -1,5 +1,6 @@
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
+@inject IEmployeesApi EmployeesApi
 @implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -85,6 +86,11 @@
                     <div class="nav-item">
                         <NavLink class="nav-link nav-sublink" href="employees">
                             <FluentIcon Value="new Size24.Person()" /> Employees
+                            @if (hasEmployeesWithMissingRates)
+                            {
+                                <span title="Some employees are missing a billable rate"
+                                      style="background:#f59e0b; color:#fff; border-radius:50%; width:16px; height:16px; font-size:0.65rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; margin-left:0.4rem; flex-shrink:0;">!</span>
+                            }
                         </NavLink>
                     </div>
                     <div class="nav-item">
@@ -247,6 +253,8 @@
     private bool paydayExpanded;
     private bool ownerExpanded;
     private bool resourcesExpanded;
+    private bool hasEmployeesWithMissingRates;
+    private bool employeesChecked;
 
     protected override void OnInitialized()
     {
@@ -264,19 +272,33 @@
         var nextIsOwner          = session?.Role == WorkitRoles.Owner;
         var nextOwnerHasCompany  = nextIsOwner && session?.CompanyId != Guid.Empty;
 
-        if (nextIsAuthenticated == isAuthenticated &&
-            nextIsAdmin         == isAdmin         &&
-            nextIsOwner         == isOwner         &&
-            nextOwnerHasCompany == ownerHasCompany)
+        var authChanged = nextIsAuthenticated != isAuthenticated ||
+                          nextIsAdmin         != isAdmin         ||
+                          nextIsOwner         != isOwner         ||
+                          nextOwnerHasCompany != ownerHasCompany;
+
+        if (authChanged)
         {
-            return;
+            isAuthenticated = nextIsAuthenticated;
+            isAdmin         = nextIsAdmin;
+            isOwner         = nextIsOwner;
+            ownerHasCompany = nextOwnerHasCompany;
+            employeesChecked = false;
+            StateHasChanged();
         }
 
-        isAuthenticated = nextIsAuthenticated;
-        isAdmin         = nextIsAdmin;
-        isOwner         = nextIsOwner;
-        ownerHasCompany = nextOwnerHasCompany;
-        StateHasChanged();
+        // Refresh the billable-rate warning badge (reset by navigation and auth changes)
+        if (isOwner && ownerHasCompany && !employeesChecked)
+        {
+            employeesChecked = true;
+            var empResult = await EmployeesApi.GetEmployeesAsync();
+            var hasMissing = (empResult.Value ?? []).Any(e => e.HourlyBillableRate == 0);
+            if (hasMissing != hasEmployeesWithMissingRates)
+            {
+                hasEmployeesWithMissingRates = hasMissing;
+                StateHasChanged();
+            }
+        }
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -287,6 +309,8 @@
             ownerExpanded = true;
         if (IsOnResourcesRoute())
             resourcesExpanded = true;
+        // Re-check employee rates on every navigation so the badge updates after editing
+        employeesChecked = false;
         InvokeAsync(StateHasChanged);
     }
 

@@ -8,4 +8,7 @@ public sealed class Tool
     public string Description { get; set; } = string.Empty;
     public string SerialNumber { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }

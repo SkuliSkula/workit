@@ -253,7 +253,10 @@ internal static class AuthEndpoints
                         Email = request.Company.Email.Trim(),
                         Address = request.Company.Address.Trim(),
                         Phone = request.Company.Phone.Trim(),
-                        Owner = request.Company.Owner.Trim()
+                        Owner = request.Company.Owner.Trim(),
+                        ZipCode = request.Company.ZipCode.Trim(),
+                        City = request.Company.City.Trim(),
+                        VatNumber = request.Company.VatNumber.Trim()
                     };
 
                     var ownerUser = new AppUser
@@ -396,6 +399,11 @@ internal static class AuthEndpoints
                         Address            = request.Company.Address.Trim(),
                         Phone              = request.Company.Phone.Trim(),
                         Owner              = request.Company.Owner.Trim(),
+                        ZipCode            = request.Company.ZipCode.Trim(),
+                        City               = request.Company.City.Trim(),
+                        VatNumber          = request.Company.VatNumber.Trim(),
+                        Source             = request.Company.Source,
+                        PaydayId           = request.Company.PaydayId,
                         PaydayClientId     = string.IsNullOrWhiteSpace(request.PaydayClientId)     ? null : credentialProtection.Protect(request.PaydayClientId.Trim()),
                         PaydayClientSecret = string.IsNullOrWhiteSpace(request.PaydayClientSecret) ? null : credentialProtection.Protect(request.PaydayClientSecret.Trim())
                     };
@@ -459,12 +467,15 @@ internal static class AuthEndpoints
 
                     var company = new Company
                     {
-                        Name    = request.Company.Name.Trim(),
-                        Ssn     = request.Company.Ssn.Trim(),
-                        Email   = request.Company.Email.Trim(),
-                        Address = request.Company.Address.Trim(),
-                        Phone   = request.Company.Phone.Trim(),
-                        Owner   = request.Company.Owner.Trim()
+                        Name      = request.Company.Name.Trim(),
+                        Ssn       = request.Company.Ssn.Trim(),
+                        Email     = request.Company.Email.Trim(),
+                        Address   = request.Company.Address.Trim(),
+                        Phone     = request.Company.Phone.Trim(),
+                        Owner     = request.Company.Owner.Trim(),
+                        ZipCode   = request.Company.ZipCode.Trim(),
+                        City      = request.Company.City.Trim(),
+                        VatNumber = request.Company.VatNumber.Trim()
                     };
 
                     db.Companies.Add(company);

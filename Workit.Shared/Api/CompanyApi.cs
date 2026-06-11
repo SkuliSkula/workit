@@ -40,9 +40,13 @@ public sealed class PaydayTestResult
     public string Message { get; set; } = string.Empty;
 
     // Populated on success — company data returned from Payday
-    public string? CompanyName    { get; set; }
-    public string? CompanySsn     { get; set; }
-    public string? CompanyEmail   { get; set; }
-    public string? CompanyPhone   { get; set; }
-    public string? CompanyAddress { get; set; }
+    public Guid?   CompanyId        { get; set; }
+    public string? CompanyName      { get; set; }
+    public string? CompanySsn       { get; set; }
+    public string? CompanyEmail     { get; set; }
+    public string? CompanyPhone     { get; set; }
+    public string? CompanyAddress   { get; set; }
+    public string? CompanyZip       { get; set; }
+    public string? CompanyCity      { get; set; }
+    public string? CompanyVatNumber { get; set; }
 }

@@ -37,4 +37,7 @@ public sealed class Material
     public bool IsActive      { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }

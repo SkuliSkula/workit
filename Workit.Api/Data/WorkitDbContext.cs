@@ -22,6 +22,12 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
     public DbSet<UserCompany> UserCompanies => Set<UserCompany>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<PaydayExpenseLink> PaydayExpenseLinks => Set<PaydayExpenseLink>();
+    public DbSet<Invoice>        Invoices        => Set<Invoice>();
+    public DbSet<InvoiceLine>    InvoiceLines    => Set<InvoiceLine>();
+    public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
+    public DbSet<Expense>        Expenses        => Set<Expense>();
+    public DbSet<ExpenseLine>    ExpenseLines    => Set<ExpenseLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,9 +58,21 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Name })
             .IsUnique(false);
 
+        modelBuilder.Entity<Customer>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .HasFilter("\"PaydayId\" IS NOT NULL");
+
         modelBuilder.Entity<Employee>()
             .HasIndex(x => new { x.CompanyId, x.DisplayName })
             .IsUnique(false);
+
+        modelBuilder.Entity<Employee>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .HasFilter("\"PaydayId\" IS NOT NULL");
+
+        modelBuilder.Entity<Company>()
+            .HasIndex(x => x.PaydayId)
+            .HasFilter("\"PaydayId\" IS NOT NULL");
 
         modelBuilder.Entity<Job>()
             .HasIndex(x => new { x.CompanyId, x.Code })
@@ -128,5 +146,62 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .IsUnique();
         modelBuilder.Entity<PasswordResetToken>()
             .HasIndex(x => x.Email);
+
+        modelBuilder.Entity<PaydayExpenseLink>().ToTable("PaydayExpenseLinks");
+        modelBuilder.Entity<PaydayExpenseLink>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayExpenseId })
+            .IsUnique();
+        modelBuilder.Entity<PaydayExpenseLink>()
+            .HasIndex(x => new { x.CompanyId, x.JobId });
+
+        // ── Invoices ──────────────────────────────────────────────────────────
+        modelBuilder.Entity<Invoice>().ToTable("Invoices");
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(x => new { x.CompanyId, x.Status });
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(x => new { x.CompanyId, x.InvoiceDate });
+        modelBuilder.Entity<Invoice>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .HasFilter("\"PaydayId\" IS NOT NULL");
+        modelBuilder.Entity<Invoice>()
+            .HasMany(x => x.Lines)
+            .WithOne()
+            .HasForeignKey(x => x.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Invoice>()
+            .HasMany(x => x.Payments)
+            .WithOne()
+            .HasForeignKey(x => x.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<InvoiceLine>().ToTable("InvoiceLines");
+        modelBuilder.Entity<InvoiceLine>()
+            .HasIndex(x => new { x.CompanyId, x.InvoiceId });
+
+        modelBuilder.Entity<InvoicePayment>().ToTable("InvoicePayments");
+        modelBuilder.Entity<InvoicePayment>()
+            .HasIndex(x => new { x.CompanyId, x.InvoiceId });
+
+        // ── Expenses ──────────────────────────────────────────────────────────
+        modelBuilder.Entity<Expense>().ToTable("Expenses");
+        modelBuilder.Entity<Expense>()
+            .HasIndex(x => new { x.CompanyId, x.Status });
+        modelBuilder.Entity<Expense>()
+            .HasIndex(x => new { x.CompanyId, x.Date });
+        modelBuilder.Entity<Expense>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .HasFilter("\"PaydayId\" IS NOT NULL");
+        modelBuilder.Entity<Expense>()
+            .HasIndex(x => new { x.CompanyId, x.JobId })
+            .HasFilter("\"JobId\" IS NOT NULL");
+        modelBuilder.Entity<Expense>()
+            .HasMany(x => x.Lines)
+            .WithOne()
+            .HasForeignKey(x => x.ExpenseId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ExpenseLine>().ToTable("ExpenseLines");
+        modelBuilder.Entity<ExpenseLine>()
+            .HasIndex(x => new { x.CompanyId, x.ExpenseId });
     }
 }

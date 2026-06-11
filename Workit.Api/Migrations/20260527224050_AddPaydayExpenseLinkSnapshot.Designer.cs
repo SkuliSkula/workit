@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Workit.Api.Data;
@@ -11,9 +12,11 @@ using Workit.Api.Data;
 namespace Workit.Api.Migrations
 {
     [DbContext(typeof(WorkitDbContext))]
-    partial class WorkitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260527224050_AddPaydayExpenseLinkSnapshot")]
+    partial class AddPaydayExpenseLinkSnapshot
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -53,9 +56,6 @@ namespace Workit.Api.Migrations
 
                     b.Property<Guid?>("ReviewedBy")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
@@ -125,10 +125,6 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("City")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<decimal>("DrivingUnitPrice")
                         .HasColumnType("numeric");
 
@@ -150,15 +146,9 @@ namespace Workit.Api.Migrations
                     b.Property<string>("PaydayClientSecret")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Ssn")
                         .IsRequired()
@@ -167,18 +157,7 @@ namespace Workit.Api.Migrations
                     b.Property<decimal>("StandardHoursPerDay")
                         .HasColumnType("numeric");
 
-                    b.Property<string>("VatNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ZipCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("PaydayId")
-                        .HasFilter("\"PaydayId\" IS NOT NULL");
 
                     b.ToTable("Companies", (string)null);
                 });
@@ -189,18 +168,6 @@ namespace Workit.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("City")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
@@ -208,15 +175,7 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("Country")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Language")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -224,30 +183,17 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Ssn")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ZipCode")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId", "Name");
-
-                    b.HasIndex("CompanyId", "PaydayId")
-                        .HasFilter("\"PaydayId\" IS NOT NULL");
 
                     b.ToTable("Customers", (string)null);
                 });
@@ -303,14 +249,6 @@ namespace Workit.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("City")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 
@@ -335,18 +273,9 @@ namespace Workit.Api.Migrations
                     b.Property<decimal>("HourlySalary")
                         .HasColumnType("numeric");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Phone")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Ssn")
                         .IsRequired()
@@ -356,404 +285,11 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("ZipCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId", "DisplayName");
 
-                    b.HasIndex("CompanyId", "PaydayId")
-                        .HasFilter("\"PaydayId\" IS NOT NULL");
-
                     b.ToTable("Employees", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.Expense", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AmountExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("AmountIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("AmountVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Comments")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreditorName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("CreditorPaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CreditorSsn")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("Date")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Deductible")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("FinalDueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("PaidDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PaymentTypeName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("PaymentTypePaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reference")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Voucher")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "Date");
-
-                    b.HasIndex("CompanyId", "JobId")
-                        .HasFilter("\"JobId\" IS NOT NULL");
-
-                    b.HasIndex("CompanyId", "PaydayId")
-                        .HasFilter("\"PaydayId\" IS NOT NULL");
-
-                    b.HasIndex("CompanyId", "Status");
-
-                    b.ToTable("Expenses", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.ExpenseLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("DiscountPercentage")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("ExpenseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("UnitPriceExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("UnitPriceIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("VatPercentage")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ExpenseId");
-
-                    b.HasIndex("CompanyId", "ExpenseId");
-
-                    b.ToTable("ExpenseLines", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.Invoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AccountingCost")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("AmountExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("AmountIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("AmountVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime?>("CancelDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("CancelledDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("CapitalGainsTax")
-                        .HasColumnType("numeric");
-
-                    b.Property<bool>("ClaimCancelled")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("ClaimCancelledDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ClaimCreated")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ClaimFinalDueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("CreateClaim")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CreateElectronicInvoice")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("CreditDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CurrencyCode")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("CurrencyRate")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("CustomerName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("CustomerPaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CustomerSsn")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("DefaultInterest")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ElectronicInvoicePartyId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("FinalDueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("ForeignAmountExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("ForeignAmountIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("ForeignAmountVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime?>("InvoiceDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("Number")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Ocr")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("PaidDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PayorName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("PayorPaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("PayorSsn")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Reference")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("RefundDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("SendEmail")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("SentDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("VatNumber")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "InvoiceDate");
-
-                    b.HasIndex("CompanyId", "PaydayId")
-                        .HasFilter("\"PaydayId\" IS NOT NULL");
-
-                    b.HasIndex("CompanyId", "Status");
-
-                    b.ToTable("Invoices", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.InvoiceLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Comment")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("DiscountPercentage")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("ForeignUnitPriceExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("ForeignUnitPriceIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Position")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("Sku")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("UnitPriceExcludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("UnitPriceIncludingVat")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("VatPercentage")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("CompanyId", "InvoiceId");
-
-                    b.ToTable("InvoiceLines", (string)null);
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.InvoicePayment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CurrencyCode")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("PaydayId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("PaymentDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PaymentTypeName")
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("PaymentTypePaydayId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("CompanyId", "InvoiceId");
-
-                    b.ToTable("InvoicePayments", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.Job", b =>
@@ -796,9 +332,6 @@ namespace Workit.Api.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<string>("WaitingReason")
                         .HasColumnType("text");
@@ -849,9 +382,6 @@ namespace Workit.Api.Migrations
 
                     b.Property<decimal>("Quantity")
                         .HasColumnType("numeric");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Unit")
                         .IsRequired()
@@ -905,9 +435,6 @@ namespace Workit.Api.Migrations
 
                     b.Property<decimal>("Quantity")
                         .HasColumnType("numeric");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("UsedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1054,9 +581,6 @@ namespace Workit.Api.Migrations
                     b.Property<int?>("PaydayInvoiceNumber")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
                     b.Property<DateOnly>("WorkDate")
                         .HasColumnType("date");
 
@@ -1091,9 +615,6 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId", "Name");
@@ -1118,9 +639,6 @@ namespace Workit.Api.Migrations
 
                     b.Property<DateTimeOffset?>("ReturnedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<Guid>("ToolId")
                         .HasColumnType("uuid");
@@ -1177,9 +695,6 @@ namespace Workit.Api.Migrations
 
                     b.Property<DateTimeOffset>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
 
                     b.Property<string>("SourceEmailMessageId")
                         .IsRequired()
@@ -1271,50 +786,11 @@ namespace Workit.Api.Migrations
                     b.ToTable("VendorInvoiceLineItems", (string)null);
                 });
 
-            modelBuilder.Entity("Workit.Shared.Models.ExpenseLine", b =>
-                {
-                    b.HasOne("Workit.Shared.Models.Expense", null)
-                        .WithMany("Lines")
-                        .HasForeignKey("ExpenseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.InvoiceLine", b =>
-                {
-                    b.HasOne("Workit.Shared.Models.Invoice", null)
-                        .WithMany("Lines")
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.InvoicePayment", b =>
-                {
-                    b.HasOne("Workit.Shared.Models.Invoice", null)
-                        .WithMany("Payments")
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Workit.Shared.Models.VendorInvoiceLineItem", b =>
                 {
                     b.HasOne("Workit.Shared.Models.VendorInvoice", null)
                         .WithMany("LineItems")
                         .HasForeignKey("VendorInvoiceId");
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.Expense", b =>
-                {
-                    b.Navigation("Lines");
-                });
-
-            modelBuilder.Entity("Workit.Shared.Models.Invoice", b =>
-                {
-                    b.Navigation("Lines");
-
-                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.VendorInvoice", b =>

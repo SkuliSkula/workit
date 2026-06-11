@@ -70,6 +70,11 @@ internal static class CompanyEndpoints
                         Address            = request.Address.Trim(),
                         Phone              = request.Phone.Trim(),
                         Owner              = request.Owner.Trim(),
+                        ZipCode            = request.ZipCode.Trim(),
+                        City               = request.City.Trim(),
+                        VatNumber          = request.VatNumber.Trim(),
+                        Source             = request.Source,
+                        PaydayId           = request.PaydayId,
                         PaydayClientId     = string.IsNullOrWhiteSpace(request.PaydayClientId)     ? null : credentialProtection.Protect(request.PaydayClientId.Trim()),
                         PaydayClientSecret = string.IsNullOrWhiteSpace(request.PaydayClientSecret) ? null : credentialProtection.Protect(request.PaydayClientSecret.Trim())
                     };
@@ -179,15 +184,27 @@ internal static class CompanyEndpoints
                     var companyEmail   = companyData.TryGetProperty("email",   out var emailProp)   ? emailProp.GetString()   : "";
                     var companyPhone   = companyData.TryGetProperty("phone",   out var phoneProp)   ? phoneProp.GetString()   : "";
                     var companyAddress = companyData.TryGetProperty("address", out var addrProp)    ? addrProp.GetString()    : "";
+                    var companyZip     = companyData.TryGetProperty("zip",     out var zipProp)     ? zipProp.GetString()     : "";
+                    var companyCity    = companyData.TryGetProperty("city",    out var cityProp)    ? cityProp.GetString()    : "";
+                    var companyVatNumber = companyData.TryGetProperty("vatNumber", out var vatProp) ? vatProp.GetString()    : "";
+                    Guid? companyId = companyData.TryGetProperty("id", out var idProp)
+                        && idProp.ValueKind == JsonValueKind.String
+                        && Guid.TryParse(idProp.GetString(), out var parsedId)
+                            ? parsedId
+                            : null;
                     return Results.Json(new
                     {
                         success     = true,
                         message     = $"Connected to Payday company: {companyName} ({companySsn})",
+                        companyId,
                         companyName,
                         companySsn,
                         companyEmail,
                         companyPhone,
-                        companyAddress
+                        companyAddress,
+                        companyZip,
+                        companyCity,
+                        companyVatNumber
                     });
                 }
 

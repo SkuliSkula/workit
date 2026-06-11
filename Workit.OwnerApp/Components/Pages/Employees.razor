@@ -159,7 +159,18 @@
                 <span>@context.HourlySalary.ToString("N0")</span>
             </TemplateColumn>
             <TemplateColumn Title="Billable/hr">
-                <span>@context.HourlyBillableRate.ToString("N0")</span>
+                @if (context.HourlyBillableRate == 0)
+                {
+                    <span style="display:flex; align-items:center; gap:0.4rem;">
+                        <span style="color:#b45309; font-weight:600;">0</span>
+                        <span title="No billable rate set — this employee will produce ISK 0 invoice lines"
+                              style="background:#fef3c7; border:1px solid #f59e0b; color:#92400e; border-radius:4px; font-size:0.72rem; font-weight:700; padding:1px 6px; white-space:nowrap;">⚠ Set rate</span>
+                    </span>
+                }
+                else
+                {
+                    <span>@context.HourlyBillableRate.ToString("N0")</span>
+                }
             </TemplateColumn>
             <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
             <TemplateColumn Title="Actions">

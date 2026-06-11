@@ -12,7 +12,17 @@ public sealed class Company
     public decimal DrivingUnitPrice { get; set; }
     public decimal StandardHoursPerDay { get; set; } = 8m;
 
+    public string ZipCode { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string VatNumber { get; set; } = string.Empty;
+
     // Payday integration credentials (per-company)
     public string? PaydayClientId { get; set; }
     public string? PaydayClientSecret { get; set; }
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
+
+    /// <summary>The corresponding Payday company id, when created from Payday.</summary>
+    public Guid? PaydayId { get; set; }
 }

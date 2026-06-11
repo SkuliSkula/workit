@@ -15,4 +15,7 @@ public sealed class Job
     public DateTimeOffset?   KanbanInProgressAt { get; set; }
     public DateTimeOffset?   KanbanWaitingAt    { get; set; }
     public DateTimeOffset?   KanbanDoneAt       { get; set; }
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }

@@ -6,6 +6,7 @@
 @inject IEmployeesApi EmployeesApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
+@inject NavigationManager Nav
 
 <PageTitle>Jobs</PageTitle>
 
@@ -335,6 +336,7 @@ else if (jobs.Count > 0)
                             else
                             {
                                 <div class="job-actions">
+                                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">Details</FluentButton>
                                     <FluentButton Appearance="Appearance.Outline" @onclick="@(() => BeginEditJob(job))">Edit job</FluentButton>
                                 </div>
                             }

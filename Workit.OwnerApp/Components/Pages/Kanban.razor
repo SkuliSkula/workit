@@ -3,6 +3,7 @@
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject ICustomersApi CustomersApi
+@inject NavigationManager Nav
 
 <PageTitle>Kanban</PageTitle>
 
@@ -49,7 +50,7 @@ else
                 }
                 @foreach (var job in BacklogJobs)
                 {
-                    <div class="kanban-card">
+                    <div class="kanban-card kanban-card--clickable" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
@@ -71,7 +72,7 @@ else
                 }
                 @foreach (var job in InProgressJobs)
                 {
-                    <div class="kanban-card">
+                    <div class="kanban-card kanban-card--clickable" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
@@ -87,7 +88,7 @@ else
                                 <span class="kanban-ts-age">@AgeSince(job.KanbanInProgressAt.Value)</span>
                             </div>
                         }
-                        <div class="kanban-card-actions">
+                        <div class="kanban-card-actions" @onclick:stopPropagation="true">
                             <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small"
                                           @onclick="@(() => OpenWaitingSheet(job))">
                                 Move to Waiting
@@ -111,7 +112,7 @@ else
                 }
                 @foreach (var job in WaitingJobs)
                 {
-                    <div class="kanban-card">
+                    <div class="kanban-card kanban-card--clickable" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
@@ -134,7 +135,7 @@ else
                                 <span class="kanban-ts-age">@AgeSince(job.KanbanWaitingAt.Value)</span>
                             </div>
                         }
-                        <div class="kanban-card-actions">
+                        <div class="kanban-card-actions" @onclick:stopPropagation="true">
                             <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
                                           @onclick="@(() => MoveToInProgressAsync(job))">
                                 Resume
@@ -158,7 +159,7 @@ else
                 }
                 @foreach (var job in DoneJobs)
                 {
-                    <div class="kanban-card kanban-card--done">
+                    <div class="kanban-card kanban-card--done kanban-card--clickable" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
@@ -301,6 +302,16 @@ else
 
     .kanban-card--done {
         opacity: 0.75;
+    }
+
+    .kanban-card--clickable {
+        cursor: pointer;
+        transition: box-shadow 0.15s, border-color 0.15s;
+    }
+
+    .kanban-card--clickable:hover {
+        border-color: #93c5fd;
+        box-shadow: 0 2px 8px rgba(59,130,246,0.12);
     }
 
     .kanban-card-code {

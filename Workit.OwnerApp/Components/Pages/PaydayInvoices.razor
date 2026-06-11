@@ -4,6 +4,7 @@
 @inject IPaydayCustomersApi CustomersApi
 @inject IJSRuntime JS
 @inject PaydayCredentialsInitializer PaydayInit
+@inject ISalesInvoicesApi WorkitInvoicesApi
 
 <PageTitle>Payday Invoices</PageTitle>
 
@@ -11,9 +12,15 @@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
         <FluentLabel Typo="Typography.PaneHeader">Payday Invoices</FluentLabel>
-        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
-            @(showCreateForm ? "✕ Cancel" : "+ New Invoice")
-        </FluentButton>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="SyncToWorkitAsync"
+                          Disabled="@(syncing || invoices.Count == 0)">
+                @(syncing ? "Syncing…" : "Sync to Workit")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New Invoice")
+            </FluentButton>
+        </div>
     </div>
 
     <div class="admin-grid" style="margin-top:0.75rem;">
@@ -40,6 +47,14 @@
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(syncResult))
+    {
+        <FluentLabel style="margin-top:0.5rem;">@syncResult</FluentLabel>
+    }
+    @if (!string.IsNullOrWhiteSpace(syncError))
+    {
+        <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@syncError</FluentLabel>
     }
 </FluentCard>
 
@@ -441,6 +456,11 @@
             ? invoices
             : invoices.Where(i => i.Status == filterStatus).ToList();
 
+    // ── Sync state ────────────────────────────────────────────────────────────
+    private bool    syncing;
+    private string? syncResult;
+    private string? syncError;
+
     // ── Action feedback ───────────────────────────────────────────────────────
     private string? actionResult;
     private string? actionError;
@@ -784,6 +804,113 @@
         finally
         {
             downloadingPdfId = null;
+        }
+    }
+
+    // ── Sync to Workit ────────────────────────────────────────────────────────
+    private async Task SyncToWorkitAsync()
+    {
+        syncing     = true;
+        syncResult  = null;
+        syncError   = null;
+
+        try
+        {
+            var existingResult = await WorkitInvoicesApi.GetInvoicesAsync();
+            if (!existingResult.IsSuccess)
+            {
+                syncError = $"Could not check existing invoices: {existingResult.ErrorMessage}";
+                return;
+            }
+
+            var existingPaydayIds = (existingResult.Value ?? [])
+                .Where(x => x.PaydayId.HasValue)
+                .Select(x => x.PaydayId!.Value)
+                .ToHashSet();
+
+            int created = 0, skipped = 0, failed = 0;
+
+            foreach (var pi in invoices)
+            {
+                if (existingPaydayIds.Contains(pi.Id))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var invoice = new Invoice
+                {
+                    CustomerPaydayId           = pi.Customer?.Id,
+                    CustomerSsn                = pi.Customer?.Ssn,
+                    CustomerName               = pi.Customer?.Name,
+                    PayorPaydayId              = pi.Payor?.Id,
+                    PayorSsn                   = pi.Payor?.Ssn,
+                    PayorName                  = pi.Payor?.Name,
+                    Number                     = pi.Number,
+                    Status                     = pi.Status,
+                    Description                = pi.Description,
+                    Reference                  = pi.Reference,
+                    CurrencyCode               = pi.CurrencyCode,
+                    CurrencyRate               = pi.CurrencyRate,
+                    InvoiceDate                = pi.InvoiceDate,
+                    DueDate                    = pi.DueDate,
+                    FinalDueDate               = pi.FinalDueDate,
+                    SentDate                   = pi.SentDate,
+                    PaidDate                   = pi.PaidDate,
+                    CancelDate                 = pi.CancelDate,
+                    CancelledDate              = pi.CancelledDate,
+                    CreditDate                 = pi.CreditDate,
+                    RefundDate                 = pi.RefundDate,
+                    ClaimCreated               = pi.ClaimCreated,
+                    ClaimFinalDueDate          = pi.ClaimFinalDueDate,
+                    ClaimCancelledDate         = pi.ClaimCancelledDate,
+                    ClaimCancelled             = pi.ClaimCancelled,
+                    AmountExcludingVat         = pi.AmountExcludingVat,
+                    AmountIncludingVat         = pi.AmountIncludingVat,
+                    AmountVat                  = pi.AmountVat,
+                    ForeignAmountExcludingVat  = pi.ForeignAmountExcludingVat,
+                    ForeignAmountIncludingVat  = pi.ForeignAmountIncludingVat,
+                    ForeignAmountVat           = pi.ForeignAmountVat,
+                    VatNumber                  = pi.VatNumber,
+                    CreateClaim                = pi.CreateClaim,
+                    CreateElectronicInvoice    = pi.CreateElectronicInvoice,
+                    ElectronicInvoicePartyId   = pi.ElectronicInvoicePartyId,
+                    AccountingCost             = pi.AccountingCost,
+                    Ocr                        = pi.Ocr,
+                    SendEmail                  = pi.SendEmail,
+                    DefaultInterest            = pi.DefaultInterest,
+                    CapitalGainsTax            = pi.CapitalGainsTax,
+                    Source                     = DataSource.Payday,
+                    PaydayId                   = pi.Id,
+                    Lines = (pi.Lines ?? []).Select(l => new InvoiceLine
+                    {
+                        Position                      = l.Position,
+                        Description                   = l.Description,
+                        Comment                       = l.Comment,
+                        Quantity                      = l.Quantity,
+                        UnitPriceExcludingVat         = l.UnitPriceExcludingVat,
+                        UnitPriceIncludingVat         = l.UnitPriceIncludingVat,
+                        ForeignUnitPriceExcludingVat  = l.ForeignUnitPriceExcludingVat,
+                        ForeignUnitPriceIncludingVat  = l.ForeignUnitPriceIncludingVat,
+                        VatPercentage                 = l.VatPercentage,
+                        DiscountPercentage            = l.DiscountPercentage,
+                        Sku                           = l.Sku,
+                        ProductId                     = l.ProductId,
+                        PaydayId                      = l.Id
+                    }).ToList()
+                };
+
+                var result = await WorkitInvoicesApi.CreateInvoiceAsync(invoice);
+                if (result.IsSuccess) created++;
+                else failed++;
+            }
+
+            syncResult = $"✓ Sync complete — {created} created, {skipped} already synced" +
+                         (failed > 0 ? $", {failed} failed" : string.Empty) + ".";
+        }
+        finally
+        {
+            syncing = false;
         }
     }
 

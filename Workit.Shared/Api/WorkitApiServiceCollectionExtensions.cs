@@ -18,6 +18,9 @@ public static class WorkitApiServiceCollectionExtensions
         services.AddScoped<IInvoicesApi, InvoicesApi>();
         services.AddScoped<IAbsenceApi, AbsenceApi>();
         services.AddScoped<IWorkDutyApi, WorkDutyApi>();
+        services.AddScoped<IPaydayExpenseLinkApi, PaydayExpenseLinkApi>();
+        services.AddScoped<ISalesInvoicesApi, SalesInvoicesApi>();
+        services.AddScoped<IExpensesApi, ExpensesApi>();
 
         return services;
     }

@@ -268,12 +268,17 @@
 
             paydayCompany = new Company
             {
-                Name    = data.CompanyName    ?? string.Empty,
-                Ssn     = data.CompanySsn     ?? string.Empty,
-                Email   = data.CompanyEmail   ?? string.Empty,
-                Phone   = data.CompanyPhone   ?? string.Empty,
-                Address = data.CompanyAddress ?? string.Empty,
-                Owner   = string.Empty
+                Name      = data.CompanyName      ?? string.Empty,
+                Ssn       = data.CompanySsn       ?? string.Empty,
+                Email     = data.CompanyEmail     ?? string.Empty,
+                Phone     = data.CompanyPhone     ?? string.Empty,
+                Address   = data.CompanyAddress   ?? string.Empty,
+                ZipCode   = data.CompanyZip       ?? string.Empty,
+                City      = data.CompanyCity      ?? string.Empty,
+                VatNumber = data.CompanyVatNumber ?? string.Empty,
+                Owner     = string.Empty,
+                Source    = DataSource.Payday,
+                PaydayId  = data.CompanyId
             };
         }
         finally

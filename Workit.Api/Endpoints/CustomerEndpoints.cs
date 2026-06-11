@@ -51,6 +51,12 @@ internal static class CustomerEndpoints
                     customer.Email = customer.Email.Trim();
                     customer.Phone = customer.Phone.Trim();
                     customer.ContactPerson = customer.ContactPerson.Trim();
+                    customer.Address = customer.Address.Trim();
+                    customer.ZipCode = customer.ZipCode.Trim();
+                    customer.City = customer.City.Trim();
+                    customer.Country = customer.Country.Trim();
+                    customer.Language = customer.Language.Trim();
+                    customer.Comment = customer.Comment.Trim();
 
                     db.Customers.Add(customer);
                     await db.SaveChangesAsync(ct);
@@ -90,6 +96,14 @@ internal static class CustomerEndpoints
                     existing.Email = customer.Email.Trim();
                     existing.Phone = customer.Phone.Trim();
                     existing.ContactPerson = customer.ContactPerson.Trim();
+                    existing.Address = customer.Address.Trim();
+                    existing.ZipCode = customer.ZipCode.Trim();
+                    existing.City = customer.City.Trim();
+                    existing.Country = customer.Country.Trim();
+                    existing.Language = customer.Language.Trim();
+                    existing.Comment = customer.Comment.Trim();
+                    existing.Source = customer.Source;
+                    existing.PaydayId = customer.PaydayId;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);

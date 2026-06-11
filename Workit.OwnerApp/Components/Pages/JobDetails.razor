@@ -1,0 +1,449 @@
+@page "/jobs/{JobId:guid}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IJobsApi JobsApi
+@inject ITimeEntriesApi TimeEntriesApi
+@inject IMaterialsApi MaterialsApi
+@inject IEmployeesApi EmployeesApi
+@inject ICustomersApi CustomersApi
+@inject IPaydayExpenseLinkApi ExpenseLinkApi
+@inject IPaydayExpensesApi ExpensesApi
+@inject NavigationManager Nav
+@inject PaydayCredentialsInitializer PaydayInit
+@using System.Text.Json
+
+<PageTitle>@(job?.Code ?? "Job Details")</PageTitle>
+
+@if (loading)
+{
+    <PageLoader />
+}
+else if (loadError is not null)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Color="Color.Error">@loadError</FluentLabel>
+        <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Nav.NavigateTo("/kanban"))" style="margin-top:0.75rem;">
+            ← Back to Kanban
+        </FluentButton>
+    </FluentCard>
+}
+else if (job is not null)
+{
+    @* ── Header ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Nav.NavigateTo("/kanban"))">
+                ← Kanban
+            </FluentButton>
+            <span style="font-size:0.78rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:#6b7280;">@job.Code</span>
+            <span style="@JobStatusStyle padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;">@JobStatusLabel</span>
+            <FluentButton Appearance="Appearance.Accent"
+                          style="margin-left:auto;"
+                          @onclick="@(() => Nav.NavigateTo($"/payday/invoice-builder?jobId={job.Id}"))">
+                Build Invoice
+            </FluentButton>
+        </div>
+        <div style="margin-top:0.5rem;">
+            <div style="font-size:1.25rem; font-weight:700; color:#111827;">@job.Name</div>
+            <div style="font-size:0.85rem; color:#6b7280; margin-top:0.15rem;">
+                Customer: <strong>@(customer?.Name ?? "—")</strong>
+                &nbsp;·&nbsp; @job.BillingType
+                &nbsp;·&nbsp; @job.Category
+            </div>
+        </div>
+    </FluentCard>
+
+    @* ── Summary cards ── *@
+    <div class="jd-summary-grid">
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Hours</div>
+            <div class="jd-summary-value">@TotalHours.ToString("0.##")</div>
+        </div>
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Overtime</div>
+            <div class="jd-summary-value">@TotalOvertime.ToString("0.##")</div>
+        </div>
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Drive</div>
+            <div class="jd-summary-value">@TotalDrive</div>
+        </div>
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Materials</div>
+            <div class="jd-summary-value">@materialUsages.Count</div>
+        </div>
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Expenses</div>
+            <div class="jd-summary-value">@linkedExpenses.Count</div>
+        </div>
+        <div class="jd-summary-card">
+            <div class="jd-summary-label">Exp. Total</div>
+            <div class="jd-summary-value" style="font-size:1.1rem;">@linkedExpenses.Sum(e => e.AmountIncludingVat).ToString("N0")</div>
+        </div>
+    </div>
+
+    @* ── Time Entries ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Time Entries</strong>
+            <span style="font-size:0.8rem; font-weight:400; color:#6b7280; margin-left:0.5rem;">@timeEntries.Count entr@(timeEntries.Count == 1 ? "y" : "ies")</span>
+        </FluentLabel>
+
+        @if (timeEntries.Count == 0)
+        {
+            <div style="color:#9ca3af; font-size:0.85rem; margin-top:0.5rem;">No time entries.</div>
+        }
+        else
+        {
+            <FluentDataGrid TGridItem="TimeEntry" Items="@timeEntries.AsQueryable()"
+                            AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.6rem;">
+                <TemplateColumn Title="Employee">
+                    <FluentLabel>@EmployeeName(context.EmployeeId)</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Date">
+                    <FluentLabel>@context.WorkDate.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Hours" Align="Align.End">
+                    <FluentLabel>@context.Hours.ToString("0.##")</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Overtime" Align="Align.End">
+                    <FluentLabel>@context.OvertimeHours.ToString("0.##")</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Drive" Align="Align.End">
+                    <FluentLabel>@context.DrivingUnits</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Notes">
+                    <FluentLabel>@(context.Notes ?? "—")</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Status" Align="Align.Center">
+                    @if (context.IsInvoiced)
+                    {
+                        <span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-size:0.75rem; font-weight:600;">Invoiced</span>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
+
+            <div style="display:flex; justify-content:flex-end; gap:2rem; margin-top:0.75rem; font-size:0.88rem; color:#374151;">
+                <span>Total hours: <strong>@TotalHours.ToString("0.##")</strong></span>
+                <span>Overtime: <strong>@TotalOvertime.ToString("0.##")</strong></span>
+                <span>Drive: <strong>@TotalDrive</strong></span>
+            </div>
+        }
+    </FluentCard>
+
+    @* ── Materials ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body"><strong>Materials</strong>
+            <span style="font-size:0.8rem; font-weight:400; color:#6b7280; margin-left:0.5rem;">@materialUsages.Count item@(materialUsages.Count == 1 ? "" : "s")</span>
+        </FluentLabel>
+
+        @if (materialUsages.Count == 0)
+        {
+            <div style="color:#9ca3af; font-size:0.85rem; margin-top:0.5rem;">No materials logged.</div>
+        }
+        else
+        {
+            <FluentDataGrid TGridItem="MaterialUsage" Items="@materialUsages.AsQueryable()"
+                            AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.6rem;">
+                <TemplateColumn Title="Material">
+                    <FluentLabel>@MaterialName(context.MaterialId)</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Employee">
+                    <FluentLabel>@EmployeeName(context.EmployeeId)</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Qty" Align="Align.End">
+                    <FluentLabel>@context.Quantity.ToString("0.##")</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Unit price" Align="Align.End">
+                    <FluentLabel>@MaterialUnitPrice(context.MaterialId).ToString("N0") ISK</FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Total" Align="Align.End">
+                    <FluentLabel><strong>@((context.Quantity * MaterialUnitPrice(context.MaterialId)).ToString("N0")) ISK</strong></FluentLabel>
+                </TemplateColumn>
+                <TemplateColumn Title="Used on">
+                    <FluentLabel>@context.UsedAt.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
+            </FluentDataGrid>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:0.75rem; font-size:0.88rem;">
+                Materials total: <strong style="margin-left:0.4rem;">@materialUsages.Sum(m => m.Quantity * MaterialUnitPrice(m.MaterialId)).ToString("N0") ISK</strong>
+            </div>
+        }
+    </FluentCard>
+
+    @* ── Payday Expenses ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body">
+                <strong>Payday Expenses</strong>
+                <span style="font-size:0.8rem; font-weight:400; color:#6b7280; margin-left:0.5rem;">
+                    @linkedExpenses.Count expense@(linkedExpenses.Count == 1 ? "" : "s")
+                    @if (linkedExpenses.Count > 0)
+                    {
+                        <span> · @linkedExpenses.Sum(e => e.Lines?.Count ?? 0) line item@(linkedExpenses.Sum(e => e.Lines?.Count ?? 0) == 1 ? "" : "s")</span>
+                    }
+                </span>
+            </FluentLabel>
+            @if (linkedExpenses.Count > 0)
+            {
+                <div style="font-size:0.88rem; color:#374151;">
+                    Total ex VAT: <strong>@linkedExpenses.Sum(e => e.AmountExcludingVat).ToString("N0") ISK</strong>
+                    &nbsp;·&nbsp;
+                    Total incl VAT: <strong style="color:#111827;">@linkedExpenses.Sum(e => e.AmountIncludingVat).ToString("N0") ISK</strong>
+                </div>
+            }
+        </div>
+
+        @if (expenseLoadError is not null)
+        {
+            <FluentLabel Color="Color.Error" style="margin-top:0.4rem;">@expenseLoadError</FluentLabel>
+        }
+
+        @if (linkedExpenses.Count == 0)
+        {
+            <div style="color:#9ca3af; font-size:0.85rem; margin-top:0.75rem;">
+                No Payday expenses linked to this job.
+                <a href="/payday/expenses" style="color:#1d4ed8; margin-left:0.4rem;">Go to Payday Expenses to link them →</a>
+            </div>
+        }
+        else
+        {
+            @* ── Expenses summary table ── *@
+            <div style="margin-top:1rem;">
+                <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#6b7280; margin-bottom:0.4rem;">All Expenses</div>
+                <FluentDataGrid TGridItem="PaydayExpense"
+                                Items="@linkedExpenses.OrderBy(e => e.Date).AsQueryable()"
+                                AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+                    <TemplateColumn Title="Vendor">
+                        <FluentLabel><strong>@(context.Creditor?.Name ?? context.Creditor?.Ssn ?? "—")</strong></FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Date">
+                        <FluentLabel>@context.Date?.ToString("dd MMM yyyy")</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status">
+                        <span style="@StatusStyle(context.Status) padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@context.Status</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Lines" Align="Align.Center">
+                        <FluentLabel>@(context.Lines?.Count ?? 0)</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Ex VAT" Align="Align.End">
+                        <FluentLabel>@context.AmountExcludingVat.ToString("N0") ISK</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="VAT" Align="Align.End">
+                        <FluentLabel>@context.AmountVat.ToString("N0") ISK</FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Incl VAT" Align="Align.End">
+                        <FluentLabel><strong>@context.AmountIncludingVat.ToString("N0") ISK</strong></FluentLabel>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Ref">
+                        <FluentLabel style="font-size:0.78rem; color:#6b7280;">@(context.Reference ?? "—")</FluentLabel>
+                    </TemplateColumn>
+                </FluentDataGrid>
+            </div>
+
+            @* ── All expense lines (flat view) ── *@
+            @if (AllExpenseLines.Count > 0)
+            {
+                <div style="margin-top:1.5rem;">
+                    <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#6b7280; margin-bottom:0.4rem;">All Line Items</div>
+                    <FluentDataGrid TGridItem="ExpenseLine"
+                                    Items="@AllExpenseLines.AsQueryable()"
+                                    AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+                        <TemplateColumn Title="Vendor">
+                            <FluentLabel style="font-size:0.82rem;">@context.VendorName</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Date">
+                            <FluentLabel style="font-size:0.82rem;">@context.Date?.ToString("dd MMM")</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Description">
+                            <FluentLabel>@context.Line.Description</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Qty" Align="Align.End">
+                            <FluentLabel>@context.Line.Quantity.ToString("0.##")</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Unit (ex VAT)" Align="Align.End">
+                            <FluentLabel>@context.Line.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="VAT %" Align="Align.End">
+                            <FluentLabel>@context.Line.VatPercentage.ToString("0.##")%</FluentLabel>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Total (incl VAT)" Align="Align.End">
+                            <FluentLabel><strong>@((context.Line.Quantity * context.Line.UnitPriceIncludingVat).ToString("N0")) ISK</strong></FluentLabel>
+                        </TemplateColumn>
+                    </FluentDataGrid>
+
+                    <div style="display:flex; justify-content:flex-end; gap:2rem; margin-top:0.75rem; font-size:0.88rem; color:#374151; border-top:1px solid #e5e7eb; padding-top:0.6rem;">
+                        <span>Lines total ex VAT: <strong>@AllExpenseLines.Sum(l => l.Line.Quantity * l.Line.UnitPriceExcludingVat).ToString("N0") ISK</strong></span>
+                        <span>Lines total incl VAT: <strong style="color:#111827; font-size:0.95rem;">@AllExpenseLines.Sum(l => l.Line.Quantity * l.Line.UnitPriceIncludingVat).ToString("N0") ISK</strong></span>
+                    </div>
+                </div>
+            }
+        }
+    </FluentCard>
+}
+
+<style>
+    .jd-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+    }
+
+    @@media (max-width: 1100px) {
+        .jd-summary-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @@media (max-width: 520px) {
+        .jd-summary-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .jd-summary-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.85rem 1rem;
+        text-align: center;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .jd-summary-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #6b7280;
+        margin-bottom: 0.35rem;
+    }
+
+    .jd-summary-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #111827;
+    }
+</style>
+
+@code {
+    private sealed record ExpenseLine(string VendorName, DateTime? Date, string Status, PaydayExpenseLine Line);
+
+    [Parameter] public Guid JobId { get; set; }
+
+    private bool    loading      = true;
+    private string? loadError;
+    private string? expenseLoadError;
+
+    private Job?      job;
+    private Customer? customer;
+
+    private readonly List<TimeEntry>      timeEntries    = [];
+    private readonly List<MaterialUsage>  materialUsages = [];
+    private readonly List<Material>       materials      = [];
+    private readonly List<Employee>       employees      = [];
+    private readonly List<PaydayExpense>  linkedExpenses = [];
+
+    private decimal TotalHours    => timeEntries.Sum(e => e.Hours);
+    private decimal TotalOvertime => timeEntries.Sum(e => e.OvertimeHours);
+    private int     TotalDrive    => timeEntries.Sum(e => e.DrivingUnits);
+
+    private List<ExpenseLine> AllExpenseLines => linkedExpenses
+        .OrderBy(e => e.Date)
+        .SelectMany(e => (e.Lines ?? []).Select(l => new ExpenseLine(
+            e.Creditor?.Name ?? e.Creditor?.Ssn ?? "—",
+            e.Date,
+            e.Status,
+            l)))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await PaydayInit.InitializeAsync();
+
+        var jobsTask       = JobsApi.GetJobsAsync();
+        var customersTask  = CustomersApi.GetCustomersAsync();
+        var employeesTask  = EmployeesApi.GetEmployeesAsync();
+        var materialsTask  = MaterialsApi.GetMaterialsAsync();
+        var entriesTask    = TimeEntriesApi.GetTimeEntriesAsync(jobId: JobId);
+        var usagesTask     = MaterialsApi.GetMaterialUsageAsync(jobId: JobId);
+        var linksTask      = ExpenseLinkApi.GetByJobAsync(JobId);
+
+        await Task.WhenAll(jobsTask, customersTask, employeesTask, materialsTask, entriesTask, usagesTask, linksTask);
+
+        var jobsResult = await jobsTask;
+        if (!jobsResult.IsSuccess) { loadError = jobsResult.ErrorMessage; loading = false; return; }
+
+        job = (jobsResult.Value ?? []).FirstOrDefault(j => j.Id == JobId);
+        if (job is null) { loadError = "Job not found."; loading = false; return; }
+
+        var custResult = await customersTask;
+        customer = (custResult.Value ?? []).FirstOrDefault(c => c.Id == job.CustomerId);
+
+        var empResult = await employeesTask;
+        employees.AddRange(empResult.Value ?? []);
+
+        var matResult = await materialsTask;
+        materials.AddRange(matResult.Value ?? []);
+
+        var entriesResult = await entriesTask;
+        if (entriesResult.IsSuccess) timeEntries.AddRange(entriesResult.Value ?? []);
+
+        var usagesResult = await usagesTask;
+        if (usagesResult.IsSuccess) materialUsages.AddRange(usagesResult.Value ?? []);
+
+        var linksResult = await linksTask;
+        if (linksResult.IsSuccess)
+            await LoadLinkedExpensesAsync(linksResult.Value ?? []);
+
+        loading = false;
+    }
+
+    private async Task LoadLinkedExpensesAsync(List<PaydayExpenseLink> links)
+    {
+        foreach (var link in links)
+        {
+            // Use stored snapshot if available — no Payday API call needed
+            if (!string.IsNullOrWhiteSpace(link.SnapshotJson))
+            {
+                try
+                {
+                    var expense = JsonSerializer.Deserialize<PaydayExpense>(link.SnapshotJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (expense is not null) { linkedExpenses.Add(expense); continue; }
+                }
+                catch { /* fall through to live fetch */ }
+            }
+
+            var result = await ExpensesApi.GetByIdAsync(link.PaydayExpenseId.ToString(), "lines");
+            if (result.IsSuccess && result.Value is not null)
+                linkedExpenses.Add(result.Value);
+            else
+                expenseLoadError = "Some expenses could not be loaded from Payday.";
+        }
+    }
+
+    private string EmployeeName(Guid employeeId) =>
+        employees.FirstOrDefault(e => e.Id == employeeId)?.DisplayName ?? "—";
+
+    private string MaterialName(Guid materialId) =>
+        materials.FirstOrDefault(m => m.Id == materialId)?.Name ?? "—";
+
+    private decimal MaterialUnitPrice(Guid materialId) =>
+        materials.FirstOrDefault(m => m.Id == materialId)?.UnitPrice ?? 0;
+
+    private bool IsJobDone => timeEntries.Count > 0 && timeEntries.All(e => e.IsInvoiced);
+
+    private string JobStatusLabel =>
+        IsJobDone                              ? "Done"        :
+        job?.KanbanStatus == KanbanStatus.Waiting ? "Waiting"    :
+                                                    "In Progress";
+
+    private string JobStatusStyle =>
+        IsJobDone                                  ? "background:#f0fdf4; color:#15803d;" :
+        job?.KanbanStatus == KanbanStatus.Waiting  ? "background:#fffbeb; color:#b45309;" :
+        timeEntries.Count == 0                     ? "background:#f1f5f9; color:#475569;" :
+                                                     "background:#eff6ff; color:#1d4ed8;";
+
+    private static string StatusStyle(string status) => status switch
+    {
+        "PAID"   => "background:#dcfce7; color:#15803d;",
+        "UNPAID" => "background:#fef3c7; color:#92400e;",
+        "DRAFT"  => "background:#f3f4f6; color:#374151;",
+        _        => "background:#f3f4f6; color:#374151;"
+    };
+}

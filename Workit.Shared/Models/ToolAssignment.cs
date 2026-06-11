@@ -8,4 +8,7 @@ public sealed class ToolAssignment
     public Guid EmployeeId { get; set; }
     public DateTimeOffset AssignedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ReturnedAt { get; set; }
+
+    /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
+    public DataSource Source { get; set; } = DataSource.Workit;
 }

@@ -345,12 +345,17 @@
             // Populate a Company object from the Payday response
             paydayCompany = new Company
             {
-                Name    = data.CompanyName    ?? string.Empty,
-                Ssn     = data.CompanySsn     ?? string.Empty,
-                Email   = data.CompanyEmail   ?? string.Empty,
-                Phone   = data.CompanyPhone   ?? string.Empty,
-                Address = data.CompanyAddress ?? string.Empty,
-                Owner   = string.Empty   // owner fills this in or edits after setup
+                Name      = data.CompanyName      ?? string.Empty,
+                Ssn       = data.CompanySsn       ?? string.Empty,
+                Email     = data.CompanyEmail     ?? string.Empty,
+                Phone     = data.CompanyPhone     ?? string.Empty,
+                Address   = data.CompanyAddress   ?? string.Empty,
+                ZipCode   = data.CompanyZip       ?? string.Empty,
+                City      = data.CompanyCity      ?? string.Empty,
+                VatNumber = data.CompanyVatNumber ?? string.Empty,
+                Owner     = string.Empty,   // owner fills this in or edits after setup
+                Source    = DataSource.Payday,
+                PaydayId  = data.CompanyId
             };
         }
         finally

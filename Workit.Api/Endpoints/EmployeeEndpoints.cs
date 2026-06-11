@@ -82,7 +82,16 @@ internal static class EmployeeEndpoints
                         Ssn = request.Employee.Ssn.Trim(),
                         Email = normalizedEmail,
                         Phone = request.Employee.Phone.Trim(),
-                        ContactPerson = request.Employee.ContactPerson.Trim()
+                        ContactPerson = request.Employee.ContactPerson.Trim(),
+                        EmploymentType = request.Employee.EmploymentType,
+                        HourlySalary = request.Employee.HourlySalary,
+                        HourlyBillableRate = request.Employee.HourlyBillableRate,
+                        Address = request.Employee.Address.Trim(),
+                        ZipCode = request.Employee.ZipCode.Trim(),
+                        City = request.Employee.City.Trim(),
+                        IsActive = request.Employee.IsActive,
+                        Source = request.Employee.Source,
+                        PaydayId = request.Employee.PaydayId
                     };
 
                     var user = new AppUser
@@ -146,6 +155,12 @@ internal static class EmployeeEndpoints
                     existing.EmploymentType = employee.EmploymentType;
                     existing.HourlySalary = employee.HourlySalary;
                     existing.HourlyBillableRate = employee.HourlyBillableRate;
+                    existing.Address = employee.Address.Trim();
+                    existing.ZipCode = employee.ZipCode.Trim();
+                    existing.City = employee.City.Trim();
+                    existing.IsActive = employee.IsActive;
+                    existing.Source = employee.Source;
+                    existing.PaydayId = employee.PaydayId;
 
                     var appUser = await db.AppUsers.FirstOrDefaultAsync(x => x.EmployeeId == id, ct);
                     if (appUser is not null)

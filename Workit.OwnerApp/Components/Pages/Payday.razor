@@ -353,6 +353,14 @@
                     existing.Email         = pc.Email         ?? existing.Email;
                     existing.Phone         = pc.Phone         ?? existing.Phone;
                     existing.ContactPerson = pc.Contact       ?? existing.ContactPerson;
+                    existing.Address       = pc.Address       ?? existing.Address;
+                    existing.ZipCode       = pc.ZipCode       ?? existing.ZipCode;
+                    existing.City          = pc.City          ?? existing.City;
+                    existing.Country       = pc.Country       ?? existing.Country;
+                    existing.Language      = pc.Language       ?? existing.Language;
+                    existing.Comment       = pc.Comment        ?? existing.Comment;
+                    existing.Source        = DataSource.Payday;
+                    existing.PaydayId      = pc.Id;
                     var r = await CustomersApi.UpdateCustomerAsync(existing);
                     if (r.IsSuccess) updated++; else errors++;
                 }
@@ -365,7 +373,15 @@
                         Ssn           = pc.Ssn,
                         Email         = pc.Email   ?? string.Empty,
                         Phone         = pc.Phone   ?? string.Empty,
-                        ContactPerson = pc.Contact ?? string.Empty
+                        ContactPerson = pc.Contact ?? string.Empty,
+                        Address       = pc.Address ?? string.Empty,
+                        ZipCode       = pc.ZipCode ?? string.Empty,
+                        City          = pc.City    ?? string.Empty,
+                        Country       = pc.Country ?? string.Empty,
+                        Language      = pc.Language ?? string.Empty,
+                        Comment       = pc.Comment  ?? string.Empty,
+                        Source        = DataSource.Payday,
+                        PaydayId      = pc.Id
                     });
                     if (r.IsSuccess) created++; else errors++;
                 }
@@ -423,9 +439,15 @@
 
                 if (bySsn.TryGetValue(pe.Ssn, out var existing))
                 {
-                    existing.DisplayName = pe.Name   ?? existing.DisplayName;
-                    existing.Email       = pe.Email  ?? existing.Email;
-                    existing.Phone       = pe.Mobile ?? existing.Phone;
+                    existing.DisplayName = pe.Name    ?? existing.DisplayName;
+                    existing.Email       = pe.Email   ?? existing.Email;
+                    existing.Phone       = pe.Mobile  ?? existing.Phone;
+                    existing.Address     = pe.Address ?? existing.Address;
+                    existing.ZipCode     = pe.Zip     ?? existing.ZipCode;
+                    existing.City        = pe.City    ?? existing.City;
+                    existing.IsActive    = pe.Active;
+                    existing.Source      = DataSource.Payday;
+                    existing.PaydayId    = pe.Id;
                     var r = await EmployeesApi.UpdateEmployeeAsync(existing);
                     if (r.IsSuccess) updated++; else errors++;
                 }
@@ -448,7 +470,13 @@
                             Ssn           = pe.Ssn,
                             Email         = pe.Email,
                             Phone         = pe.Mobile  ?? string.Empty,
-                            ContactPerson = pe.Name    ?? pe.Email
+                            ContactPerson = pe.Name    ?? pe.Email,
+                            Address       = pe.Address ?? string.Empty,
+                            ZipCode       = pe.Zip     ?? string.Empty,
+                            City          = pe.City    ?? string.Empty,
+                            IsActive      = pe.Active,
+                            Source        = DataSource.Payday,
+                            PaydayId      = pe.Id
                         },
                         Password = password
                     });

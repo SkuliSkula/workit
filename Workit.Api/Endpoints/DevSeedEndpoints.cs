@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
 using Workit.Shared.Auth;
 using Workit.Shared.Models;
+using Workit.Shared.Payday;
 
 namespace Workit.Api.Endpoints;
 
@@ -94,20 +96,28 @@ public static class DevSeedEndpoints
             usages.AddRange(CreateMaterialUsages(compC.Id, empsC, jobsC, matsC, rng));
             db.MaterialUsages.AddRange(usages);
 
+            // ── Payday Expense Links (fake snapshots for testing) ──────────────
+            var expLinks = new List<PaydayExpenseLink>();
+            expLinks.AddRange(CreateExpenseLinks(compA.Id, jobsA, "electrical", rng));
+            expLinks.AddRange(CreateExpenseLinks(compB.Id, jobsB, "plumbing",   rng));
+            expLinks.AddRange(CreateExpenseLinks(compC.Id, jobsC, "masonry",    rng));
+            db.PaydayExpenseLinks.AddRange(expLinks);
+
             await db.SaveChangesAsync(ct);
 
             return Results.Ok(new
             {
-                companies    = 3,
-                owners       = 2,
-                customers    = custA.Count + custB.Count + custC.Count,
-                jobs         = jobsA.Count + jobsB.Count + jobsC.Count,
-                employees    = empsA.Count + empsB.Count + empsC.Count,
-                materials    = matsA.Count + matsB.Count + matsC.Count,
-                timeEntries  = entries.Count,
-                absences     = absences.Count,
+                companies      = 3,
+                owners         = 2,
+                customers      = custA.Count + custB.Count + custC.Count,
+                jobs           = jobsA.Count + jobsB.Count + jobsC.Count,
+                employees      = empsA.Count + empsB.Count + empsC.Count,
+                materials      = matsA.Count + matsB.Count + matsC.Count,
+                timeEntries    = entries.Count,
+                absences       = absences.Count,
                 materialUsages = usages.Count,
-                credentials  = new { email1 = "jon@test.is", email2 = "maria@test.is", password }
+                expenseLinks   = expLinks.Count,
+                credentials    = new { email1 = "jon@test.is", email2 = "maria@test.is", password }
             });
         });
     }
@@ -649,6 +659,138 @@ public static class DevSeedEndpoints
         }
 
         return usages;
+    }
+
+    // ── Payday Expense Links ──────────────────────────────────────────────────
+
+    private static List<PaydayExpenseLink> CreateExpenseLinks(
+        Guid companyId, List<Job> jobs, string trade, Random rng)
+    {
+        var links   = new List<PaydayExpenseLink>();
+        var vendors = GetExpenseVendors(trade);
+
+        foreach (var job in jobs.Where(j => j.KanbanInProgressAt.HasValue))
+        {
+            var lane     = GetSeedLane(job);
+            var jobStart = job.KanbanInProgressAt!.Value;
+            var jobEnd   = lane == SeedLane.Done
+                               ? job.KanbanDoneAt!.Value
+                               : lane == SeedLane.Waiting
+                                   ? job.KanbanWaitingAt!.Value
+                                   : new DateTimeOffset(2025, 12, 15, 0, 0, 0, TimeSpan.Zero);
+            var spanDays = Math.Max(1, (int)(jobEnd - jobStart).TotalDays);
+
+            var count = rng.Next(2, 5); // 2–4 expenses per job
+            for (var i = 0; i < count; i++)
+            {
+                var expenseId   = Guid.NewGuid();
+                var expenseDate = jobStart.AddDays(rng.Next(0, spanDays)).DateTime;
+                var isPaid      = lane == SeedLane.Done || rng.NextDouble() < 0.4;
+                var vendor      = vendors[rng.Next(vendors.Length)];
+                var lines       = BuildExpenseLines(expenseId, trade, rng);
+                var exclVat     = lines.Sum(l => l.Quantity * l.UnitPriceExcludingVat);
+                var vatAmt      = lines.Sum(l => l.Quantity * l.UnitPriceExcludingVat * l.VatPercentage / 100m);
+
+                var expense = new PaydayExpense
+                {
+                    Id                 = expenseId,
+                    Status             = isPaid ? "PAID" : "UNPAID",
+                    Creditor           = new PaydayExpenseCreditor
+                    {
+                        Id   = Guid.NewGuid(),
+                        Ssn  = $"4{rng.Next(10000, 99999)}49{rng.Next(10, 99)}",
+                        Name = vendor,
+                    },
+                    Date               = expenseDate,
+                    Comments           = $"Vara og þjónusta — {job.Code}",
+                    Deductible         = true,
+                    AmountExcludingVat = Math.Round(exclVat, 0),
+                    AmountIncludingVat = Math.Round(exclVat + vatAmt, 0),
+                    AmountVat          = Math.Round(vatAmt, 0),
+                    Created            = expenseDate,
+                    Lines              = lines,
+                };
+
+                links.Add(new PaydayExpenseLink
+                {
+                    CompanyId       = companyId,
+                    PaydayExpenseId = expenseId,
+                    JobId           = job.Id,
+                    LinkedAt        = new DateTimeOffset(expenseDate, TimeSpan.Zero),
+                    SnapshotJson    = JsonSerializer.Serialize(expense),
+                });
+            }
+        }
+
+        return links;
+    }
+
+    private static string[] GetExpenseVendors(string trade) => trade switch
+    {
+        "electrical" => ["Rafiðnaðarverslunin ehf.", "HS Orka rafhlutir hf.", "Elektro Ísland sf.", "Þór & Co. ehf.", "Rafvirkjaþjónustan hf."],
+        "plumbing"   => ["Vatnsvirkjun hf.", "Lagnir og íhlutir sf.", "Þyrilinn pípuhlutir ehf.", "Pípufræðin hf.", "Vatnsveit sf."],
+        _            => ["Byggingarmiðstöðin ehf.", "Steinar og efni sf.", "Múrverkshlutir hf.", "Húsaþjónustan ehf.", "Íslensku byggingavörur sf."],
+    };
+
+    private static List<PaydayExpenseLine> BuildExpenseLines(Guid expenseId, string trade, Random rng)
+    {
+        (string desc, int maxQty, decimal price)[] templates = trade switch
+        {
+            "electrical" =>
+            [
+                ("N1XE-U 5G 6 Cu leiðari 50m",             2, 46000m),
+                ("NYM-J 3x2.5 leiðari 100m rúlla",         1, 39000m),
+                ("Schneider iC60 16A B-rof (x10)",         3,  6500m),
+                ("ABB F204 30mA jarðtenglavörn",           4,  3200m),
+                ("Legrand tjakkdósir (x50)",               2,  9000m),
+                ("Osram Ledvance panel 60x60 36W (x4)",    5, 31200m),
+                ("Hager MGB116A mælaborð",                 1, 28000m),
+                ("Þinglagnir og festihlutir (ýmislegt)",   1,  8500m),
+            ],
+            "plumbing" =>
+            [
+                ("Uponor 16mm PE-Xa lagnir 100m",          2, 18500m),
+                ("Uponor Q&E 16mm samskeyti (x50)",        3, 31000m),
+                ("Grohe Eurosmart blöndunarr (x2)",        2, 28000m),
+                ("Geberit Duofix WC rammi",                1, 42000m),
+                ("Geberit Sigma20 þvottaklafi (x2)",       2, 18500m),
+                ("Ballofix 15mm lokavatn (x10)",           3,  2800m),
+                ("Isover Rörskål 22/30mm einangrun (x10)", 2,    980m),
+                ("Þrýstipróf og gæðahlutir",               1, 12000m),
+            ],
+            _ =>
+            [
+                ("Portland sement CEM I 42.5 (x20 pokar)", 3,  1800m),
+                ("Múrblanda M5 (x30 pokar)",               2,  1200m),
+                ("Leca blokkar 40x20x20 (x100 stk.)",      3,    620m),
+                ("Hilti HIT-RE 500 v3 lím (x5)",           4,  6800m),
+                ("Mapei Keraflex maxi S1 (x10 pokar)",     2,  4800m),
+                ("Rockwool einangrunarplata (x20)",        2,  3800m),
+                ("Gyproc GN13 gipsplata (x20 stk.)",       2,  2800m),
+                ("Steypuhlutir og festiefni (ýmislegt)",   1,  9500m),
+            ],
+        };
+
+        var count  = rng.Next(2, 5);
+        var picked = templates.OrderBy(_ => rng.Next()).Take(count).ToList();
+
+        return picked.Select(t =>
+        {
+            var qty    = (decimal)rng.Next(1, t.maxQty + 1);
+            var price  = Math.Round(t.price * (0.90m + (decimal)(rng.NextDouble() * 0.20)), 0);
+            var vatPct = 24.0m;
+            return new PaydayExpenseLine
+            {
+                Id                    = Guid.NewGuid(),
+                ExpenseId             = expenseId,
+                Description           = t.desc,
+                Quantity              = qty,
+                UnitPriceExcludingVat = price,
+                UnitPriceIncludingVat = Math.Round(price * 1.24m, 0),
+                VatPercentage         = vatPct,
+                Created               = DateTime.UtcNow,
+            };
+        }).ToList();
     }
 
     // ── Icelandic public holidays ─────────────────────────────────────────────

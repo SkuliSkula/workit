@@ -8,9 +8,12 @@
 @inject ICompanyApi CompanyApi
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
+@inject IPaydayExpenseLinkApi ExpenseLinkApi
+@inject IPaydayExpensesApi PaydayExpensesApi
 @inject PaydayCredentialsInitializer PaydayInit
 @inject NavigationManager Navigation
 
+@using System.Text.Json
 @using Workit.Shared.Api
 @using Workit.Shared.Models
 @using Workit.Shared.Payday
@@ -177,8 +180,9 @@
 
             @if (rateWarnings.Count > 0)
             {
-                <div style="padding:0.5rem 0.75rem; background:#fef3c7; border:1px solid #fbbf24; border-radius:8px; margin-bottom:0.75rem; font-size:0.85rem; color:#92400e;">
-                    ⚠ Missing billable rates: @string.Join(", ", rateWarnings). Lines will generate with 0 price — adjust manually.
+                <div style="padding:0.6rem 0.9rem; background:#fef3c7; border:2px solid #f59e0b; border-radius:8px; margin-bottom:0.75rem; font-size:0.88rem; color:#78350f;">
+                    <strong>⚠ Missing hourly billable rate for: @string.Join(", ", rateWarnings)</strong><br />
+                    <span style="font-size:0.82rem;">These employees have no rate set — their labor lines will be created with ISK 0. Go to <strong>Employees</strong> and set a billable rate before generating, or edit the amounts manually on the next step.</span>
                 </div>
             }
 
@@ -222,6 +226,14 @@
                             @if (js.Materials.Any(m => m.IsLowStock))
                             {
                                 <span style="color:#dc2626; font-size:0.8rem;"> (⚠ low stock)</span>
+                            }
+                        </div>
+                        <div>
+                            <span style="color:#64748b;">Expenses:</span>
+                            <strong>@js.Expenses.Count</strong>
+                            @if (js.Expenses.Count > 0)
+                            {
+                                <span style="font-size:0.8rem; color:#64748b;"> (@js.Expenses.Sum(e => e.AmountIncludingVat).ToString("N0") ISK)</span>
                             }
                         </div>
                         @if (js.Job.BillingType != BillingType.FixedPrice)
@@ -436,6 +448,10 @@
 }
 
 @code {
+    // ── Query parameters ──────────────────────────────────────────────────────
+    [Parameter, SupplyParameterFromQuery(Name = "jobId")]
+    public Guid? PrefillJobId { get; set; }
+
     // ── Wizard state ─────────────────────────────────────────────────────────
     private enum WizardStep { SelectCustomer, SelectJobs, PreviewLines, MapCustomer, Done }
 
@@ -521,6 +537,7 @@
         public List<TimeEntry> TimeEntries { get; set; } = [];
         public List<MaterialAggregate> Materials { get; set; } = [];
         public List<EmployeeHours> EmployeeBreakdown { get; set; } = [];
+        public List<PaydayExpense> Expenses { get; set; } = [];
     }
 
     private sealed class MaterialAggregate
@@ -597,6 +614,29 @@
         customersWithJobs = allCustomers.Where(c => customerIdsWithJobs.Contains(c.Id)).OrderBy(c => c.Name).ToList();
 
         initLoading = false;
+
+        if (PrefillJobId.HasValue)
+            await PrefillFromJobAsync(PrefillJobId.Value);
+    }
+
+    // ── Prefill from job (via ?jobId= query param) ───────────────────────────
+    private async Task PrefillFromJobAsync(Guid jobId)
+    {
+        var job = allJobs.FirstOrDefault(j => j.Id == jobId);
+        if (job is null) return;
+
+        selectedCustomerIdStr = job.CustomerId.ToString();
+        dateFrom = new DateTime(2020, 1, 1);
+        dateTo   = DateTime.Today;
+
+        GoToSelectJobs();
+
+        foreach (var js in jobSelections)
+            js.IsSelected = js.Job.Id == jobId;
+
+        await LoadJobDataAsync();
+        // Stop here so the user sees the data summary — including any rate warnings —
+        // before moving on. They click "Generate Invoice Lines →" themselves.
     }
 
     // ── Step 1 → 2 ──────────────────────────────────────────────────────────
@@ -736,6 +776,38 @@
                 .Distinct()
                 .ToList();
 
+            // Load linked Payday expenses for each selected job
+            var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            foreach (var js in jobSelections.Where(j => j.IsSelected))
+            {
+                js.Expenses = [];
+                var linksResult = await ExpenseLinkApi.GetByJobAsync(js.Job.Id);
+                if (!linksResult.IsSuccess) continue;
+
+                foreach (var link in linksResult.Value ?? [])
+                {
+                    PaydayExpense? expense = null;
+
+                    // Prefer stored snapshot — avoids a Payday API call
+                    if (!string.IsNullOrWhiteSpace(link.SnapshotJson))
+                    {
+                        try { expense = JsonSerializer.Deserialize<PaydayExpense>(link.SnapshotJson, jsonOpts); }
+                        catch { /* fall through */ }
+                    }
+
+                    // Fall back to live fetch if no snapshot
+                    if (expense is null)
+                    {
+                        var expResult = await PaydayExpensesApi.GetByIdAsync(link.PaydayExpenseId.ToString(), "lines");
+                        if (expResult.IsSuccess && expResult.Value is not null)
+                            expense = expResult.Value;
+                    }
+
+                    if (expense is not null)
+                        js.Expenses.Add(expense);
+                }
+            }
+
             jobDataLoaded = true;
         }
         catch (Exception ex)
@@ -822,6 +894,47 @@
                     LineType = "material",
                     JobCode = code
                 });
+            }
+
+            // Expenses — one invoice line per expense line; fall back to header total if no lines
+            foreach (var expense in js.Expenses)
+            {
+                var vendorLabel = expense.Creditor?.Name ?? expense.Creditor?.Ssn ?? "Vendor";
+
+                if (expense.Lines is { Count: > 0 })
+                {
+                    foreach (var el in expense.Lines)
+                    {
+                        invoiceLines.Add(new InvoiceLineForm
+                        {
+                            Description = string.IsNullOrWhiteSpace(el.Description)
+                                ? $"Kostnaður — {vendorLabel}"
+                                : el.Description,
+                            Quantity = el.Quantity,
+                            UnitPriceExcludingVat = Math.Round(el.UnitPriceExcludingVat, 0, MidpointRounding.AwayFromZero),
+                            VatPercentage = el.VatPercentage,
+                            DiscountPercentage = el.DiscountPercentage ?? 0m,
+                            LineType = "expense",
+                            JobCode = code
+                        });
+                    }
+                }
+                else
+                {
+                    // No line-level detail — use the expense header total
+                    var vatPct = expense.AmountExcludingVat > 0
+                        ? Math.Round(expense.AmountVat / expense.AmountExcludingVat * 100m, 0)
+                        : 24m;
+                    invoiceLines.Add(new InvoiceLineForm
+                    {
+                        Description = $"Kostnaður — {vendorLabel}",
+                        Quantity = 1,
+                        UnitPriceExcludingVat = Math.Round(expense.AmountExcludingVat, 0, MidpointRounding.AwayFromZero),
+                        VatPercentage = vatPct,
+                        LineType = "expense",
+                        JobCode = code
+                    });
+                }
             }
         }
 
