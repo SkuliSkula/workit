@@ -911,7 +911,7 @@
                                 ? $"Kostnaður — {vendorLabel}"
                                 : el.Description,
                             Quantity = el.Quantity,
-                            UnitPriceExcludingVat = Math.Round(el.UnitPriceExcludingVat, 0, MidpointRounding.AwayFromZero),
+                            UnitPriceExcludingVat = Math.Round(el.UnitPriceExcludingVat ?? 0m, 0, MidpointRounding.AwayFromZero),
                             VatPercentage = el.VatPercentage,
                             DiscountPercentage = el.DiscountPercentage ?? 0m,
                             LineType = "expense",

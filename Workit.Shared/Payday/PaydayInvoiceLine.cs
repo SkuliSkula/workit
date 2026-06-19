@@ -9,8 +9,8 @@ public sealed class PaydayInvoiceLine
     public string   Description                   { get; set; } = string.Empty;
     public string?  Comment                       { get; set; }
     public decimal  Quantity                      { get; set; }
-    public decimal  UnitPriceExcludingVat         { get; set; }
-    public decimal  UnitPriceIncludingVat         { get; set; }
+    public decimal? UnitPriceExcludingVat         { get; set; }
+    public decimal? UnitPriceIncludingVat         { get; set; }
     public decimal? ForeignUnitPriceExcludingVat  { get; set; }
     public decimal? ForeignUnitPriceIncludingVat  { get; set; }
     public decimal  VatPercentage                 { get; set; }

@@ -6,8 +6,8 @@ public sealed class PaydayExpenseLine
     public Guid     ExpenseId             { get; set; }
     public string   Description           { get; set; } = string.Empty;
     public decimal   Quantity              { get; set; }
-    public decimal  UnitPriceExcludingVat { get; set; }
-    public decimal  UnitPriceIncludingVat { get; set; }
+    public decimal? UnitPriceExcludingVat { get; set; }
+    public decimal? UnitPriceIncludingVat { get; set; }
     public decimal  VatPercentage         { get; set; }
     public decimal? DiscountPercentage    { get; set; }
     public Guid?    AccountId             { get; set; }

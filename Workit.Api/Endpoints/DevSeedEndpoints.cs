@@ -688,8 +688,8 @@ public static class DevSeedEndpoints
                 var isPaid      = lane == SeedLane.Done || rng.NextDouble() < 0.4;
                 var vendor      = vendors[rng.Next(vendors.Length)];
                 var lines       = BuildExpenseLines(expenseId, trade, rng);
-                var exclVat     = lines.Sum(l => l.Quantity * l.UnitPriceExcludingVat);
-                var vatAmt      = lines.Sum(l => l.Quantity * l.UnitPriceExcludingVat * l.VatPercentage / 100m);
+                var exclVat     = lines.Sum(l => l.Quantity * (l.UnitPriceExcludingVat ?? 0m));
+                var vatAmt      = lines.Sum(l => l.Quantity * (l.UnitPriceExcludingVat ?? 0m) * l.VatPercentage / 100m);
 
                 var expense = new PaydayExpense
                 {

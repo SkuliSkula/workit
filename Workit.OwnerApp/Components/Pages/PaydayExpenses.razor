@@ -480,10 +480,10 @@
                     <PropertyColumn Property="@(x => x.Description)" Title="Description" />
                     <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty" />
                     <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
-                        <FluentLabel>@context.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                        <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
                     </TemplateColumn>
                     <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
-                        <FluentLabel>@context.UnitPriceIncludingVat.ToString("N0")</FluentLabel>
+                        <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
                     </TemplateColumn>
                     <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
                     <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
@@ -741,7 +741,7 @@
                 {
                     Description           = line.Description,
                     Quantity              = line.Quantity,
-                    UnitPriceExcludingVat = line.UnitPriceExcludingVat,
+                    UnitPriceExcludingVat = line.UnitPriceExcludingVat ?? 0m,
                     VatPercentage         = line.VatPercentage,
                     DiscountPercentage    = line.DiscountPercentage ?? 0,
                     AccountIdStr         = line.AccountId?.ToString() ?? string.Empty
@@ -1096,8 +1096,8 @@
                     {
                         Description           = l.Description,
                         Quantity              = l.Quantity,
-                        UnitPriceExcludingVat = l.UnitPriceExcludingVat,
-                        UnitPriceIncludingVat = l.UnitPriceIncludingVat,
+                        UnitPriceExcludingVat = l.UnitPriceExcludingVat ?? 0m,
+                        UnitPriceIncludingVat = l.UnitPriceIncludingVat ?? 0m,
                         VatPercentage         = l.VatPercentage,
                         DiscountPercentage    = l.DiscountPercentage,
                         AccountId             = l.AccountId,

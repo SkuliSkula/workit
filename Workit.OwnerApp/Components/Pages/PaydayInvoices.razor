@@ -408,10 +408,10 @@
                     <PropertyColumn Property="@(x => x.Comment)"     Title="Comment" />
                     <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty"  Format="0.##" />
                     <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
-                        <FluentLabel>@context.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                        <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
                     </TemplateColumn>
                     <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
-                        <FluentLabel>@context.UnitPriceIncludingVat.ToString("N0")</FluentLabel>
+                        <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
                     </TemplateColumn>
                     <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
                     <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
@@ -888,8 +888,8 @@
                         Description                   = l.Description,
                         Comment                       = l.Comment,
                         Quantity                      = l.Quantity,
-                        UnitPriceExcludingVat         = l.UnitPriceExcludingVat,
-                        UnitPriceIncludingVat         = l.UnitPriceIncludingVat,
+                        UnitPriceExcludingVat         = l.UnitPriceExcludingVat ?? 0m,
+                        UnitPriceIncludingVat         = l.UnitPriceIncludingVat ?? 0m,
                         ForeignUnitPriceExcludingVat  = l.ForeignUnitPriceExcludingVat,
                         ForeignUnitPriceIncludingVat  = l.ForeignUnitPriceIncludingVat,
                         VatPercentage                 = l.VatPercentage,

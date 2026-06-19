@@ -259,19 +259,19 @@ else if (job is not null)
                             <FluentLabel>@context.Line.Quantity.ToString("0.##")</FluentLabel>
                         </TemplateColumn>
                         <TemplateColumn Title="Unit (ex VAT)" Align="Align.End">
-                            <FluentLabel>@context.Line.UnitPriceExcludingVat.ToString("N0")</FluentLabel>
+                            <FluentLabel>@((context.Line.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
                         </TemplateColumn>
                         <TemplateColumn Title="VAT %" Align="Align.End">
                             <FluentLabel>@context.Line.VatPercentage.ToString("0.##")%</FluentLabel>
                         </TemplateColumn>
                         <TemplateColumn Title="Total (incl VAT)" Align="Align.End">
-                            <FluentLabel><strong>@((context.Line.Quantity * context.Line.UnitPriceIncludingVat).ToString("N0")) ISK</strong></FluentLabel>
+                            <FluentLabel><strong>@((context.Line.Quantity * (context.Line.UnitPriceIncludingVat ?? 0m)).ToString("N0")) ISK</strong></FluentLabel>
                         </TemplateColumn>
                     </FluentDataGrid>
 
                     <div style="display:flex; justify-content:flex-end; gap:2rem; margin-top:0.75rem; font-size:0.88rem; color:#374151; border-top:1px solid #e5e7eb; padding-top:0.6rem;">
-                        <span>Lines total ex VAT: <strong>@AllExpenseLines.Sum(l => l.Line.Quantity * l.Line.UnitPriceExcludingVat).ToString("N0") ISK</strong></span>
-                        <span>Lines total incl VAT: <strong style="color:#111827; font-size:0.95rem;">@AllExpenseLines.Sum(l => l.Line.Quantity * l.Line.UnitPriceIncludingVat).ToString("N0") ISK</strong></span>
+                        <span>Lines total ex VAT: <strong>@AllExpenseLines.Sum(l => l.Line.Quantity * (l.Line.UnitPriceExcludingVat ?? 0m)).ToString("N0") ISK</strong></span>
+                        <span>Lines total incl VAT: <strong style="color:#111827; font-size:0.95rem;">@AllExpenseLines.Sum(l => l.Line.Quantity * (l.Line.UnitPriceIncludingVat ?? 0m)).ToString("N0") ISK</strong></span>
                     </div>
                 </div>
             }
