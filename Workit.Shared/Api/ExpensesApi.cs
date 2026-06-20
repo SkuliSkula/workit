@@ -12,6 +12,12 @@ public interface IExpensesApi
     Task<ApiResult<ExpenseLine>>    AddLineAsync(Guid expenseId, ExpenseLine line);
     Task<ApiResult<ExpenseLine>>    UpdateLineAsync(Guid expenseId, ExpenseLine line);
     Task<ApiResult>                 DeleteLineAsync(Guid expenseId, Guid lineId);
+
+    /// <summary>Import a Payday expense into the Workit DB. Idempotent — deduped by PaydayId.</summary>
+    Task<ApiResult<Expense>>        ImportPaydayExpenseAsync(Expense expense);
+
+    /// <summary>Record partial/full billings of expense lines, tagged with an invoice number.</summary>
+    Task<ApiResult>                 BillLinesAsync(BillExpenseLinesRequest request);
 }
 
 internal sealed class ExpensesApi(HttpClient httpClient, IAccessTokenAccessor tokenAccessor)
@@ -46,4 +52,10 @@ internal sealed class ExpensesApi(HttpClient httpClient, IAccessTokenAccessor to
 
     public Task<ApiResult> DeleteLineAsync(Guid expenseId, Guid lineId) =>
         DeleteAsync($"/api/expenses/{expenseId}/lines/{lineId}", "Failed to delete line.");
+
+    public Task<ApiResult<Expense>> ImportPaydayExpenseAsync(Expense expense) =>
+        PostForJsonAsync<Expense, Expense>("/api/expenses/import-payday", expense, "Failed to import Payday expense.");
+
+    public Task<ApiResult> BillLinesAsync(BillExpenseLinesRequest request) =>
+        PostAsync("/api/expenses/lines/bill", request, "Failed to record expense billing.");
 }

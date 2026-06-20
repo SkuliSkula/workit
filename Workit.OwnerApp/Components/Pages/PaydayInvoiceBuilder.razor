@@ -8,8 +8,7 @@
 @inject ICompanyApi CompanyApi
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
-@inject IPaydayExpenseLinkApi ExpenseLinkApi
-@inject IPaydayExpensesApi PaydayExpensesApi
+@inject IExpensesApi ExpensesApi
 @inject PaydayCredentialsInitializer PaydayInit
 @inject NavigationManager Navigation
 
@@ -287,7 +286,13 @@
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Qty</FluentLabel>
-                    <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="0" Step="0.5m" Style="width:100%" />
+                    <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="0"
+                                       Max="@(line.LineType == "expense" ? line.MaxQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture) : null)"
+                                       Step="0.5m" Style="width:100%" />
+                    @if (line.LineType == "expense")
+                    {
+                        <FluentLabel Style="font-size:0.68rem; color:#6b7280;">of @line.MaxQuantity.ToString("0.##") left</FluentLabel>
+                    }
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Price ex VAT</FluentLabel>
@@ -537,7 +542,7 @@
         public List<TimeEntry> TimeEntries { get; set; } = [];
         public List<MaterialAggregate> Materials { get; set; } = [];
         public List<EmployeeHours> EmployeeBreakdown { get; set; } = [];
-        public List<PaydayExpense> Expenses { get; set; } = [];
+        public List<Expense> Expenses { get; set; } = [];
     }
 
     private sealed class MaterialAggregate
@@ -559,9 +564,14 @@
         public decimal UnitPriceExcludingVat { get; set; }
         public decimal VatPercentage { get; set; } = 24m;
         public decimal DiscountPercentage { get; set; }
-        public string LineType { get; set; } = string.Empty; // "labor", "overtime", "driving", "material", "manual"
+        public string LineType { get; set; } = string.Empty; // "labor", "overtime", "driving", "material", "expense", "manual"
         public string JobCode { get; set; } = string.Empty;  // for regeneration
         public Guid EmployeeId { get; set; }                 // for overtime regeneration
+
+        // Expense billing writeback (set for LineType == "expense")
+        public Guid?   ExpenseLineId { get; set; }
+        public Guid?   JobId         { get; set; }
+        public decimal MaxQuantity   { get; set; }           // remaining billable qty on the source expense line
     }
 
     private sealed class EmployeeHours
@@ -776,36 +786,13 @@
                 .Distinct()
                 .ToList();
 
-            // Load linked Payday expenses for each selected job
-            var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            // Load expenses (with lines + billings) for each selected job from the Workit DB
             foreach (var js in jobSelections.Where(j => j.IsSelected))
             {
                 js.Expenses = [];
-                var linksResult = await ExpenseLinkApi.GetByJobAsync(js.Job.Id);
-                if (!linksResult.IsSuccess) continue;
-
-                foreach (var link in linksResult.Value ?? [])
-                {
-                    PaydayExpense? expense = null;
-
-                    // Prefer stored snapshot — avoids a Payday API call
-                    if (!string.IsNullOrWhiteSpace(link.SnapshotJson))
-                    {
-                        try { expense = JsonSerializer.Deserialize<PaydayExpense>(link.SnapshotJson, jsonOpts); }
-                        catch { /* fall through */ }
-                    }
-
-                    // Fall back to live fetch if no snapshot
-                    if (expense is null)
-                    {
-                        var expResult = await PaydayExpensesApi.GetByIdAsync(link.PaydayExpenseId.ToString(), "lines");
-                        if (expResult.IsSuccess && expResult.Value is not null)
-                            expense = expResult.Value;
-                    }
-
-                    if (expense is not null)
-                        js.Expenses.Add(expense);
-                }
+                var expensesResult = await ExpensesApi.GetExpensesAsync(jobId: js.Job.Id);
+                if (expensesResult.IsSuccess)
+                    js.Expenses.AddRange(expensesResult.Value ?? []);
             }
 
             jobDataLoaded = true;
@@ -896,43 +883,31 @@
                 });
             }
 
-            // Expenses — one invoice line per expense line; fall back to header total if no lines
+            // Expenses — one invoice line per expense line, billed at the sale price for
+            // the remaining (not-yet-billed) quantity. Fully-billed lines are skipped.
             foreach (var expense in js.Expenses)
             {
-                var vendorLabel = expense.Creditor?.Name ?? expense.Creditor?.Ssn ?? "Vendor";
+                var vendorLabel = expense.CreditorName ?? expense.CreditorSsn ?? "Vendor";
 
-                if (expense.Lines is { Count: > 0 })
+                foreach (var el in expense.Lines ?? [])
                 {
-                    foreach (var el in expense.Lines)
-                    {
-                        invoiceLines.Add(new InvoiceLineForm
-                        {
-                            Description = string.IsNullOrWhiteSpace(el.Description)
-                                ? $"Kostnaður — {vendorLabel}"
-                                : el.Description,
-                            Quantity = el.Quantity,
-                            UnitPriceExcludingVat = Math.Round(el.UnitPriceExcludingVat ?? 0m, 0, MidpointRounding.AwayFromZero),
-                            VatPercentage = el.VatPercentage,
-                            DiscountPercentage = el.DiscountPercentage ?? 0m,
-                            LineType = "expense",
-                            JobCode = code
-                        });
-                    }
-                }
-                else
-                {
-                    // No line-level detail — use the expense header total
-                    var vatPct = expense.AmountExcludingVat > 0
-                        ? Math.Round(expense.AmountVat / expense.AmountExcludingVat * 100m, 0)
-                        : 24m;
+                    var remaining = el.Quantity - el.Billings.Sum(b => b.Quantity);
+                    if (remaining <= 0) continue;
+
                     invoiceLines.Add(new InvoiceLineForm
                     {
-                        Description = $"Kostnaður — {vendorLabel}",
-                        Quantity = 1,
-                        UnitPriceExcludingVat = Math.Round(expense.AmountExcludingVat, 0, MidpointRounding.AwayFromZero),
-                        VatPercentage = vatPct,
+                        Description = string.IsNullOrWhiteSpace(el.Description)
+                            ? $"Kostnaður — {vendorLabel}"
+                            : el.Description,
+                        Quantity = remaining,
+                        UnitPriceExcludingVat = Math.Round(el.SalePriceExcludingVat, 0, MidpointRounding.AwayFromZero),
+                        VatPercentage = el.VatPercentage,
+                        DiscountPercentage = el.DiscountPercentage ?? 0m,
                         LineType = "expense",
-                        JobCode = code
+                        JobCode = code,
+                        ExpenseLineId = el.Id,
+                        JobId = js.Job.Id,
+                        MaxQuantity = remaining
                     });
                 }
             }
@@ -1057,6 +1032,26 @@
                         Ids = materialUsageIdsToMark,
                         PaydayInvoiceNumber = invoiceNumber
                     }));
+
+                // Record expense-line billings (partial or full) against this invoice
+                var billingEntries = invoiceLines
+                    .Where(l => l.LineType == "expense" && l.ExpenseLineId.HasValue && l.Quantity > 0)
+                    .Select(l => new ExpenseLineBillingEntry
+                    {
+                        ExpenseLineId         = l.ExpenseLineId!.Value,
+                        JobId                 = l.JobId,
+                        Quantity              = l.Quantity,
+                        SalePriceExcludingVat = l.UnitPriceExcludingVat,
+                        VatPercentage         = l.VatPercentage
+                    })
+                    .ToList();
+                if (billingEntries.Count > 0)
+                    markTasks.Add(ExpensesApi.BillLinesAsync(new BillExpenseLinesRequest
+                    {
+                        PaydayInvoiceNumber = invoiceNumber,
+                        Lines = billingEntries
+                    }));
+
                 if (markTasks.Count > 0)
                     await Task.WhenAll(markTasks);
 

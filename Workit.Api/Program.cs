@@ -212,7 +212,6 @@ app.MapInvoiceEndpoints();
 app.MapAbsenceEndpoints();
 app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
-app.MapPaydayExpenseLinkEndpoints();
 app.MapSalesInvoiceEndpoints();
 app.MapExpenseEndpoints();
 app.MapDevSeedEndpoints();

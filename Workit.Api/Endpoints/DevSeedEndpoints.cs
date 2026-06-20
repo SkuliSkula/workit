@@ -96,12 +96,12 @@ public static class DevSeedEndpoints
             usages.AddRange(CreateMaterialUsages(compC.Id, empsC, jobsC, matsC, rng));
             db.MaterialUsages.AddRange(usages);
 
-            // ── Payday Expense Links (fake snapshots for testing) ──────────────
-            var expLinks = new List<PaydayExpenseLink>();
-            expLinks.AddRange(CreateExpenseLinks(compA.Id, jobsA, "electrical", rng));
-            expLinks.AddRange(CreateExpenseLinks(compB.Id, jobsB, "plumbing",   rng));
-            expLinks.AddRange(CreateExpenseLinks(compC.Id, jobsC, "masonry",    rng));
-            db.PaydayExpenseLinks.AddRange(expLinks);
+            // ── Expenses (imported from Payday, Source = Payday) ───────────────
+            var seededExpenses = new List<Expense>();
+            seededExpenses.AddRange(CreateExpenses(compA.Id, jobsA, "electrical", rng));
+            seededExpenses.AddRange(CreateExpenses(compB.Id, jobsB, "plumbing",   rng));
+            seededExpenses.AddRange(CreateExpenses(compC.Id, jobsC, "masonry",    rng));
+            db.Expenses.AddRange(seededExpenses);
 
             await db.SaveChangesAsync(ct);
 
@@ -116,7 +116,7 @@ public static class DevSeedEndpoints
                 timeEntries    = entries.Count,
                 absences       = absences.Count,
                 materialUsages = usages.Count,
-                expenseLinks   = expLinks.Count,
+                expenses       = seededExpenses.Count,
                 credentials    = new { email1 = "jon@test.is", email2 = "maria@test.is", password }
             });
         });
@@ -661,12 +661,12 @@ public static class DevSeedEndpoints
         return usages;
     }
 
-    // ── Payday Expense Links ──────────────────────────────────────────────────
+    // ── Expenses (imported from Payday) ───────────────────────────────────────
 
-    private static List<PaydayExpenseLink> CreateExpenseLinks(
+    private static List<Expense> CreateExpenses(
         Guid companyId, List<Job> jobs, string trade, Random rng)
     {
-        var links   = new List<PaydayExpenseLink>();
+        var result  = new List<Expense>();
         var vendors = GetExpenseVendors(trade);
 
         foreach (var job in jobs.Where(j => j.KanbanInProgressAt.HasValue))
@@ -711,18 +711,12 @@ public static class DevSeedEndpoints
                     Lines              = lines,
                 };
 
-                links.Add(new PaydayExpenseLink
-                {
-                    CompanyId       = companyId,
-                    PaydayExpenseId = expenseId,
-                    JobId           = job.Id,
-                    LinkedAt        = new DateTimeOffset(expenseDate, TimeSpan.Zero),
-                    SnapshotJson    = JsonSerializer.Serialize(expense),
-                });
+                // Map into a real Workit expense (Source = Payday) with markup-derived sale prices.
+                result.Add(expense.ToWorkitExpense(job.Id, companyId));
             }
         }
 
-        return links;
+        return result;
     }
 
     private static string[] GetExpenseVendors(string trade) => trade switch

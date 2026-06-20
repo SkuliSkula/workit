@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Workit.Api.Data;
@@ -11,9 +12,11 @@ using Workit.Api.Data;
 namespace Workit.Api.Migrations
 {
     [DbContext(typeof(WorkitDbContext))]
-    partial class WorkitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260619224113_AddExpenseMarkupAndBillings")]
+    partial class AddExpenseMarkupAndBillings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1003,6 +1006,37 @@ namespace Workit.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("PasswordResetTokens", (string)null);
+                });
+
+            modelBuilder.Entity("Workit.Shared.Models.PaydayExpenseLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("LinkedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PaydayExpenseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "JobId");
+
+                    b.HasIndex("CompanyId", "PaydayExpenseId")
+                        .IsUnique();
+
+                    b.ToTable("PaydayExpenseLinks", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.RefreshToken", b =>

@@ -1,11 +1,9 @@
 @page "/payday/expenses"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayExpensesApi ExpensesApi
-@inject IPaydayExpenseLinkApi ExpenseLinkApi
 @inject IJobsApi JobsApi
 @inject PaydayCredentialsInitializer PaydayInit
 @inject IExpensesApi WorkitExpensesApi
-@using System.Text.Json
 @using System.Text.RegularExpressions
 
 <PageTitle>Payday Expenses</PageTitle>
@@ -614,7 +612,8 @@
 
     // ── Job linking state ─────────────────────────────────────────────────────
     private readonly List<Job>                      jobs              = [];
-    private readonly Dictionary<Guid, Guid?>        expenseJobLinks   = new();   // expenseId → jobId
+    private readonly Dictionary<Guid, Guid?>        expenseJobLinks   = new();   // paydayExpenseId → jobId
+    private readonly Dictionary<Guid, Expense>      workitExpensesById = new();  // paydayExpenseId → imported Workit expense
     private readonly Dictionary<Guid, Job?>         autoDetectedJobs  = new();   // expenseId → detected job
     private PaydayExpense? linkingExpense;
     private string         pendingLinkJobId  = string.Empty;
@@ -955,11 +954,17 @@
     // ── Job link helpers ──────────────────────────────────────────────────────
     private async Task LoadAllLinksAsync()
     {
-        var result = await ExpenseLinkApi.GetAllAsync();
+        // Single source of truth: links live on the imported Workit expenses (deduped by PaydayId).
+        var result = await WorkitExpensesApi.GetExpensesAsync();
         if (!result.IsSuccess) return;
         expenseJobLinks.Clear();
-        foreach (var link in result.Value ?? [])
-            expenseJobLinks[link.PaydayExpenseId] = link.JobId;
+        workitExpensesById.Clear();
+        foreach (var e in result.Value ?? [])
+        {
+            if (e.PaydayId is null) continue;
+            workitExpensesById[e.PaydayId.Value] = e;
+            if (e.JobId.HasValue) expenseJobLinks[e.PaydayId.Value] = e.JobId.Value;
+        }
     }
 
     private void DetectJobsFromComments()
@@ -997,14 +1002,16 @@
         linkDialogError = null;
         try
         {
-            var snapshot     = expenses.FirstOrDefault(e => e.Id == linkingExpense.Id) ?? linkingExpense;
-            var snapshotJson = JsonSerializer.Serialize(snapshot);
-            var result = await ExpenseLinkApi.LinkAsync(linkingExpense.Id, jobId, snapshotJson);
+            // Import the Payday expense into the Workit DB (idempotent) and link it to the job.
+            var source  = expenses.FirstOrDefault(e => e.Id == linkingExpense.Id) ?? linkingExpense;
+            var expense = source.ToWorkitExpense(jobId);
+            var result  = await WorkitExpensesApi.ImportPaydayExpenseAsync(expense);
             if (result.IsSuccess && result.Value is not null)
             {
-                expenseJobLinks[linkingExpense.Id] = jobId;
+                expenseJobLinks[linkingExpense.Id]   = jobId;
+                workitExpensesById[linkingExpense.Id] = result.Value;
                 linkingExpense = null;
-                actionResult   = "✓ Expense linked to job.";
+                actionResult   = "✓ Expense imported & linked to job.";
                 actionError    = null;
             }
             else
@@ -1020,13 +1027,10 @@
 
     private async Task UnlinkJobAsync(PaydayExpense expense)
     {
-        // Find the link record by expense id in our local cache
-        // We need the link id — reload from API
-        var linksResult = await ExpenseLinkApi.GetByExpenseAsync(expense.Id);
-        if (!linksResult.IsSuccess || linksResult.Value is null || linksResult.Value.Count == 0) return;
+        if (!workitExpensesById.TryGetValue(expense.Id, out var workit)) return;
 
-        var link   = linksResult.Value[0];
-        var result = await ExpenseLinkApi.UnlinkAsync(link.Id);
+        workit.JobId = null;
+        var result = await WorkitExpensesApi.UpdateExpenseAsync(workit);
         if (result.IsSuccess)
         {
             expenseJobLinks.Remove(expense.Id);
@@ -1070,42 +1074,8 @@
                     continue;
                 }
 
-                var expense = new Expense
-                {
-                    CreditorPaydayId    = pe.Creditor?.Id,
-                    CreditorSsn         = pe.Creditor?.Ssn,
-                    CreditorName        = pe.Creditor?.Name,
-                    PaymentTypePaydayId = pe.PaymentType?.Id,
-                    PaymentTypeName     = pe.PaymentType?.Name,
-                    Status              = pe.Status,
-                    Date                = pe.Date,
-                    DueDate             = pe.DueDate,
-                    FinalDueDate        = pe.FinalDueDate,
-                    PaidDate            = pe.PaidDate,
-                    Reference           = pe.Reference,
-                    Deductible          = pe.Deductible,
-                    Comments            = pe.Comments,
-                    Voucher             = pe.Voucher,
-                    AmountExcludingVat  = pe.AmountExcludingVat,
-                    AmountIncludingVat  = pe.AmountIncludingVat,
-                    AmountVat           = pe.AmountVat,
-                    JobId               = expenseJobLinks.GetValueOrDefault(pe.Id),
-                    Source              = DataSource.Payday,
-                    PaydayId            = pe.Id,
-                    Lines = (pe.Lines ?? []).Select(l => new ExpenseLine
-                    {
-                        Description           = l.Description,
-                        Quantity              = l.Quantity,
-                        UnitPriceExcludingVat = l.UnitPriceExcludingVat ?? 0m,
-                        UnitPriceIncludingVat = l.UnitPriceIncludingVat ?? 0m,
-                        VatPercentage         = l.VatPercentage,
-                        DiscountPercentage    = l.DiscountPercentage,
-                        AccountId             = l.AccountId,
-                        PaydayId              = l.Id
-                    }).ToList()
-                };
-
-                var result = await WorkitExpensesApi.CreateExpenseAsync(expense);
+                var expense = pe.ToWorkitExpense(expenseJobLinks.GetValueOrDefault(pe.Id));
+                var result  = await WorkitExpensesApi.ImportPaydayExpenseAsync(expense);
                 if (result.IsSuccess) created++;
                 else failed++;
             }
