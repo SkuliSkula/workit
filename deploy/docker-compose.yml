@@ -42,6 +42,10 @@ services:
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
       App__Url: ${APP_URL:-https://admin.workit.is}
+    volumes:
+      # DataProtection keys — MUST persist across container recreation, otherwise
+      # every redeploy rotates the key and breaks DB-encrypted credentials.
+      - workit-api-keys:/app/keys
     networks:
       - internal
       - app
@@ -83,3 +87,9 @@ networks:
 
 volumes:
   workit-db-data:
+  # Pre-created and pre-populated on the server to preserve the existing
+  # DataProtection key. Declared external so Compose reuses it without the
+  # "already exists" warning and never destroys it on `compose down -v`.
+  workit-api-keys:
+    external: true
+    name: deploy_workit-api-keys
