@@ -48,6 +48,9 @@ builder.Services.AddCors(options =>
                 .WithOrigins(
                     "https://admin.workit.is",
                     "https://app.workit.is",
+                    // Static site that hosts the password-reset page the
+                    // forgot-password email links to.
+                    "https://help.workit.is",
                     "https://localhost:7100",
                     "https://localhost:7300",
                     "https://localhost:7200",
