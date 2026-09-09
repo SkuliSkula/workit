@@ -187,6 +187,26 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+// ── One-off demo seeding ───────────────────────────────────────────────────────
+// `dotnet Workit.Api.dll --seed-demo` builds the App Store review company and
+// exits without serving. A command-line flag rather than an endpoint: it must
+// not be reachable over HTTP in production, and it only ever touches the demo
+// company's own rows.
+//
+// This must run here — immediately after migrations and before the startup
+// tasks — not later in the file. Once hosted services are in play,
+// InvoiceScanBackgroundService can throw, and the default
+// BackgroundServiceExceptionBehavior.StopHost then tears down the host and
+// disposes the service provider out from under this block.
+if (args.Contains("--seed-demo"))
+{
+    using var demoScope = app.Services.CreateScope();
+    var demoDb = demoScope.ServiceProvider.GetRequiredService<WorkitDbContext>();
+    var summary = await DemoDataSeeder.SeedAsync(demoDb);
+    Console.WriteLine(summary);
+    return;
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -241,20 +261,6 @@ if (!isDesignTime)
             apiLogger.LogError(ex, "Skipping seed because the database is unavailable.");
         }
     }
-}
-
-// ── One-off demo seeding ───────────────────────────────────────────────────────
-// `dotnet run --project Workit.Api -- --seed-demo` builds the App Store review
-// company and exits without starting the server. Deliberately a command-line
-// flag rather than an endpoint: it must not be reachable over HTTP in
-// production, and it only ever touches the demo company's own rows.
-if (args.Contains("--seed-demo"))
-{
-    using var demoScope = app.Services.CreateScope();
-    var demoDb = demoScope.ServiceProvider.GetRequiredService<WorkitDbContext>();
-    var summary = await DemoDataSeeder.SeedAsync(demoDb);
-    Console.WriteLine(summary);
-    return;
 }
 
 try
