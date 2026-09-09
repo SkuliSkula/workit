@@ -227,8 +227,11 @@ public sealed class EmailScanService(
 
     private static async Task<IMailFolder> OpenFolderAsync(ImapClient client, string folderName)
     {
+        // MailKit 4.16.0 annotates Inbox as nullable: it is only populated once
+        // the client has connected. Both call sites connect first, so a null
+        // here means the caller broke that ordering.
         if (folderName.Equals("INBOX", StringComparison.OrdinalIgnoreCase))
-            return client.Inbox;
+            return Inbox(client);
 
         var ns = client.PersonalNamespaces.FirstOrDefault();
         if (ns is not null)
@@ -237,8 +240,12 @@ public sealed class EmailScanService(
             return folder;
         }
 
-        return client.Inbox;
+        return Inbox(client);
     }
+
+    private static IMailFolder Inbox(ImapClient client) =>
+        client.Inbox ?? throw new InvalidOperationException(
+            "IMAP Inbox is unavailable because the client is not connected.");
 
     private static VendorInvoice ToInvoiceFromFile(ParsedInvoice parsed, Guid companyId, string fileName, string dedupKey)
     {
