@@ -792,7 +792,6 @@ public static class DevSeedEndpoints
     private static bool IsIcelandicHoliday(DateOnly d) => (d.Month, d.Day) switch
     {
         (1, 1)  => true, // Nýársdagur
-        (1, 6)  => true, // Þrettándinn
         (3, 20) => true, // Skírdagur (approx)
         (3, 21) => true, // Föstudagurinn langi (approx)
         (3, 23) => true, // Páskadagur (approx)

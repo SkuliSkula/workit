@@ -6,10 +6,10 @@ namespace Workit.Tests.Utilities;
 public class IcelandicHolidaysTests
 {
     [Fact]
-    public void GetHolidays_Returns17Holidays_ForAnyYear()
+    public void GetHolidays_Returns16Holidays_ForAnyYear()
     {
         var holidays = IcelandicHolidays.GetHolidays(2026);
-        holidays.Should().HaveCount(17);
+        holidays.Should().HaveCount(16);
     }
 
     [Fact]
@@ -51,11 +51,14 @@ public class IcelandicHolidaysTests
     }
 
     [Fact]
-    public void GetHolidays_Epiphany_IsHalfDay()
+    public void GetHolidays_Epiphany_IsNotAHoliday()
     {
+        // Þrettándinn (6 January) ends the Icelandic Christmas season and is
+        // widely celebrated, but it is not a public holiday — it is an ordinary
+        // working day. It was removed from the calendar in "Holiday cleanup"
+        // (76f066a); this guards against it being reintroduced.
         var holidays = IcelandicHolidays.GetHolidays(2026);
-        var epiphany = holidays.Single(h => h.Name == "Epiphany");
-        epiphany.IsHalfDay.Should().BeTrue();
+        holidays.Should().NotContain(h => h.Date == new DateOnly(2026, 1, 6));
     }
 
     [Theory]
@@ -140,17 +143,16 @@ public class IcelandicHolidaysTests
     // --- GetHolidaysInMonth ---
 
     [Fact]
-    public void GetHolidaysInMonth_January_Returns2Holidays()
+    public void GetHolidaysInMonth_January_Returns1Holiday()
     {
-        // New Year's Day (Jan 1) + Epiphany (Jan 6)
+        // New Year's Day (Jan 1) is January's only public holiday.
         var holidays = IcelandicHolidays.GetHolidaysInMonth(2026, 1);
-        holidays.Should().HaveCount(2);
+        holidays.Should().HaveCount(1);
         holidays.Should().Contain(h => h.Name == "New Year's Day");
-        holidays.Should().Contain(h => h.Name == "Epiphany");
     }
 
     [Fact]
-    public void GetHolidaysInMonth_December_Returns3Holidays()
+    public void GetHolidaysInMonth_December_Returns4Holidays()
     {
         // Christmas Eve (24), Christmas Day (25), 2nd Day (26), New Year's Eve (31)
         var holidays = IcelandicHolidays.GetHolidaysInMonth(2026, 12);
@@ -172,10 +174,9 @@ public class IcelandicHolidaysTests
     {
         // January 2026: 31 days, weekdays = 22 (Jan 1 = Thursday)
         // Jan 1 (New Year's, full holiday, Thursday) → -1
-        // Jan 6 (Epiphany, half day, Tuesday) → -0.5
-        // Expected: 22 - 1 - 0.5 = 20.5
+        // Expected: 22 - 1 = 21
         var workingDays = IcelandicHolidays.GetWorkingDaysInMonth(2026, 1);
-        workingDays.Should().Be(20.5m);
+        workingDays.Should().Be(21m);
     }
 
     [Fact]
@@ -185,8 +186,9 @@ public class IcelandicHolidaysTests
         // We need to verify the logic works - find a year where a holiday falls on weekend
         // 2022: Jan 1 is Saturday → should not reduce weekday count
         var workingDays2022 = IcelandicHolidays.GetWorkingDaysInMonth(2022, 1);
-        // Jan 2022: 21 weekdays. Jan 1 Sat (no effect), Jan 6 Thu (half day, -0.5)
-        workingDays2022.Should().Be(20.5m);
+        // Jan 2022: 21 weekdays, and New Year's Day falls on the Saturday, so
+        // no weekday is lost. Expected: 21.
+        workingDays2022.Should().Be(21m);
     }
 
     [Fact]
