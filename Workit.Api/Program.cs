@@ -243,6 +243,20 @@ if (!isDesignTime)
     }
 }
 
+// ── One-off demo seeding ───────────────────────────────────────────────────────
+// `dotnet run --project Workit.Api -- --seed-demo` builds the App Store review
+// company and exits without starting the server. Deliberately a command-line
+// flag rather than an endpoint: it must not be reachable over HTTP in
+// production, and it only ever touches the demo company's own rows.
+if (args.Contains("--seed-demo"))
+{
+    using var demoScope = app.Services.CreateScope();
+    var demoDb = demoScope.ServiceProvider.GetRequiredService<WorkitDbContext>();
+    var summary = await DemoDataSeeder.SeedAsync(demoDb);
+    Console.WriteLine(summary);
+    return;
+}
+
 try
 {
     app.Run();
