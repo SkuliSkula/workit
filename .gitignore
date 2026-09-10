@@ -502,3 +502,7 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 deploy/.env
+
+# The custom PdfPig build is a hard dependency of Workit.Api's invoice parsing
+# and is not on nuget.org, so it is committed despite the *.nupkg rule above.
+!local-packages/*.nupkg
