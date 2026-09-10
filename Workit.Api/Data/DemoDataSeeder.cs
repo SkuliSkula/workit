@@ -29,6 +29,22 @@ public static class DemoDataSeeder
     /// <summary>Shared by both demo logins. Must never be rotated — Apple keeps it on file.</summary>
     public const string Password = "WorkitDemo2026!";
 
+    /// <summary>
+    /// True for the two demo logins filed with Apple App Review.
+    ///
+    /// Their password is published in App Store Connect, so anything that would
+    /// change it has to be refused: a single reset — ours while testing, or a
+    /// reviewer's — locks the review team out of the app with no warning, and
+    /// the failure only surfaces as a rejected build.
+    /// </summary>
+    public static bool IsProtectedAccount(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+        var normalized = email.Trim();
+        return normalized.Equals(OwnerEmail, StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals(EmployeeEmail, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static async Task<string> SeedAsync(WorkitDbContext db, CancellationToken ct = default)
     {
         var existing = await db.Companies.FirstOrDefaultAsync(c => c.Name == CompanyName, ct);

@@ -513,7 +513,10 @@ internal static class AuthEndpoints
             var normalizedEmail = request.Email.Trim().ToLowerInvariant();
             var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Email == normalizedEmail, ct);
 
-            if (user is not null)
+            // Demo accounts never get a reset link. The response below is
+            // deliberately identical either way so this does not leak which
+            // addresses are registered.
+            if (user is not null && !DemoDataSeeder.IsProtectedAccount(normalizedEmail))
             {
                 // Expire any existing unused tokens for this email
                 var existing = await db.PasswordResetTokens
@@ -558,6 +561,11 @@ internal static class AuthEndpoints
                     var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Email == token.Email, ct);
                     if (user is null)
                         return Results.BadRequest("This reset link is invalid or has expired.");
+
+                    // Tokens issued before this guard existed are still redeemable,
+                    // so the demo check belongs here too, not only at issue time.
+                    if (DemoDataSeeder.IsProtectedAccount(user.Email))
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
 
                     user.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
                     token.Used = true;

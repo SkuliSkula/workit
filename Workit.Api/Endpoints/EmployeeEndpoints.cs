@@ -195,6 +195,11 @@ internal static class EmployeeEndpoints
                         return Results.NotFound();
                     }
 
+                    if (DemoDataSeeder.IsProtectedAccount(appUser.Email))
+                    {
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
+                    }
+
                     appUser.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
                     await db.SaveChangesAsync(ct);
                     return Results.NoContent();
