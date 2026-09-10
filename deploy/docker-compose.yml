@@ -20,9 +20,9 @@ services:
 
   # ── API ─────────────────────────────────────────────────────────────────────
   workit-api:
-    build:
-      context: ..
-      dockerfile: Workit.Api/Dockerfile
+    # Built and pushed by .github/workflows/deploy.yml; the server only pulls.
+    # IMAGE_TAG is pinned to a commit SHA in .env by deploy/deploy.sh.
+    image: ghcr.io/skuliskula/workit-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       workit-db:
@@ -52,9 +52,7 @@ services:
 
   # ── Owner App (Blazor Server) ───────────────────────────────────────────────
   workit-owner:
-    build:
-      context: ..
-      dockerfile: Workit.OwnerApp/Dockerfile
+    image: ghcr.io/skuliskula/workit-owner:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       - workit-api

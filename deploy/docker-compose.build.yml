@@ -1,0 +1,18 @@
+# Emergency escape hatch: build the images on this machine instead of pulling
+# them from GHCR. Normal deploys go through GitHub Actions and never use this.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+#
+# Both Dockerfiles COPY a pre-published output tree, so run this first:
+#   dotnet publish Workit.Api/Workit.Api.csproj           -c Release -o Workit.Api/publish
+#   dotnet publish Workit.OwnerApp/Workit.OwnerApp.csproj -c Release -o Workit.OwnerApp/publish
+services:
+  workit-api:
+    build:
+      context: ..
+      dockerfile: Workit.Api/Dockerfile
+  workit-owner:
+    build:
+      context: ..
+      dockerfile: Workit.OwnerApp/Dockerfile
