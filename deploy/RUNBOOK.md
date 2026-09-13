@@ -41,6 +41,12 @@ Merging to `main` automatically:
 
 Roughly three minutes. Nothing deploys if the tests fail.
 
+**Documentation-only merges do not deploy.** A merge whose every changed file
+is markdown skips the deploy workflow entirely — no rebuild, no restart. A
+commit touching both markdown and code still deploys as normal. If a deploy is
+skipped and you wanted one, run *Deploy to production* by hand from the Actions
+tab.
+
 ```bash
 gh run list --repo SkuliSkula/workit
 gh run watch <run-id> --repo SkuliSkula/workit
