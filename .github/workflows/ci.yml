@@ -2,6 +2,10 @@ name: CI
 
 # Every push to dev and every PR into dev or main. Deploys live in deploy.yml;
 # this workflow only ever tells you whether the code is sound.
+# Do NOT add paths-ignore here. build-and-test is a required status check on
+# main, and a filtered-out run never reports — so a docs-only PR would sit
+# blocked forever waiting for a check that will never arrive. Deploy.yml can
+# filter safely because nothing requires it.
 on:
   push:
     branches: [dev]

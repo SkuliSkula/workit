@@ -4,6 +4,15 @@ name: Deploy to production
 on:
   push:
     branches: [main]
+    # Documentation-only merges should not rebuild images and restart a live
+    # API. No .md file is embedded into any build, so skipping them cannot
+    # change what runs. A commit touching both markdown and code still
+    # deploys — paths-ignore only skips when *every* changed file matches.
+    #
+    # If a deploy is ever skipped and you wanted one, run this workflow by
+    # hand from the Actions tab (workflow_dispatch, below).
+    paths-ignore:
+      - '**.md'
   workflow_dispatch:
 
 concurrency:
