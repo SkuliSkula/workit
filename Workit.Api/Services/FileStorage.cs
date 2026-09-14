@@ -30,11 +30,25 @@ public sealed class StorageOptions
     /// <summary>Local directory used by the dev fallback when R2 is not configured.</summary>
     public string LocalPath { get; set; } = "AttachmentStore";
 
-    public bool IsR2Configured =>
-        !string.IsNullOrWhiteSpace(ServiceUrl) &&
-        !string.IsNullOrWhiteSpace(AccessKeyId) &&
-        !string.IsNullOrWhiteSpace(SecretAccessKey) &&
-        !string.IsNullOrWhiteSpace(BucketName);
+    public bool IsR2Configured => MissingR2Settings.Count == 0;
+
+    /// <summary>
+    /// Names of the R2 settings that are absent. Used at startup to explain why
+    /// the API fell back to local disk — a single missing value is otherwise silent.
+    /// Never includes secret values, only setting names.
+    /// </summary>
+    public IReadOnlyList<string> MissingR2Settings
+    {
+        get
+        {
+            var missing = new List<string>(4);
+            if (string.IsNullOrWhiteSpace(ServiceUrl)) missing.Add($"{SectionName}:ServiceUrl");
+            if (string.IsNullOrWhiteSpace(AccessKeyId)) missing.Add($"{SectionName}:AccessKeyId");
+            if (string.IsNullOrWhiteSpace(SecretAccessKey)) missing.Add($"{SectionName}:SecretAccessKey");
+            if (string.IsNullOrWhiteSpace(BucketName)) missing.Add($"{SectionName}:BucketName");
+            return missing;
+        }
+    }
 }
 
 /// <summary>
