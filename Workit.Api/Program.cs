@@ -136,10 +136,30 @@ builder.Services.AddSingleton(storageOptions);
 if (storageOptions.IsR2Configured)
 {
     builder.Services.AddSingleton<IFileStorageService, R2FileStorageService>();
+    Log.Information(
+        "Job attachments: storing in Cloudflare R2 — bucket {Bucket} at {Endpoint}.",
+        storageOptions.BucketName, storageOptions.ServiceUrl);
 }
 else
 {
     builder.Services.AddSingleton<IFileStorageService, LocalFileStorageService>();
+    var missing = storageOptions.MissingR2Settings;
+    if (missing.Count == 4)
+    {
+        Log.Information(
+            "Job attachments: storing on local disk at {Path}. R2 is not configured — "
+            + "fine for development, but uploads do not survive a container rebuild.",
+            storageOptions.LocalPath);
+    }
+    else
+    {
+        // A partially-filled config is almost always a typo, and silently using
+        // local disk in production would lose files on the next deploy.
+        Log.Warning(
+            "Job attachments: R2 is only partially configured, so falling back to local disk at {Path}. "
+            + "Missing setting(s): {MissingSettings}. Uploads will NOT go to R2 and do not survive a container rebuild.",
+            storageOptions.LocalPath, string.Join(", ", missing));
+    }
 }
 
 // ── Payday ─────────────────────────────────────────────────────────────────────
