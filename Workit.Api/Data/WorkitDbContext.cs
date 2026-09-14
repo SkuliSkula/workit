@@ -28,6 +28,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<Expense>            Expenses           => Set<Expense>();
     public DbSet<ExpenseLine>        ExpenseLines       => Set<ExpenseLine>();
     public DbSet<ExpenseLineBilling> ExpenseLineBillings => Set<ExpenseLineBilling>();
+    public DbSet<JobAttachment>      JobAttachments     => Set<JobAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -212,5 +213,10 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<ExpenseLineBilling>()
             .HasIndex(x => new { x.CompanyId, x.JobId })
             .HasFilter("\"JobId\" IS NOT NULL");
+
+        // ── Job attachments ───────────────────────────────────────────────────
+        modelBuilder.Entity<JobAttachment>().ToTable("JobAttachments");
+        modelBuilder.Entity<JobAttachment>()
+            .HasIndex(x => new { x.CompanyId, x.JobId });
     }
 }

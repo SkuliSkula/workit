@@ -42,6 +42,12 @@ services:
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
       App__Url: ${APP_URL:-https://admin.workit.is}
+      # Job attachments — Cloudflare R2 (S3-compatible). If unset, the API falls
+      # back to on-disk storage in the container (not durable across redeploys).
+      Storage__ServiceUrl: ${R2_SERVICE_URL:-}
+      Storage__AccessKeyId: ${R2_ACCESS_KEY_ID:-}
+      Storage__SecretAccessKey: ${R2_SECRET_ACCESS_KEY:-}
+      Storage__BucketName: ${R2_BUCKET_NAME:-}
     volumes:
       # DataProtection keys — MUST persist across container recreation, otherwise
       # every redeploy rotates the key and breaks DB-encrypted credentials.

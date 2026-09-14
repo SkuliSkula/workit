@@ -1,11 +1,15 @@
 @page "/jobs/{JobId:guid}"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IAsyncDisposable
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
 @inject IEmployeesApi EmployeesApi
 @inject ICustomersApi CustomersApi
 @inject IExpensesApi ExpensesApi
+@inject IJobAttachmentsApi AttachmentsApi
+@inject AuthSessionService AuthSession
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 <PageTitle>@(job?.Code ?? "Job Details")</PageTitle>
@@ -249,7 +253,257 @@ else if (job is not null)
             </div>
         }
     </FluentCard>
+
+    @* ── Attachments ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body"><strong>Photos &amp; Documents</strong>
+                <span style="color:#6b7280; font-weight:500;">(@attachments.Count)</span>
+            </FluentLabel>
+            <label class="jd-upload-btn">
+                <InputFile OnChange="OnFilesSelectedAsync" multiple accept="image/*,application/pdf" style="display:none;" />
+                @(isUploading ? "Uploading…" : "Upload files")
+            </label>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(attachmentError))
+        {
+            <div style="margin-top:0.75rem; padding:0.6rem 0.9rem; border-radius:8px; background:#fef2f2; color:#991b1b; border:1px solid #fecaca; font-size:0.85rem;">
+                @attachmentError
+            </div>
+        }
+
+        @if (attachments.Count == 0)
+        {
+            <FluentLabel Style="color:#6b7280; margin-top:0.75rem; font-size:0.9rem;">
+                No files yet. Upload photos or PDF documents, or add them from the Workit mobile app on site.
+            </FluentLabel>
+        }
+        else
+        {
+            <div class="jd-attach-grid">
+                @foreach (var a in attachments)
+                {
+                    <div class="jd-attach-card">
+                        <button type="button" class="jd-attach-thumb" @onclick="() => OpenViewerAsync(a)" title="View @a.FileName">
+                            @if (a.Kind == AttachmentKind.Image && thumbnails.TryGetValue(a.Id, out var dataUri))
+                            {
+                                <img src="@dataUri" alt="@a.FileName" />
+                            }
+                            else
+                            {
+                                <span class="jd-attach-icon">@(a.Kind == AttachmentKind.Image ? "🖼️" : "📄")</span>
+                            }
+                            <span class="jd-attach-view-hint">View</span>
+                        </button>
+                        <div class="jd-attach-name" title="@a.FileName">@a.FileName</div>
+                        <div class="jd-attach-meta">@FormatSize(a.SizeBytes) · @a.UploadedByName · @a.UploadedAt.LocalDateTime.ToString("d MMM yyyy")</div>
+                        <div class="jd-attach-actions">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenViewerAsync(a)">View</FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(a)">Download</FluentButton>
+                            @if (CanDelete(a))
+                            {
+                                <FluentButton Appearance="Appearance.Stealth" Style="color:#dc2626;" @onclick="() => DeleteAsync(a)">Delete</FluentButton>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </FluentCard>
+
+    @* ── Attachment viewer ── *@
+    @if (viewerAttachment is not null)
+    {
+        <div class="jd-viewer-overlay" @onclick="CloseViewer">
+            <div class="jd-viewer-dialog" @onclick:stopPropagation="true">
+                <div class="jd-viewer-head">
+                    <span class="jd-viewer-title" title="@viewerAttachment.FileName">@viewerAttachment.FileName</span>
+                    <div style="display:flex; gap:0.4rem;">
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(viewerAttachment)">Download</FluentButton>
+                        <FluentButton Appearance="Appearance.Accent" @onclick="CloseViewer">Close</FluentButton>
+                    </div>
+                </div>
+                <div class="jd-viewer-body">
+                    @if (viewerLoading)
+                    {
+                        <div style="padding:2rem;"><FluentProgressRing /></div>
+                    }
+                    else if (viewerError is not null)
+                    {
+                        <FluentLabel Color="Color.Error" Style="padding:1.5rem;">@viewerError</FluentLabel>
+                    }
+                    else if (viewerAttachment.Kind == AttachmentKind.Image && viewerImageSrc is not null)
+                    {
+                        <img src="@viewerImageSrc" alt="@viewerAttachment.FileName" class="jd-viewer-image" />
+                    }
+                    else if (viewerObjectUrl is not null)
+                    {
+                        <iframe src="@viewerObjectUrl" class="jd-viewer-frame" title="@viewerAttachment.FileName"></iframe>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 }
+
+<style>
+    .jd-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #14304b;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.45rem 0.9rem;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .jd-attach-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.85rem;
+        margin-top: 0.9rem;
+    }
+
+    .jd-attach-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .jd-attach-thumb {
+        position: relative;
+        height: 120px;
+        width: 100%;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .jd-attach-view-hint {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(17, 24, 39, 0.45);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    .jd-attach-thumb:hover .jd-attach-view-hint,
+    .jd-attach-thumb:focus-visible .jd-attach-view-hint {
+        opacity: 1;
+    }
+
+    .jd-viewer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        padding: 2rem;
+    }
+
+    .jd-viewer-dialog {
+        background: #fff;
+        border-radius: 12px;
+        width: min(1000px, 100%);
+        height: min(90vh, 100%);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    .jd-viewer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .jd-viewer-title {
+        font-weight: 600;
+        color: #111827;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .jd-viewer-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1f2937;
+    }
+
+    .jd-viewer-image {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .jd-viewer-frame {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+    }
+
+    .jd-attach-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .jd-attach-icon { font-size: 2.4rem; }
+
+    .jd-attach-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #111827;
+        padding: 0.5rem 0.6rem 0.15rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .jd-attach-meta {
+        font-size: 0.72rem;
+        color: #6b7280;
+        padding: 0 0.6rem 0.4rem;
+    }
+
+    .jd-attach-actions {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0 0.4rem 0.5rem;
+        margin-top: auto;
+    }
+</style>
 
 <style>
     .jd-summary-grid {
@@ -309,6 +563,21 @@ else if (job is not null)
     private readonly List<Material>       materials      = [];
     private readonly List<Employee>       employees      = [];
     private readonly List<Expense>        expenses       = [];
+
+    private readonly List<JobAttachmentInfo> attachments = [];
+    private readonly Dictionary<Guid, string> thumbnails = [];
+    private string? attachmentError;
+    private bool isUploading;
+    private Guid currentUserId;
+    private bool isOwnerOrAdmin;
+
+    private JobAttachmentInfo? viewerAttachment;
+    private bool viewerLoading;
+    private string? viewerError;
+    private string? viewerImageSrc;
+    private string? viewerObjectUrl;   // blob: URL for the PDF iframe, revoked on close
+
+    private const long MaxUploadBytes = 25 * 1024 * 1024;
 
     private decimal TotalHours    => timeEntries.Sum(e => e.Hours);
     private decimal TotalOvertime => timeEntries.Sum(e => e.OvertimeHours);
@@ -378,8 +647,175 @@ else if (job is not null)
         if (expensesResult.IsSuccess) expenses.AddRange(expensesResult.Value ?? []);
         else expenseLoadError = expensesResult.ErrorMessage;
 
+        var session = await AuthSession.GetSessionAsync();
+        currentUserId = session?.UserId ?? Guid.Empty;
+        isOwnerOrAdmin = session is not null &&
+            (string.Equals(session.Role, WorkitRoles.Owner, StringComparison.Ordinal) ||
+             string.Equals(session.Role, WorkitRoles.Admin, StringComparison.Ordinal));
+
+        await LoadAttachmentsAsync();
+
         loading = false;
     }
+
+    private async Task LoadAttachmentsAsync()
+    {
+        var result = await AttachmentsApi.GetForJobAsync(JobId);
+        if (!result.IsSuccess)
+        {
+            attachmentError = result.ErrorMessage;
+            return;
+        }
+
+        attachments.Clear();
+        attachments.AddRange(result.Value ?? []);
+
+        // Load image thumbnails as data URIs (downloads are authenticated server-side).
+        foreach (var a in attachments.Where(a => a.Kind == AttachmentKind.Image && !thumbnails.ContainsKey(a.Id)))
+        {
+            var bytes = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+            if (bytes.IsSuccess && bytes.Value is not null)
+                thumbnails[a.Id] = $"data:{a.ContentType};base64,{Convert.ToBase64String(bytes.Value)}";
+        }
+    }
+
+    private bool CanDelete(JobAttachmentInfo a) =>
+        isOwnerOrAdmin || a.UploadedByUserId == currentUserId;
+
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
+    {
+        attachmentError = null;
+        isUploading = true;
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(maximumFileCount: 20))
+            {
+                if (file.Size == 0) continue;
+                if (file.Size > MaxUploadBytes)
+                {
+                    attachmentError = $"{file.Name} is larger than 25 MB and was skipped.";
+                    continue;
+                }
+
+                await using var stream = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+                // Buffer to a memory stream so the multipart request has a known length.
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                buffer.Position = 0;
+
+                var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+                var result = await AttachmentsApi.UploadAsync(JobId, buffer, file.Name, contentType);
+                if (!result.IsSuccess)
+                    attachmentError = result.ErrorMessage;
+            }
+
+            await LoadAttachmentsAsync();
+        }
+        catch (Exception ex)
+        {
+            attachmentError = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task OpenViewerAsync(JobAttachmentInfo a)
+    {
+        await ClearViewerObjectUrlAsync();
+        viewerAttachment = a;
+        viewerError = null;
+        viewerImageSrc = null;
+        viewerLoading = true;
+
+        try
+        {
+            if (a.Kind == AttachmentKind.Image && thumbnails.TryGetValue(a.Id, out var cached))
+            {
+                // Full image bytes are already loaded for the thumbnail.
+                viewerImageSrc = cached;
+                return;
+            }
+
+            var result = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+            if (!result.IsSuccess || result.Value is null)
+            {
+                viewerError = result.ErrorMessage ?? "The file could not be loaded.";
+                return;
+            }
+
+            var base64 = Convert.ToBase64String(result.Value);
+            if (a.Kind == AttachmentKind.Image)
+                viewerImageSrc = $"data:{a.ContentType};base64,{base64}";
+            else
+                viewerObjectUrl = await JS.InvokeAsync<string>("createBlobUrl", base64, a.ContentType);
+        }
+        catch (Exception ex)
+        {
+            viewerError = $"The file could not be loaded: {ex.Message}";
+        }
+        finally
+        {
+            viewerLoading = false;
+        }
+    }
+
+    private async Task CloseViewer()
+    {
+        await ClearViewerObjectUrlAsync();
+        viewerAttachment = null;
+        viewerImageSrc = null;
+        viewerError = null;
+    }
+
+    private async Task ClearViewerObjectUrlAsync()
+    {
+        if (viewerObjectUrl is not null)
+        {
+            try { await JS.InvokeVoidAsync("revokeBlobUrl", viewerObjectUrl); }
+            catch (JSException) { }
+            catch (InvalidOperationException) { }
+            viewerObjectUrl = null;
+        }
+    }
+
+    private async Task DownloadAsync(JobAttachmentInfo a)
+    {
+        var result = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            attachmentError = result.ErrorMessage ?? "Download failed.";
+            return;
+        }
+
+        var base64 = Convert.ToBase64String(result.Value);
+        await JS.InvokeVoidAsync("triggerFileDownload", a.FileName, base64, a.ContentType);
+    }
+
+    private async Task DeleteAsync(JobAttachmentInfo a)
+    {
+        var result = await AttachmentsApi.DeleteAsync(JobId, a.Id);
+        if (!result.IsSuccess)
+        {
+            attachmentError = result.ErrorMessage ?? "Delete failed.";
+            return;
+        }
+
+        attachments.Remove(a);
+        thumbnails.Remove(a.Id);
+        if (viewerAttachment?.Id == a.Id)
+            await CloseViewer();
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024.0 * 1024.0):0.#} MB",
+        >= 1024        => $"{bytes / 1024.0:0.#} KB",
+        _              => $"{bytes} B"
+    };
+
+    public async ValueTask DisposeAsync() => await ClearViewerObjectUrlAsync();
 
     private string EmployeeName(Guid employeeId) =>
         employees.FirstOrDefault(e => e.Id == employeeId)?.DisplayName ?? "—";

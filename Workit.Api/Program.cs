@@ -128,6 +128,20 @@ else
     builder.Services.AddSingleton<IAnalyticsService, NullAnalyticsService>();
 }
 
+// ── File storage (job attachments) ───────────────────────────────────────────────
+// R2 (Cloudflare object storage) in production; a local-disk fallback in dev so the
+// feature works without cloud credentials. The API is the only process with access.
+var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
+builder.Services.AddSingleton(storageOptions);
+if (storageOptions.IsR2Configured)
+{
+    builder.Services.AddSingleton<IFileStorageService, R2FileStorageService>();
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorageService, LocalFileStorageService>();
+}
+
 // ── Payday ─────────────────────────────────────────────────────────────────────
 // The API is the only process that talks to Payday. It registers the "PaydayApi"
 // HttpClient plus the direct Payday clients; /api/payday/* proxies them for the
@@ -237,6 +251,7 @@ app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
 app.MapSalesInvoiceEndpoints();
 app.MapExpenseEndpoints();
+app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapDevSeedEndpoints();
 
