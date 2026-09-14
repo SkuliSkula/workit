@@ -1,5 +1,6 @@
 @page "/jobs/{JobId:guid}"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IAsyncDisposable
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
@@ -284,7 +285,7 @@ else if (job is not null)
                 @foreach (var a in attachments)
                 {
                     <div class="jd-attach-card">
-                        <div class="jd-attach-thumb">
+                        <button type="button" class="jd-attach-thumb" @onclick="() => OpenViewerAsync(a)" title="View @a.FileName">
                             @if (a.Kind == AttachmentKind.Image && thumbnails.TryGetValue(a.Id, out var dataUri))
                             {
                                 <img src="@dataUri" alt="@a.FileName" />
@@ -293,10 +294,12 @@ else if (job is not null)
                             {
                                 <span class="jd-attach-icon">@(a.Kind == AttachmentKind.Image ? "🖼️" : "📄")</span>
                             }
-                        </div>
+                            <span class="jd-attach-view-hint">View</span>
+                        </button>
                         <div class="jd-attach-name" title="@a.FileName">@a.FileName</div>
                         <div class="jd-attach-meta">@FormatSize(a.SizeBytes) · @a.UploadedByName · @a.UploadedAt.LocalDateTime.ToString("d MMM yyyy")</div>
                         <div class="jd-attach-actions">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => OpenViewerAsync(a)">View</FluentButton>
                             <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(a)">Download</FluentButton>
                             @if (CanDelete(a))
                             {
@@ -308,6 +311,40 @@ else if (job is not null)
             </div>
         }
     </FluentCard>
+
+    @* ── Attachment viewer ── *@
+    @if (viewerAttachment is not null)
+    {
+        <div class="jd-viewer-overlay" @onclick="CloseViewer">
+            <div class="jd-viewer-dialog" @onclick:stopPropagation="true">
+                <div class="jd-viewer-head">
+                    <span class="jd-viewer-title" title="@viewerAttachment.FileName">@viewerAttachment.FileName</span>
+                    <div style="display:flex; gap:0.4rem;">
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(viewerAttachment)">Download</FluentButton>
+                        <FluentButton Appearance="Appearance.Accent" @onclick="CloseViewer">Close</FluentButton>
+                    </div>
+                </div>
+                <div class="jd-viewer-body">
+                    @if (viewerLoading)
+                    {
+                        <div style="padding:2rem;"><FluentProgressRing /></div>
+                    }
+                    else if (viewerError is not null)
+                    {
+                        <FluentLabel Color="Color.Error" Style="padding:1.5rem;">@viewerError</FluentLabel>
+                    }
+                    else if (viewerAttachment.Kind == AttachmentKind.Image && viewerImageSrc is not null)
+                    {
+                        <img src="@viewerImageSrc" alt="@viewerAttachment.FileName" class="jd-viewer-image" />
+                    }
+                    else if (viewerObjectUrl is not null)
+                    {
+                        <iframe src="@viewerObjectUrl" class="jd-viewer-frame" title="@viewerAttachment.FileName"></iframe>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 }
 
 <style>
@@ -341,12 +378,99 @@ else if (job is not null)
     }
 
     .jd-attach-thumb {
+        position: relative;
         height: 120px;
+        width: 100%;
         background: #f3f4f6;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .jd-attach-view-hint {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(17, 24, 39, 0.45);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    .jd-attach-thumb:hover .jd-attach-view-hint,
+    .jd-attach-thumb:focus-visible .jd-attach-view-hint {
+        opacity: 1;
+    }
+
+    .jd-viewer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        padding: 2rem;
+    }
+
+    .jd-viewer-dialog {
+        background: #fff;
+        border-radius: 12px;
+        width: min(1000px, 100%);
+        height: min(90vh, 100%);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    .jd-viewer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .jd-viewer-title {
+        font-weight: 600;
+        color: #111827;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .jd-viewer-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #1f2937;
+    }
+
+    .jd-viewer-image {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .jd-viewer-frame {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
     }
 
     .jd-attach-thumb img {
@@ -446,6 +570,12 @@ else if (job is not null)
     private bool isUploading;
     private Guid currentUserId;
     private bool isOwnerOrAdmin;
+
+    private JobAttachmentInfo? viewerAttachment;
+    private bool viewerLoading;
+    private string? viewerError;
+    private string? viewerImageSrc;
+    private string? viewerObjectUrl;   // blob: URL for the PDF iframe, revoked on close
 
     private const long MaxUploadBytes = 25 * 1024 * 1024;
 
@@ -591,6 +721,65 @@ else if (job is not null)
         }
     }
 
+    private async Task OpenViewerAsync(JobAttachmentInfo a)
+    {
+        await ClearViewerObjectUrlAsync();
+        viewerAttachment = a;
+        viewerError = null;
+        viewerImageSrc = null;
+        viewerLoading = true;
+
+        try
+        {
+            if (a.Kind == AttachmentKind.Image && thumbnails.TryGetValue(a.Id, out var cached))
+            {
+                // Full image bytes are already loaded for the thumbnail.
+                viewerImageSrc = cached;
+                return;
+            }
+
+            var result = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+            if (!result.IsSuccess || result.Value is null)
+            {
+                viewerError = result.ErrorMessage ?? "The file could not be loaded.";
+                return;
+            }
+
+            var base64 = Convert.ToBase64String(result.Value);
+            if (a.Kind == AttachmentKind.Image)
+                viewerImageSrc = $"data:{a.ContentType};base64,{base64}";
+            else
+                viewerObjectUrl = await JS.InvokeAsync<string>("createBlobUrl", base64, a.ContentType);
+        }
+        catch (Exception ex)
+        {
+            viewerError = $"The file could not be loaded: {ex.Message}";
+        }
+        finally
+        {
+            viewerLoading = false;
+        }
+    }
+
+    private async Task CloseViewer()
+    {
+        await ClearViewerObjectUrlAsync();
+        viewerAttachment = null;
+        viewerImageSrc = null;
+        viewerError = null;
+    }
+
+    private async Task ClearViewerObjectUrlAsync()
+    {
+        if (viewerObjectUrl is not null)
+        {
+            try { await JS.InvokeVoidAsync("revokeBlobUrl", viewerObjectUrl); }
+            catch (JSException) { }
+            catch (InvalidOperationException) { }
+            viewerObjectUrl = null;
+        }
+    }
+
     private async Task DownloadAsync(JobAttachmentInfo a)
     {
         var result = await AttachmentsApi.DownloadAsync(JobId, a.Id);
@@ -615,6 +804,8 @@ else if (job is not null)
 
         attachments.Remove(a);
         thumbnails.Remove(a.Id);
+        if (viewerAttachment?.Id == a.Id)
+            await CloseViewer();
     }
 
     private static string FormatSize(long bytes) => bytes switch
@@ -623,6 +814,8 @@ else if (job is not null)
         >= 1024        => $"{bytes / 1024.0:0.#} KB",
         _              => $"{bytes} B"
     };
+
+    public async ValueTask DisposeAsync() => await ClearViewerObjectUrlAsync();
 
     private string EmployeeName(Guid employeeId) =>
         employees.FirstOrDefault(e => e.Id == employeeId)?.DisplayName ?? "—";
