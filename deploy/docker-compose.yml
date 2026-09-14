@@ -62,8 +62,6 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       # Internal Docker DNS — avoids a public roundtrip for server→API calls
       ApiBaseUrl: "http://workit-api:8080/"
-      Payday__ClientId: ${PAYDAY_CLIENT_ID:-}
-      Payday__ClientSecret: ${PAYDAY_CLIENT_SECRET:-}
     networks:
       - app
 

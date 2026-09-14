@@ -74,6 +74,38 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
         }
     }
 
+    /// <summary>Delete that reports success as a typed result, for interfaces that expect ApiResult&lt;bool&gt;.</summary>
+    protected async Task<ApiResult<bool>> DeleteForBoolAsync(string requestUri, string defaultErrorMessage)
+    {
+        var result = await DeleteAsync(requestUri, defaultErrorMessage);
+        return result.IsSuccess
+            ? ApiResult<bool>.Success(true)
+            : ApiResult<bool>.Failure(result.ErrorMessage ?? defaultErrorMessage);
+    }
+
+    protected async Task<ApiResult<byte[]>> GetBytesAsync(string requestUri, string defaultErrorMessage)
+    {
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Get, requestUri);
+            using var response = await httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return ApiResult<byte[]>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+            }
+
+            return ApiResult<byte[]>.Success(await response.Content.ReadAsByteArrayAsync());
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<byte[]>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<byte[]>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
+        }
+    }
+
     private async Task<ApiResult> SendAsync<T>(HttpMethod method, string requestUri, T payload, string defaultErrorMessage)
     {
         try

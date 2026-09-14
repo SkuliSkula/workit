@@ -32,16 +32,23 @@ else
     <FluentCard Class="admin-card" AreaRestricted="false">
         <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">API Credentials</FluentLabel>
         <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-bottom:1rem;">
-            Enter the Client ID and Client Secret from your Payday account.
-            You can find these in Payday under Settings → API / Integrations.
+            @if (hasExistingCredentials)
+            {
+                <text>Credentials are stored securely and cannot be viewed. To replace them, enter a new Client ID and Client Secret and save.</text>
+            }
+            else
+            {
+                <text>Enter the Client ID and Client Secret from your Payday account.
+                You can find these in Payday under Settings → API / Integrations.</text>
+            }
         </FluentLabel>
 
         <div style="display:grid; gap:1rem; max-width:500px;">
             <div>
-                <FluentTextField Label="Client ID" @bind-Value="clientId" Style="width:100%;" Placeholder="e.g. abc123-def456-..." />
+                <FluentTextField Label="Client ID" @bind-Value="clientId" Style="width:100%;" Placeholder="@(hasExistingCredentials ? "Enter a new Client ID to replace the stored one" : "e.g. abc123-def456-...")" />
             </div>
             <div>
-                <FluentTextField Label="Client Secret" @bind-Value="clientSecret" Style="width:100%;" Placeholder="e.g. sk_live_..." TextFieldType="TextFieldType.Password" />
+                <FluentTextField Label="Client Secret" @bind-Value="clientSecret" Style="width:100%;" Placeholder="@(hasExistingCredentials ? "Enter a new Client Secret to replace the stored one" : "e.g. sk_live_...")" TextFieldType="TextFieldType.Password" />
             </div>
         </div>
 
@@ -80,8 +87,8 @@ else
 
             <FluentButton Appearance="Appearance.Accent"
                           @onclick="SaveCredentialsAsync"
-                          Disabled="@isSaving">
-                @(isSaving ? "Saving…" : "Save Credentials")
+                          Disabled="@(isSaving || !HasCredentials)">
+                @(isSaving ? "Saving…" : hasExistingCredentials ? "Replace Credentials" : "Save Credentials")
             </FluentButton>
 
             @if (hasExistingCredentials)
@@ -138,12 +145,11 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // The API never returns stored credentials — only whether they exist.
         var result = await CompanyApi.GetCompanyAsync();
         if (result.IsSuccess && result.Value is not null)
         {
-            clientId = result.Value.PaydayClientId ?? "";
-            clientSecret = result.Value.PaydayClientSecret ?? "";
-            hasExistingCredentials = !string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(clientSecret);
+            hasExistingCredentials = result.Value.HasPaydayCredentials;
         }
         isLoading = false;
     }
@@ -179,8 +185,14 @@ else
         var result = await CompanyApi.UpdatePaydayCredentialsAsync(clientId, clientSecret);
         if (result.IsSuccess)
         {
-            saveMessage = "Payday credentials saved successfully.";
-            hasExistingCredentials = HasCredentials;
+            saveMessage = hasExistingCredentials
+                ? "Payday credentials replaced."
+                : "Payday credentials saved.";
+            hasExistingCredentials = true;
+            // Clear the form so the secret doesn't linger in the UI.
+            clientId = "";
+            clientSecret = "";
+            testMessage = null;
         }
         else
         {
