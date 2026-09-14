@@ -106,6 +106,38 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
         }
     }
 
+    /// <summary>Uploads a file as multipart/form-data (field name "file") and reads a JSON response.</summary>
+    protected async Task<ApiResult<TResponse>> PostFileForJsonAsync<TResponse>(
+        string requestUri, Stream content, string fileName, string contentType, string defaultErrorMessage)
+    {
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Post, requestUri);
+            using var form = new MultipartFormDataContent();
+            using var fileContent = new StreamContent(content);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            form.Add(fileContent, "file", fileName);
+            request.Content = form;
+
+            using var response = await httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+            }
+
+            var value = await response.Content.ReadFromJsonAsync<TResponse>();
+            return ApiResult<TResponse>.Success(value);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<TResponse>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<TResponse>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
+        }
+    }
+
     private async Task<ApiResult> SendAsync<T>(HttpMethod method, string requestUri, T payload, string defaultErrorMessage)
     {
         try

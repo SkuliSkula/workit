@@ -6,6 +6,9 @@
 @inject IEmployeesApi EmployeesApi
 @inject ICustomersApi CustomersApi
 @inject IExpensesApi ExpensesApi
+@inject IJobAttachmentsApi AttachmentsApi
+@inject AuthSessionService AuthSession
+@inject IJSRuntime JS
 @inject NavigationManager Nav
 
 <PageTitle>@(job?.Code ?? "Job Details")</PageTitle>
@@ -249,7 +252,134 @@ else if (job is not null)
             </div>
         }
     </FluentCard>
+
+    @* ── Attachments ── *@
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+            <FluentLabel Typo="Typography.Body"><strong>Photos &amp; Documents</strong>
+                <span style="color:#6b7280; font-weight:500;">(@attachments.Count)</span>
+            </FluentLabel>
+            <label class="jd-upload-btn">
+                <InputFile OnChange="OnFilesSelectedAsync" multiple accept="image/*,application/pdf" style="display:none;" />
+                @(isUploading ? "Uploading…" : "Upload files")
+            </label>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(attachmentError))
+        {
+            <div style="margin-top:0.75rem; padding:0.6rem 0.9rem; border-radius:8px; background:#fef2f2; color:#991b1b; border:1px solid #fecaca; font-size:0.85rem;">
+                @attachmentError
+            </div>
+        }
+
+        @if (attachments.Count == 0)
+        {
+            <FluentLabel Style="color:#6b7280; margin-top:0.75rem; font-size:0.9rem;">
+                No files yet. Upload photos or PDF documents, or add them from the Workit mobile app on site.
+            </FluentLabel>
+        }
+        else
+        {
+            <div class="jd-attach-grid">
+                @foreach (var a in attachments)
+                {
+                    <div class="jd-attach-card">
+                        <div class="jd-attach-thumb">
+                            @if (a.Kind == AttachmentKind.Image && thumbnails.TryGetValue(a.Id, out var dataUri))
+                            {
+                                <img src="@dataUri" alt="@a.FileName" />
+                            }
+                            else
+                            {
+                                <span class="jd-attach-icon">@(a.Kind == AttachmentKind.Image ? "🖼️" : "📄")</span>
+                            }
+                        </div>
+                        <div class="jd-attach-name" title="@a.FileName">@a.FileName</div>
+                        <div class="jd-attach-meta">@FormatSize(a.SizeBytes) · @a.UploadedByName · @a.UploadedAt.LocalDateTime.ToString("d MMM yyyy")</div>
+                        <div class="jd-attach-actions">
+                            <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(a)">Download</FluentButton>
+                            @if (CanDelete(a))
+                            {
+                                <FluentButton Appearance="Appearance.Stealth" Style="color:#dc2626;" @onclick="() => DeleteAsync(a)">Delete</FluentButton>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </FluentCard>
 }
+
+<style>
+    .jd-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #14304b;
+        color: #fff;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.45rem 0.9rem;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+    .jd-attach-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.85rem;
+        margin-top: 0.9rem;
+    }
+
+    .jd-attach-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .jd-attach-thumb {
+        height: 120px;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .jd-attach-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .jd-attach-icon { font-size: 2.4rem; }
+
+    .jd-attach-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #111827;
+        padding: 0.5rem 0.6rem 0.15rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .jd-attach-meta {
+        font-size: 0.72rem;
+        color: #6b7280;
+        padding: 0 0.6rem 0.4rem;
+    }
+
+    .jd-attach-actions {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0 0.4rem 0.5rem;
+        margin-top: auto;
+    }
+</style>
 
 <style>
     .jd-summary-grid {
@@ -309,6 +439,15 @@ else if (job is not null)
     private readonly List<Material>       materials      = [];
     private readonly List<Employee>       employees      = [];
     private readonly List<Expense>        expenses       = [];
+
+    private readonly List<JobAttachmentInfo> attachments = [];
+    private readonly Dictionary<Guid, string> thumbnails = [];
+    private string? attachmentError;
+    private bool isUploading;
+    private Guid currentUserId;
+    private bool isOwnerOrAdmin;
+
+    private const long MaxUploadBytes = 25 * 1024 * 1024;
 
     private decimal TotalHours    => timeEntries.Sum(e => e.Hours);
     private decimal TotalOvertime => timeEntries.Sum(e => e.OvertimeHours);
@@ -378,8 +517,112 @@ else if (job is not null)
         if (expensesResult.IsSuccess) expenses.AddRange(expensesResult.Value ?? []);
         else expenseLoadError = expensesResult.ErrorMessage;
 
+        var session = await AuthSession.GetSessionAsync();
+        currentUserId = session?.UserId ?? Guid.Empty;
+        isOwnerOrAdmin = session is not null &&
+            (string.Equals(session.Role, WorkitRoles.Owner, StringComparison.Ordinal) ||
+             string.Equals(session.Role, WorkitRoles.Admin, StringComparison.Ordinal));
+
+        await LoadAttachmentsAsync();
+
         loading = false;
     }
+
+    private async Task LoadAttachmentsAsync()
+    {
+        var result = await AttachmentsApi.GetForJobAsync(JobId);
+        if (!result.IsSuccess)
+        {
+            attachmentError = result.ErrorMessage;
+            return;
+        }
+
+        attachments.Clear();
+        attachments.AddRange(result.Value ?? []);
+
+        // Load image thumbnails as data URIs (downloads are authenticated server-side).
+        foreach (var a in attachments.Where(a => a.Kind == AttachmentKind.Image && !thumbnails.ContainsKey(a.Id)))
+        {
+            var bytes = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+            if (bytes.IsSuccess && bytes.Value is not null)
+                thumbnails[a.Id] = $"data:{a.ContentType};base64,{Convert.ToBase64String(bytes.Value)}";
+        }
+    }
+
+    private bool CanDelete(JobAttachmentInfo a) =>
+        isOwnerOrAdmin || a.UploadedByUserId == currentUserId;
+
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
+    {
+        attachmentError = null;
+        isUploading = true;
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(maximumFileCount: 20))
+            {
+                if (file.Size == 0) continue;
+                if (file.Size > MaxUploadBytes)
+                {
+                    attachmentError = $"{file.Name} is larger than 25 MB and was skipped.";
+                    continue;
+                }
+
+                await using var stream = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+                // Buffer to a memory stream so the multipart request has a known length.
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                buffer.Position = 0;
+
+                var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+                var result = await AttachmentsApi.UploadAsync(JobId, buffer, file.Name, contentType);
+                if (!result.IsSuccess)
+                    attachmentError = result.ErrorMessage;
+            }
+
+            await LoadAttachmentsAsync();
+        }
+        catch (Exception ex)
+        {
+            attachmentError = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task DownloadAsync(JobAttachmentInfo a)
+    {
+        var result = await AttachmentsApi.DownloadAsync(JobId, a.Id);
+        if (!result.IsSuccess || result.Value is null)
+        {
+            attachmentError = result.ErrorMessage ?? "Download failed.";
+            return;
+        }
+
+        var base64 = Convert.ToBase64String(result.Value);
+        await JS.InvokeVoidAsync("triggerFileDownload", a.FileName, base64, a.ContentType);
+    }
+
+    private async Task DeleteAsync(JobAttachmentInfo a)
+    {
+        var result = await AttachmentsApi.DeleteAsync(JobId, a.Id);
+        if (!result.IsSuccess)
+        {
+            attachmentError = result.ErrorMessage ?? "Delete failed.";
+            return;
+        }
+
+        attachments.Remove(a);
+        thumbnails.Remove(a.Id);
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024.0 * 1024.0):0.#} MB",
+        >= 1024        => $"{bytes / 1024.0:0.#} KB",
+        _              => $"{bytes} B"
+    };
 
     private string EmployeeName(Guid employeeId) =>
         employees.FirstOrDefault(e => e.Id == employeeId)?.DisplayName ?? "—";
