@@ -13,6 +13,7 @@ using Workit.Api.Data;
 using Workit.Api.Endpoints;
 using Workit.Api.Services;
 using Workit.Shared.Auth;
+using Workit.Shared.Payday;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
@@ -127,12 +128,11 @@ else
     builder.Services.AddSingleton<IAnalyticsService, NullAnalyticsService>();
 }
 
-// Payday API HttpClient (for credential testing)
-builder.Services.AddHttpClient("PaydayApi", client =>
-{
-    client.BaseAddress = new Uri("https://api.payday.is/");
-    client.DefaultRequestHeaders.Add("Api-Version", "alpha");
-});
+// ── Payday ─────────────────────────────────────────────────────────────────────
+// The API is the only process that talks to Payday. It registers the "PaydayApi"
+// HttpClient plus the direct Payday clients; /api/payday/* proxies them for the
+// Owner app using each company's encrypted credentials (see PaydayEndpoints).
+builder.Services.AddPaydayApiClients();
 
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
@@ -237,6 +237,7 @@ app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
 app.MapSalesInvoiceEndpoints();
 app.MapExpenseEndpoints();
+app.MapPaydayEndpoints();
 app.MapDevSeedEndpoints();
 
 // ── Startup tasks ──────────────────────────────────────────────────────────────

@@ -45,6 +45,36 @@ internal static class EndpointHelpers
         return false;
     }
 
+    /// <summary>
+    /// Prepares a Company for an API response: returns a copy with the stored Payday
+    /// credentials replaced by a boolean flag, so the values never leave the API.
+    /// Returns a new instance so a tracked entity is never modified.
+    /// Call this on every Company the API returns.
+    /// </summary>
+    internal static Workit.Shared.Models.Company WithoutSecrets(this Workit.Shared.Models.Company company) =>
+        new()
+        {
+            Id                  = company.Id,
+            Name                = company.Name,
+            Ssn                 = company.Ssn,
+            Email               = company.Email,
+            Address             = company.Address,
+            Phone               = company.Phone,
+            Owner               = company.Owner,
+            DrivingUnitPrice    = company.DrivingUnitPrice,
+            StandardHoursPerDay = company.StandardHoursPerDay,
+            ZipCode             = company.ZipCode,
+            City                = company.City,
+            VatNumber           = company.VatNumber,
+            Source              = company.Source,
+            PaydayId            = company.PaydayId,
+            PaydayClientId      = null,
+            PaydayClientSecret  = null,
+            HasPaydayCredentials =
+                !string.IsNullOrWhiteSpace(company.PaydayClientId) &&
+                !string.IsNullOrWhiteSpace(company.PaydayClientSecret)
+        };
+
     internal static bool IsValidCompany(Workit.Shared.Models.Company company) =>
         !string.IsNullOrWhiteSpace(company.Name) &&
         !string.IsNullOrWhiteSpace(company.Ssn) &&

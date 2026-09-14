@@ -2,7 +2,6 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayInvoicesApi InvoicesApi
 @inject IJSRuntime JS
-@inject PaydayCredentialsInitializer PaydayInit
 @implements IAsyncDisposable
 
 <PageTitle>Payday Dashboard</PageTitle>
@@ -196,7 +195,6 @@ else
     // ── Lifecycle ────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
-        await PaydayInit.InitializeAsync();
         await LoadDashboardAsync();
     }
 

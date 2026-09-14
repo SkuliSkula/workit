@@ -74,6 +74,10 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => x.PaydayId)
             .HasFilter("\"PaydayId\" IS NOT NULL");
 
+        // Response-only flag; the encrypted credential columns are the source of truth.
+        modelBuilder.Entity<Company>()
+            .Ignore(x => x.HasPaydayCredentials);
+
         modelBuilder.Entity<Job>()
             .HasIndex(x => new { x.CompanyId, x.Code })
             .IsUnique(false);

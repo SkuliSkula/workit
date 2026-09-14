@@ -19,17 +19,15 @@ internal static class CompanyEndpoints
         securedApi.MapGet("/company", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
+                    // Available to every role: employees (mobile apps) need the company's
+                    // name, driving rate and standard hours. Payday credentials are never
+                    // returned — see WithoutSecrets.
                     var userContext = httpContext.User.ToUserContext();
-                    // AsNoTracking so decrypted values never accidentally get saved back
                     var company = await db.Companies.AsNoTracking()
                         .FirstOrDefaultAsync(x => x.Id == userContext.CompanyId, ct);
                     if (company is null) return Results.NotFound();
 
-                    // Decrypt Payday credentials before sending to client (transmitted over HTTPS)
-                    company.PaydayClientId     = credentialProtection.Unprotect(company.PaydayClientId);
-                    company.PaydayClientSecret = credentialProtection.Unprotect(company.PaydayClientSecret);
-
-                    return Results.Ok(company);
+                    return Results.Ok(company.WithoutSecrets());
                 },
                 logger,
                 "loading company"))
@@ -59,7 +57,7 @@ internal static class CompanyEndpoints
                         // Otherwise link the user to the existing company record
                         db.UserCompanies.Add(new UserCompany { UserId = userContext.UserId, CompanyId = existing.Id });
                         await db.SaveChangesAsync(ct);
-                        return Results.Ok(existing);
+                        return Results.Ok(existing.WithoutSecrets());
                     }
 
                     var company = new Company
@@ -89,7 +87,7 @@ internal static class CompanyEndpoints
                     db.UserCompanies.Add(userCompany);
                     await db.SaveChangesAsync(ct);
 
-                    return Results.Ok(company);
+                    return Results.Ok(company.WithoutSecrets());
                 },
                 logger,
                 "creating a new company"))
@@ -107,7 +105,7 @@ internal static class CompanyEndpoints
 
                     company.DrivingUnitPrice = request.UnitPrice;
                     await db.SaveChangesAsync(ct);
-                    return Results.Ok(company);
+                    return Results.Ok(company.WithoutSecrets());
                 },
                 logger,
                 "updating driving rate"))
@@ -118,6 +116,9 @@ internal static class CompanyEndpoints
             WorkitDbContext db,
             HttpContext httpContext) =>
         {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
             var userContext = httpContext.User.ToUserContext();
             var company = await db.Companies.FindAsync(userContext.CompanyId);
             if (company is null) return Results.NotFound();
@@ -148,8 +149,12 @@ internal static class CompanyEndpoints
 
         app.MapPost("/api/company/payday-test", async (
             UpdatePaydayCredentialsRequest req,
+            HttpContext httpContext,
             IHttpClientFactory httpClientFactory) =>
         {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+
             if (string.IsNullOrWhiteSpace(req.ClientId) || string.IsNullOrWhiteSpace(req.ClientSecret))
                 return Results.BadRequest("ClientId and ClientSecret are required.");
 

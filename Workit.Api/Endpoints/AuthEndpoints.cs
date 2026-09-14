@@ -115,9 +115,10 @@ internal static class AuthEndpoints
                     if (httpContext.User.IsAdmin())
                     {
                         var allCompanies = await db.Companies
+                            .AsNoTracking()
                             .OrderBy(x => x.Name)
                             .ToListAsync(ct);
-                        return Results.Ok(allCompanies);
+                        return Results.Ok(allCompanies.Select(c => c.WithoutSecrets()).ToList());
                     }
 
                     var companyIds = await db.UserCompanies
@@ -126,11 +127,12 @@ internal static class AuthEndpoints
                         .ToListAsync(ct);
 
                     var companies = await db.Companies
+                        .AsNoTracking()
                         .Where(x => companyIds.Contains(x.Id))
                         .OrderBy(x => x.Name)
                         .ToListAsync(ct);
 
-                    return Results.Ok(companies);
+                    return Results.Ok(companies.Select(c => c.WithoutSecrets()).ToList());
                 },
                 logger,
                 "listing user companies"))

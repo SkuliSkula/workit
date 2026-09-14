@@ -9,7 +9,6 @@
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
 @inject IExpensesApi ExpensesApi
-@inject PaydayCredentialsInitializer PaydayInit
 @inject NavigationManager Navigation
 
 @using System.Text.Json
@@ -587,7 +586,6 @@
     // ── Lifecycle ────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
-        await PaydayInit.InitializeAsync();
 
         // Default date range: previous month
         var today = DateTime.Today;
