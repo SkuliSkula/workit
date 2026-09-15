@@ -4,7 +4,7 @@
     {
       "label": "Kill Workit Ports",
       "type": "shell",
-      "command": "for p in 5100 5200 5300 7100 7200 7300; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
+      "command": "for p in 5200 5300 7200 7300; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
       "problemMatcher": []
     },
     {
@@ -20,15 +20,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Kill EmployeeApp Ports",
-      "type": "shell",
-      "command": "for p in 5100 7100; do pids=$(lsof -ti tcp:$p); [ -n \"$pids\" ] && kill $pids; done; sleep 1",
-      "problemMatcher": []
-    },
-    {
       "label": "Open Workit Safari",
       "type": "shell",
-      "command": "osascript -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5100\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5200/swagger\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5300\"}'",
+      "command": "osascript -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5200/swagger\"}' -e 'tell application \"Safari\" to make new document with properties {URL:\"http://localhost:5300\"}'",
       "dependsOn": ["Kill Workit Ports"],
       "problemMatcher": []
     }

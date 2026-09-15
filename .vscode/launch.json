@@ -38,25 +38,6 @@
       "preLaunchTask": "Kill OwnerApp Ports",
       "postDebugTask": "Kill OwnerApp Ports",
       "stopAtEntry": false
-    },
-    {
-      "name": "Workit EmployeeApp",
-      "type": "coreclr",
-      "request": "launch",
-      "program": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "Workit.EmployeeApp/Workit.EmployeeApp.csproj"
-      ],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      },
-      "preLaunchTask": "Kill EmployeeApp Ports",
-      "postDebugTask": "Kill EmployeeApp Ports",
-      "stopAtEntry": false
     }
   ],
   "compounds": [
@@ -64,8 +45,7 @@
       "name": "Workit - Run All",
       "configurations": [
         "Workit API",
-        "Workit OwnerApp",
-        "Workit EmployeeApp"
+        "Workit OwnerApp"
       ],
       "preLaunchTask": "Open Workit Safari",
       "stopAll": true

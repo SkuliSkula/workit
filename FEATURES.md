@@ -1,6 +1,6 @@
 # Workit — Feature List
 
-Workit is a workforce management system for service contractors. It has two user-facing apps — **Owner App** (web, for company managers) and **Employee App** (mobile-first PWA, for field workers) — backed by a shared REST API.
+Workit is a workforce management system for service contractors. This repository contains the **Owner App** (web, for company managers) and the shared REST API. The iOS employee app is maintained separately; see the [deploy and release runbook](deploy/RUNBOOK.md).
 
 ---
 
@@ -61,34 +61,6 @@ Workit is a workforce management system for service contractors. It has two user
 
 ---
 
-## Employee App
-
-### Personal Dashboard
-- Avatar card with name, company, and worked-days badge for the month
-- KPI summary: total hours, jobs worked, entries logged
-- Daily load bar chart for the current month
-- Top jobs by hours
-- Recent entries list
-- Month navigation with swipe gesture support
-
-### Time Entry Logging
-- Log own hours: select job, work date, regular hours, overtime hours, optional notes
-- View personal entry history (date, job, hours, overtime, notes)
-- 30-day rolling summary in the header (total hours, entry count, unique jobs)
-- FAB (floating action button) opens a bottom-sheet entry form
-
-### Materials
-- Browse the company material catalog filtered by category
-- Stock level indicators (green / orange / red)
-- Log material usage per job: select job, enter quantity, optional notes
-
-### Tool Tracker
-- **With me**: tools currently assigned to the employee — name, serial number, duration held, return button
-- **Available**: tools in stock — take a tool with one tap
-- Header shows count of tools with employee and count available
-
----
-
 ## API
 
 - JWT authentication with role-based access (Admin, Owner, Employee)
@@ -99,6 +71,8 @@ Workit is a workforce management system for service contractors. It has two user
 ---
 
 ## Roles Summary
+
+Employee permissions remain available through the API for the separately maintained iOS app.
 
 | Capability | Owner | Employee |
 |---|---|---|
