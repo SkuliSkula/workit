@@ -74,6 +74,70 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
         }
     }
 
+    /// <summary>Delete that reports success as a typed result, for interfaces that expect ApiResult&lt;bool&gt;.</summary>
+    protected async Task<ApiResult<bool>> DeleteForBoolAsync(string requestUri, string defaultErrorMessage)
+    {
+        var result = await DeleteAsync(requestUri, defaultErrorMessage);
+        return result.IsSuccess
+            ? ApiResult<bool>.Success(true)
+            : ApiResult<bool>.Failure(result.ErrorMessage ?? defaultErrorMessage);
+    }
+
+    protected async Task<ApiResult<byte[]>> GetBytesAsync(string requestUri, string defaultErrorMessage)
+    {
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Get, requestUri);
+            using var response = await httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return ApiResult<byte[]>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+            }
+
+            return ApiResult<byte[]>.Success(await response.Content.ReadAsByteArrayAsync());
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<byte[]>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<byte[]>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
+        }
+    }
+
+    /// <summary>Uploads a file as multipart/form-data (field name "file") and reads a JSON response.</summary>
+    protected async Task<ApiResult<TResponse>> PostFileForJsonAsync<TResponse>(
+        string requestUri, Stream content, string fileName, string contentType, string defaultErrorMessage)
+    {
+        try
+        {
+            using var request = await CreateRequestAsync(HttpMethod.Post, requestUri);
+            using var form = new MultipartFormDataContent();
+            using var fileContent = new StreamContent(content);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            form.Add(fileContent, "file", fileName);
+            request.Content = form;
+
+            using var response = await httpClient.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+            }
+
+            var value = await response.Content.ReadFromJsonAsync<TResponse>();
+            return ApiResult<TResponse>.Success(value);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<TResponse>.Failure($"Could not reach the server. ({ex.Message})");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<TResponse>.Failure($"{defaultErrorMessage} ({ex.GetType().Name}: {ex.Message})");
+        }
+    }
+
     private async Task<ApiResult> SendAsync<T>(HttpMethod method, string requestUri, T payload, string defaultErrorMessage)
     {
         try

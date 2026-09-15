@@ -42,12 +42,18 @@ services:
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
       # Host of the public /reset-password page (the marketing site, not the owner
-      # app — admin.workit.is has no such route). Reset links are built from this.
+      # app — admin.workit.is has no such route). Reset and invite links are built from this.
       App__Url: ${APP_URL:-https://help.workit.is}
       App__OwnerAppUrl: ${OWNER_APP_URL:-https://admin.workit.is}
       App__IosAppUrl: ${IOS_APP_URL:-https://apps.apple.com/app/id6810220458}
       # Set once the Android app is published; the welcome email hides the link while blank.
       App__AndroidAppUrl: ${ANDROID_APP_URL:-}
+      # Job attachments — Cloudflare R2 (S3-compatible). If unset, the API falls
+      # back to on-disk storage in the container (not durable across redeploys).
+      Storage__ServiceUrl: ${R2_SERVICE_URL:-}
+      Storage__AccessKeyId: ${R2_ACCESS_KEY_ID:-}
+      Storage__SecretAccessKey: ${R2_SECRET_ACCESS_KEY:-}
+      Storage__BucketName: ${R2_BUCKET_NAME:-}
     volumes:
       # DataProtection keys — MUST persist across container recreation, otherwise
       # every redeploy rotates the key and breaks DB-encrypted credentials.
@@ -68,8 +74,6 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       # Internal Docker DNS — avoids a public roundtrip for server→API calls
       ApiBaseUrl: "http://workit-api:8080/"
-      Payday__ClientId: ${PAYDAY_CLIENT_ID:-}
-      Payday__ClientSecret: ${PAYDAY_CLIENT_SECRET:-}
     networks:
       - app
 

@@ -18,8 +18,9 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().Cre
 builder.Services.AddWorkitApiClients();
 builder.Services.AddScoped<IAccessTokenAccessor, BrowserAccessTokenAccessor>();
 builder.Services.AddScoped<AuthSessionService>();
-builder.Services.AddScoped<PaydayCredentialsInitializer>();
-builder.Services.AddPaydayApiClients();
+// Payday is reached through the Workit API (/api/payday/*); this app never holds
+// Payday credentials. The proxies implement the same IPayday*Api interfaces.
+builder.Services.AddPaydayProxyClients();
 
 var app = builder.Build();
 

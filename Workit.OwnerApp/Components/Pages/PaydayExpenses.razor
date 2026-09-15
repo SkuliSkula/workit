@@ -2,7 +2,6 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayExpensesApi ExpensesApi
 @inject IJobsApi JobsApi
-@inject PaydayCredentialsInitializer PaydayInit
 @inject IExpensesApi WorkitExpensesApi
 @using System.Text.RegularExpressions
 
@@ -626,7 +625,6 @@
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
-        await PaydayInit.InitializeAsync();
         var accountsTask  = ExpensesApi.GetAccountsAsync();
         var jobsTask      = JobsApi.GetJobsAsync();
         var expensesTask  = FetchPageAsync(page: 1, append: false);

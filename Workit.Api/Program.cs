@@ -13,6 +13,7 @@ using Workit.Api.Data;
 using Workit.Api.Endpoints;
 using Workit.Api.Services;
 using Workit.Shared.Auth;
+using Workit.Shared.Payday;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
@@ -127,12 +128,45 @@ else
     builder.Services.AddSingleton<IAnalyticsService, NullAnalyticsService>();
 }
 
-// Payday API HttpClient (for credential testing)
-builder.Services.AddHttpClient("PaydayApi", client =>
+// ── File storage (job attachments) ───────────────────────────────────────────────
+// R2 (Cloudflare object storage) in production; a local-disk fallback in dev so the
+// feature works without cloud credentials. The API is the only process with access.
+var storageOptions = builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
+builder.Services.AddSingleton(storageOptions);
+if (storageOptions.IsR2Configured)
 {
-    client.BaseAddress = new Uri("https://api.payday.is/");
-    client.DefaultRequestHeaders.Add("Api-Version", "alpha");
-});
+    builder.Services.AddSingleton<IFileStorageService, R2FileStorageService>();
+    Log.Information(
+        "Job attachments: storing in Cloudflare R2 — bucket {Bucket} at {Endpoint}.",
+        storageOptions.BucketName, storageOptions.ServiceUrl);
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorageService, LocalFileStorageService>();
+    var missing = storageOptions.MissingR2Settings;
+    if (missing.Count == 4)
+    {
+        Log.Information(
+            "Job attachments: storing on local disk at {Path}. R2 is not configured — "
+            + "fine for development, but uploads do not survive a container rebuild.",
+            storageOptions.LocalPath);
+    }
+    else
+    {
+        // A partially-filled config is almost always a typo, and silently using
+        // local disk in production would lose files on the next deploy.
+        Log.Warning(
+            "Job attachments: R2 is only partially configured, so falling back to local disk at {Path}. "
+            + "Missing setting(s): {MissingSettings}. Uploads will NOT go to R2 and do not survive a container rebuild.",
+            storageOptions.LocalPath, string.Join(", ", missing));
+    }
+}
+
+// ── Payday ─────────────────────────────────────────────────────────────────────
+// The API is the only process that talks to Payday. It registers the "PaydayApi"
+// HttpClient plus the direct Payday clients; /api/payday/* proxies them for the
+// Owner app using each company's encrypted credentials (see PaydayEndpoints).
+builder.Services.AddPaydayApiClients();
 
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
@@ -239,6 +273,8 @@ app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
 app.MapSalesInvoiceEndpoints();
 app.MapExpenseEndpoints();
+app.MapJobAttachmentEndpoints();
+app.MapPaydayEndpoints();
 app.MapDevSeedEndpoints();
 
 // ── Startup tasks ──────────────────────────────────────────────────────────────

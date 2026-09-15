@@ -25,6 +25,18 @@
             return navigator.clipboard.writeText(text);
         };
 
+        window.createBlobUrl = function (base64, mimeType) {
+            const bytes = atob(base64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            const blob = new Blob([arr], { type: mimeType });
+            return URL.createObjectURL(blob);
+        };
+
+        window.revokeBlobUrl = function (url) {
+            if (url) URL.revokeObjectURL(url);
+        };
+
         window.triggerFileDownload = function (filename, base64, mimeType) {
             const bytes = atob(base64);
             const arr = new Uint8Array(bytes.length);

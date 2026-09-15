@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Anthropic.SDK" Version="5.10.0" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.103.2" />
     <PackageReference Include="MailKit" Version="4.16.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.2" />
@@ -30,6 +31,10 @@
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Workit.Tests" />
   </ItemGroup>
 
   <ItemGroup>

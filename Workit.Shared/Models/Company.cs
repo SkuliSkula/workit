@@ -16,9 +16,18 @@ public sealed class Company
     public string City { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;
 
-    // Payday integration credentials (per-company)
+    // Payday integration credentials (per-company).
+    // Write-only: clients send these when creating a company or via the
+    // payday-credentials endpoint; the API stores them encrypted and never
+    // returns them. Responses carry HasPaydayCredentials instead.
     public string? PaydayClientId { get; set; }
     public string? PaydayClientSecret { get; set; }
+
+    /// <summary>
+    /// True when Payday credentials are configured for this company.
+    /// Set by the API on responses only; not stored in the database.
+    /// </summary>
+    public bool HasPaydayCredentials { get; set; }
 
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
     public DataSource Source { get; set; } = DataSource.Workit;
