@@ -216,70 +216,72 @@
             @(totalInvoices > 0 ? $"(total in Payday: {totalInvoices})" : string.Empty)
         </div>
 
-        <FluentDataGrid TGridItem="PaydayInvoice" Items="@DisplayedInvoices.AsQueryable()"
-                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+        <div style="overflow-x:auto; min-width:0; max-width:100%;">
+            <FluentDataGrid TGridItem="PaydayInvoice" Items="@DisplayedInvoices.AsQueryable()"
+                            AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="min-width:900px;">
 
-            <PropertyColumn Property="@(x => x.Number)"  Title="#" Sortable="true" />
+                <PropertyColumn Property="@(x => x.Number)"  Title="#" Sortable="true" />
 
-            <TemplateColumn Title="Customer">
-                <FluentLabel>@(context.Customer?.Name ?? "—")</FluentLabel>
-            </TemplateColumn>
+                <TemplateColumn Title="Customer">
+                    <FluentLabel>@(context.Customer?.Name ?? "—")</FluentLabel>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Status">
-                <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
-                    @context.Status
-                </span>
-            </TemplateColumn>
+                <TemplateColumn Title="Status">
+                    <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                        @context.Status
+                    </span>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Invoice Date">
-                <FluentLabel>@context.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </TemplateColumn>
+                <TemplateColumn Title="Invoice Date">
+                    <FluentLabel>@context.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Due Date">
-                <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </TemplateColumn>
+                <TemplateColumn Title="Due Date">
+                    <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Amount" Align="Align.End">
-                <FluentLabel>@context.AmountIncludingVat.ToString("N0") @context.CurrencyCode</FluentLabel>
-            </TemplateColumn>
+                <TemplateColumn Title="Amount" Align="Align.End">
+                    <FluentLabel>@context.AmountIncludingVat.ToString("N0") @context.CurrencyCode</FluentLabel>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Actions" Align="Align.End">
-                <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  @onclick="@(() => ToggleDetail(context))"
-                                  title="View details">
-                        @(selectedInvoice?.Id == context.Id ? "▲ Close" : "▼ View")
-                    </FluentButton>
-
-                    @if (context.Status is "SENT" or "DRAFT")
-                    {
+                <TemplateColumn Title="Actions" Align="Align.End">
+                    <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
                         <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => BeginMarkPaid(context))"
-                                      title="Mark as paid">✓ Paid</FluentButton>
-                    }
+                                      @onclick="@(() => ToggleDetail(context))"
+                                      title="View details">
+                            View
+                        </FluentButton>
 
-                    @if (context.Status is "SENT" or "DRAFT")
-                    {
+                        @if (context.Status is "SENT" or "DRAFT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => BeginMarkPaid(context))"
+                                          title="Mark as paid">✓ Paid</FluentButton>
+                        }
+
+                        @if (context.Status is "SENT" or "DRAFT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => CancelInvoiceAsync(context))"
+                                          Disabled="@(cancelling && cancellingId == context.Id)"
+                                          title="Cancel invoice">Cancel</FluentButton>
+                        }
+
+                        @if (context.Status == "DRAFT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => DeleteInvoiceAsync(context))"
+                                          title="Delete draft">Delete</FluentButton>
+                        }
+
                         <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => CancelInvoiceAsync(context))"
-                                      Disabled="@(cancelling && cancellingId == context.Id)"
-                                      title="Cancel invoice">Cancel</FluentButton>
-                    }
-
-                    @if (context.Status == "DRAFT")
-                    {
-                        <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => DeleteInvoiceAsync(context))"
-                                      title="Delete draft">Delete</FluentButton>
-                    }
-
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  @onclick="@(() => DownloadPdfAsync(context))"
-                                  Disabled="@(downloadingPdfId == context.Id.ToString())"
-                                  title="Download PDF">PDF</FluentButton>
-                </div>
-            </TemplateColumn>
-        </FluentDataGrid>
+                                      @onclick="@(() => DownloadPdfAsync(context))"
+                                      Disabled="@(downloadingPdfId == context.Id.ToString())"
+                                      title="Download PDF">PDF</FluentButton>
+                    </div>
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
 
         @if (invoices.Count < totalInvoices)
         {
@@ -309,7 +311,7 @@
 @* ── Mark Paid panel ── *@
 @if (markPaidInvoice is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
+    <AppDialog Title="Mark Invoice as Paid" OnClose="CancelMarkPaid" Busy="markingPaid">
         <FluentLabel Typo="Typography.Body"><strong>Mark Invoice #@(markPaidInvoice.Number?.ToString() ?? "–") as Paid</strong></FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <FluentDatePicker @bind-Value="markPaidDate" Label="Payment date" />
@@ -317,119 +319,128 @@
                 <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmMarkPaidAsync" Disabled="@markingPaid">
                     @(markingPaid ? "Saving…" : "Confirm")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelMarkPaid">Cancel</FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelMarkPaid" Disabled="@markingPaid">Cancel</FluentButton>
             </div>
         </div>
         @if (!string.IsNullOrWhiteSpace(markPaidError))
         {
             <FluentLabel Color="Color.Error" style="margin-top:0.4rem;">@markPaidError</FluentLabel>
         }
-    </FluentCard>
+    </AppDialog>
 }
 
 @* ── Invoice detail ── *@
 @if (selectedInvoice is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <FluentLabel Typo="Typography.Body">
-                <strong>Invoice #@(selectedInvoice.Number?.ToString() ?? "–")</strong>
-                <span style="@StatusStyle(selectedInvoice.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
-                    @selectedInvoice.Status
-                </span>
-            </FluentLabel>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="ClearSelected">✕ Close</FluentButton>
-        </div>
-
-        <div class="admin-grid" style="margin-top:0.75rem;">
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Customer</FluentLabel>
-                <FluentLabel><strong>@(selectedInvoice.Customer?.Name ?? "—")</strong></FluentLabel>
-            </div>
-            @if (selectedInvoice.Payor?.Id != selectedInvoice.Customer?.Id && selectedInvoice.Payor is not null)
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Payor</FluentLabel>
-                    <FluentLabel><strong>@selectedInvoice.Payor.Name</strong></FluentLabel>
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(selectedInvoice.Description))
-            {
-                <div style="grid-column:span 2">
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Description</FluentLabel>
-                    <FluentLabel>@selectedInvoice.Description</FluentLabel>
-                </div>
-            }
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Invoice date</FluentLabel>
-                <FluentLabel>@selectedInvoice.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </div>
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
-                <FluentLabel>@selectedInvoice.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </div>
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
-                <FluentLabel>@selectedInvoice.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </div>
-            @if (selectedInvoice.PaidDate.HasValue)
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
-                    <FluentLabel>@selectedInvoice.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
-                </div>
-            }
-            @if (selectedInvoice.SentDate.HasValue)
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Sent</FluentLabel>
-                    <FluentLabel>@selectedInvoice.SentDate?.ToString("dd MMM yyyy HH:mm")</FluentLabel>
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(selectedInvoice.VatNumber))
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT number</FluentLabel>
-                    <FluentLabel>@selectedInvoice.VatNumber</FluentLabel>
-                </div>
-            }
-        </div>
-
-        @* ── Lines table ── *@
-        @if (selectedInvoice.Lines is { Count: > 0 })
+    <AppDialog Title="Invoice Details" Wide="true" OnClose="ClearSelected">
+        @if (detailLoading)
         {
-            <div style="margin-top:1rem;">
-                <FluentLabel><strong>Lines</strong></FluentLabel>
-                <FluentDataGrid TGridItem="PaydayInvoiceLine" Items="@selectedInvoice.Lines.AsQueryable()"
-                                AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
-                    <PropertyColumn Property="@(x => x.Position)"    Title="#" />
-                    <PropertyColumn Property="@(x => x.Description)" Title="Description" />
-                    <PropertyColumn Property="@(x => x.Comment)"     Title="Comment" />
-                    <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty"  Format="0.##" />
-                    <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
-                        <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
-                        <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
-                    </TemplateColumn>
-                    <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
-                    <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
-                </FluentDataGrid>
+            <div class="dialog-loading" role="status"><FluentProgressRing /> Loading details…</div>
+        }
+        else
+        {
+            <div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <FluentLabel Typo="Typography.Body">
+                        <strong>Invoice #@(selectedInvoice.Number?.ToString() ?? "–")</strong>
+                        <span style="@StatusStyle(selectedInvoice.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                            @selectedInvoice.Status
+                        </span>
+                    </FluentLabel>
+                </div>
+
+                <div class="admin-grid" style="margin-top:0.75rem;">
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Customer</FluentLabel>
+                        <FluentLabel><strong>@(selectedInvoice.Customer?.Name ?? "—")</strong></FluentLabel>
+                    </div>
+                    @if (selectedInvoice.Payor?.Id != selectedInvoice.Customer?.Id && selectedInvoice.Payor is not null)
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Payor</FluentLabel>
+                            <FluentLabel><strong>@selectedInvoice.Payor.Name</strong></FluentLabel>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(selectedInvoice.Description))
+                    {
+                        <div style="grid-column:span 2">
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Description</FluentLabel>
+                            <FluentLabel>@selectedInvoice.Description</FluentLabel>
+                        </div>
+                    }
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Invoice date</FluentLabel>
+                        <FluentLabel>@selectedInvoice.InvoiceDate?.ToString("dd MMM yyyy")</FluentLabel>
+                    </div>
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
+                        <FluentLabel>@selectedInvoice.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                    </div>
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
+                        <FluentLabel>@selectedInvoice.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                    </div>
+                    @if (selectedInvoice.PaidDate.HasValue)
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
+                            <FluentLabel>@selectedInvoice.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
+                        </div>
+                    }
+                    @if (selectedInvoice.SentDate.HasValue)
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Sent</FluentLabel>
+                            <FluentLabel>@selectedInvoice.SentDate?.ToString("dd MMM yyyy HH:mm")</FluentLabel>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(selectedInvoice.VatNumber))
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT number</FluentLabel>
+                            <FluentLabel>@selectedInvoice.VatNumber</FluentLabel>
+                        </div>
+                    }
+                </div>
+
+                @* ── Lines table ── *@
+                @if (selectedInvoice.Lines is { Count: > 0 })
+                {
+                    <div class="dialog-table" style="margin-top:1rem;">
+                        <FluentLabel><strong>Lines</strong></FluentLabel>
+                        <FluentDataGrid TGridItem="PaydayInvoiceLine" Items="@selectedInvoice.Lines.AsQueryable()"
+                                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
+                            <PropertyColumn Property="@(x => x.Position)"    Title="#" />
+                            <PropertyColumn Property="@(x => x.Description)" Title="Description" />
+                            <PropertyColumn Property="@(x => x.Comment)"     Title="Comment" />
+                            <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty"  Format="0.##" />
+                            <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
+                                <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
+                                <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
+                            </TemplateColumn>
+                            <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
+                            <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
+                        </FluentDataGrid>
+                    </div>
+                }
+
+                @* ── Totals ── *@
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
+                    <div>Amount ex VAT: <strong>@selectedInvoice.AmountExcludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+                    <div>VAT: <strong>@selectedInvoice.AmountVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+                    <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedInvoice.AmountIncludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(detailError))
+                {
+                    <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
+                }
+
             </div>
         }
-
-        @* ── Totals ── *@
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
-            <div>Amount ex VAT: <strong>@selectedInvoice.AmountExcludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
-            <div>VAT: <strong>@selectedInvoice.AmountVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
-            <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedInvoice.AmountIncludingVat.ToString("N0") @selectedInvoice.CurrencyCode</strong></div>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(detailError))
-        {
-            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
-        }
-    </FluentCard>
+    </AppDialog>
 }
 
 @code {
@@ -511,6 +522,8 @@
     // ── Detail state ──────────────────────────────────────────────────────────
     private PaydayInvoice? selectedInvoice;
     private string?        detailError;
+    private bool detailLoading;
+    private int detailRequestVersion;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -665,25 +678,37 @@
     // ── Detail ────────────────────────────────────────────────────────────────
     private async Task ToggleDetail(PaydayInvoice invoice)
     {
-        if (selectedInvoice?.Id == invoice.Id)
-        {
-            selectedInvoice = null;
-            return;
-        }
-
+        var requestVersion = ++detailRequestVersion;
+        selectedInvoice = invoice;
         detailError = null;
-        // Reload with payments included for the full detail view
-        var result = await InvoicesApi.GetByIdAsync(invoice.Id.ToString(), "lines,payments");
-        if (result.IsSuccess)
-            selectedInvoice = result.Value;
-        else
+        detailLoading = true;
+        try
         {
-            detailError     = result.ErrorMessage;
-            selectedInvoice = invoice; // fall back to list data
+            var result = await InvoicesApi.GetByIdAsync(invoice.Id.ToString(), "lines,payments");
+            if (requestVersion != detailRequestVersion || selectedInvoice?.Id != invoice.Id) return;
+            if (result.IsSuccess && result.Value is not null)
+                selectedInvoice = result.Value;
+            else
+                detailError = result.ErrorMessage ?? "Could not load full details. Showing the list information.";
+        }
+        catch (Exception)
+        {
+            if (requestVersion == detailRequestVersion)
+                detailError = "Could not load full details. Please close and try again.";
+        }
+        finally
+        {
+            if (requestVersion == detailRequestVersion) detailLoading = false;
         }
     }
 
-    private void ClearSelected() => selectedInvoice = null;
+    private void ClearSelected()
+    {
+        detailRequestVersion++;
+        selectedInvoice = null;
+        detailLoading = false;
+        detailError = null;
+    }
 
     // ── Mark Paid ─────────────────────────────────────────────────────────────
     private void BeginMarkPaid(PaydayInvoice invoice)

@@ -1,0 +1,50 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="app-dialog @(Wide ? "app-dialog-wide" : null)"
+        aria-labelledby="@titleId" aria-modal="true" data-busy="@(Busy ? "true" : "false")">
+    <div class="dialog-layout">
+        <header class="dialog-header">
+            <h2 id="@titleId">@Title</h2>
+            <button type="button" class="dialog-close" aria-label="Close dialog" autofocus
+                    disabled="@Busy" @onclick="RequestClose">✕</button>
+        </header>
+        <div class="dialog-body">
+            @ChildContent
+        </div>
+    </div>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private readonly string titleId = $"dialog-title-{Guid.NewGuid():N}";
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<AppDialog>? reference;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/AppDialog.razor.js");
+        reference = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("open", dialog, reference);
+    }
+
+    [JSInvokable]
+    public Task RequestClose() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        reference?.Dispose();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

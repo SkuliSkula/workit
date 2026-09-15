@@ -1,0 +1,64 @@
+.app-dialog {
+    width: min(680px, calc(100vw - 3rem));
+    max-width: none;
+    max-height: min(90dvh, 1000px);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--neutral-stroke-rest, #dce3ea);
+    border-radius: 14px;
+    background: var(--neutral-layer-1, #fff);
+    color: var(--neutral-foreground-rest, #14304b);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    overflow: hidden;
+}
+
+.app-dialog-wide { width: min(1100px, calc(100vw - 3rem)); }
+.app-dialog::backdrop { background: rgba(15, 23, 42, .45); }
+.dialog-layout { display: flex; flex-direction: column; max-height: inherit; }
+.dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--neutral-stroke-rest, #dce3ea);
+    flex-shrink: 0;
+}
+.dialog-header h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+.dialog-close {
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 1.1rem;
+    min-width: 44px;
+    min-height: 44px;
+    cursor: pointer;
+}
+.dialog-close:hover { background: var(--neutral-fill-secondary-rest, #edf2f6); }
+.dialog-close:focus-visible { outline: 2px solid var(--accent-fill-rest, #0078d4); }
+.dialog-close:disabled { cursor: wait; opacity: .5; }
+.dialog-body { padding: 1.25rem; overflow: auto; min-height: 0; overscroll-behavior: contain; }
+.dialog-body ::deep .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dialog-body ::deep .dialog-line-editor { grid-template-columns: minmax(180px, 2fr) repeat(5, minmax(80px, 1fr)) auto; }
+.dialog-body ::deep .dialog-table { overflow-x: auto; }
+.dialog-body ::deep .dialog-table fluent-data-grid { min-width: 650px; }
+.dialog-body ::deep .dialog-loading { display: flex; align-items: center; gap: .75rem; padding: 1rem 0; }
+
+@media (max-width: 900px) {
+    .dialog-body ::deep .dialog-line-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+    .app-dialog, .app-dialog-wide {
+        width: 100%;
+        height: 100dvh;
+        max-height: 100dvh;
+        border: 0;
+        border-radius: 0;
+    }
+    .dialog-layout { height: 100%; }
+    .dialog-body { padding: 1rem; }
+    .dialog-body ::deep .admin-grid { grid-template-columns: minmax(0, 1fr); }
+    .dialog-body ::deep .admin-grid > * { grid-column: auto !important; }
+}
