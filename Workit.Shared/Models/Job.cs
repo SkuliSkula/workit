@@ -5,6 +5,13 @@ public sealed class Job
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CompanyId { get; set; }
     public Guid CustomerId { get; set; }
+
+    /// <summary>
+    /// The employee responsible for this job, if one has been picked. Optional —
+    /// most jobs are shared, and a job can exist before anyone is put on it.
+    /// </summary>
+    public Guid? AssignedEmployeeId { get; set; }
+
     public string       Name          { get; set; } = string.Empty;
     public string       Code          { get; set; } = string.Empty;
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;

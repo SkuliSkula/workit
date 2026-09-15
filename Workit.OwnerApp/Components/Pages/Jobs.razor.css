@@ -118,6 +118,17 @@
     border-radius: 999px;
 }
 
+/* Same pill as the customer, tinted so the two read as different facts. */
+.job-assignee {
+    font-size: 0.78rem;
+    color: #1e5078;
+    font-weight: 500;
+    flex-shrink: 0;
+    background: rgba(30, 80, 120, 0.09);
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
 .job-billing-badge {
     flex-shrink: 0;
     font-size: 0.73rem;

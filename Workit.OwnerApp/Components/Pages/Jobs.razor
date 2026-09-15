@@ -65,6 +65,15 @@
                 else { <FluentLabel>No customers available yet.</FluentLabel> }
             </div>
             <div>
+                <FluentSelect Label="Assigned employee" TValue="string" TOption="string" @bind-Value="selectedEmployeeId" style="width:100%">
+                    <FluentOption TOption="string" Value="@UnassignedValue">— Unassigned —</FluentOption>
+                    @foreach (var e in employees)
+                    {
+                        <FluentOption TOption="string" Value="@e.Id.ToString()">@e.DisplayName</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div>
                 <FluentTextField Label="Job name *" @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
             </div>
             <div>
@@ -128,6 +137,10 @@ else if (jobs.Count > 0)
                     <span class="job-code">@job.Code</span>
                     <span class="job-name">@job.Name</span>
                     <span class="job-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</span>
+                    @if (job.AssignedEmployeeId is Guid assigneeId)
+                    {
+                        <span class="job-assignee" title="Assigned employee">@employeeLookup.GetValueOrDefault(assigneeId, "—")</span>
+                    }
                     <span class="job-billing-badge badge--category">@CategoryLabel(job.Category)</span>
                     <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
                         @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
@@ -309,6 +322,15 @@ else if (jobs.Count > 0)
                                             </FluentSelect>
                                         </div>
                                         <div>
+                                            <FluentSelect Label="Assigned employee" TValue="string" TOption="string" @bind-Value="editingEmployeeId" style="width:100%">
+                                                <FluentOption TOption="string" Value="@UnassignedValue">— Unassigned —</FluentOption>
+                                                @foreach (var e in employees)
+                                                {
+                                                    <FluentOption TOption="string" Value="@e.Id.ToString()">@e.DisplayName</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        </div>
+                                        <div>
                                             <FluentTextField Label="Job name" @bind-Value="editingJob.Name" style="width:100%" />
                                         </div>
                                         <div>
@@ -374,7 +396,9 @@ else if (company is not null)
     private Guid?    expandedJobId;
     private Job?     editingJob;
     private string?  editingCustomerId;
+    private string?  editingEmployeeId;
     private string?     selectedCustomerId;
+    private string      selectedEmployeeId = UnassignedValue;
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
     private JobCategory newCategory    = JobCategory.NewInstallation;
@@ -382,6 +406,12 @@ else if (company is not null)
 
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
     private bool HasEditingCustomer  => Guid.TryParse(editingCustomerId,  out _);
+
+    /// <summary>FluentSelect needs a real value for "none"; an empty string is not selectable.</summary>
+    private const string UnassignedValue = "none";
+
+    private static Guid? ParseAssignee(string? value) =>
+        Guid.TryParse(value, out var id) ? id : null;
 
     private static string CategoryLabel(JobCategory cat) => cat switch
     {
@@ -595,33 +625,36 @@ else if (company is not null)
 
         var result = await JobsApi.CreateJobAsync(new Job
         {
-            CompanyId   = company.Id,
-            CustomerId  = customerId,
-            Name        = newJobName.Trim(),
-            BillingType = newBillingType,
-            Category    = newCategory
+            CompanyId          = company.Id,
+            CustomerId         = customerId,
+            AssignedEmployeeId = ParseAssignee(selectedEmployeeId),
+            Name               = newJobName.Trim(),
+            BillingType        = newBillingType,
+            Category           = newCategory
         });
 
-        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; showCreateForm = false; await LoadAsync(); }
+        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeId = UnassignedValue; showCreateForm = false; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
     private void BeginEditJob(Job job)
     {
-        editingJob = new Job { Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, Code = job.Code, Name = job.Name, BillingType = job.BillingType };
+        editingJob = new Job { Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeId = job.AssignedEmployeeId, Code = job.Code, Name = job.Name, BillingType = job.BillingType };
         editingCustomerId = job.CustomerId.ToString();
+        editingEmployeeId = job.AssignedEmployeeId?.ToString() ?? UnassignedValue;
     }
 
     private async Task SaveJobAsync()
     {
         if (editingJob is null || !Guid.TryParse(editingCustomerId, out var customerId)) return;
-        editingJob.CustomerId = customerId;
+        editingJob.CustomerId         = customerId;
+        editingJob.AssignedEmployeeId = ParseAssignee(editingEmployeeId);
         var result = await JobsApi.UpdateJobAsync(editingJob);
-        if (result.IsSuccess) { editingJob = null; editingCustomerId = null; await LoadAsync(); }
+        if (result.IsSuccess) { editingJob = null; editingCustomerId = null; editingEmployeeId = null; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
-    private void CancelJobEdit() { editingJob = null; editingCustomerId = null; }
+    private void CancelJobEdit() { editingJob = null; editingCustomerId = null; editingEmployeeId = null; }
 
     // ── Company settings ──────────────────────────────────────────────────────
     private async Task SaveCompanySettingsAsync()

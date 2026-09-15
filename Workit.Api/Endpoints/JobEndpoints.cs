@@ -71,6 +71,9 @@ internal static class JobEndpoints
                     if (customer is null)
                         return Results.BadRequest("Customer not found.");
 
+                    if (!await AssigneeIsValidAsync(db, userContext.CompanyId, job.AssignedEmployeeId, ct))
+                        return Results.BadRequest("Employee not found.");
+
                     // Assign globally unique sequential job number for this company
                     var nextNumber = (await db.Jobs
                         .Where(j => j.CompanyId == userContext.CompanyId)
@@ -164,10 +167,14 @@ internal static class JobEndpoints
                         return Results.NotFound();
                     }
 
+                    if (!await AssigneeIsValidAsync(db, userContext.CompanyId, job.AssignedEmployeeId, ct))
+                        return Results.BadRequest("Employee not found.");
+
                     // Code, Category and JobNumber are set at creation and never change.
-                    existing.CustomerId  = job.CustomerId;
-                    existing.Name        = job.Name.Trim();
-                    existing.BillingType = job.BillingType;
+                    existing.CustomerId         = job.CustomerId;
+                    existing.AssignedEmployeeId = job.AssignedEmployeeId;
+                    existing.Name               = job.Name.Trim();
+                    existing.BillingType        = job.BillingType;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
@@ -176,4 +183,13 @@ internal static class JobEndpoints
                 "updating a job"))
             .WithName("UpdateJob");
     }
+
+    /// <summary>
+    /// An unassigned job is always fine. An assignee must be one of the caller's
+    /// own employees — the id comes from the client, and a guid from another
+    /// tenant must not be storable.
+    /// </summary>
+    private static async Task<bool> AssigneeIsValidAsync(WorkitDbContext db, Guid companyId, Guid? employeeId, CancellationToken ct) =>
+        employeeId is null
+        || await db.Employees.AnyAsync(e => e.Id == employeeId && e.CompanyId == companyId, ct);
 }
