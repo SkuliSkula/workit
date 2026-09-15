@@ -41,7 +41,13 @@ services:
       PostHog__ProjectApiKey: ${POSTHOG_API_KEY:-}
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__From: ${RESEND_FROM:-Workit <noreply@workit.is>}
-      App__Url: ${APP_URL:-https://admin.workit.is}
+      # Host of the public /reset-password page (the marketing site, not the owner
+      # app — admin.workit.is has no such route). Reset and invite links are built from this.
+      App__Url: ${APP_URL:-https://help.workit.is}
+      App__OwnerAppUrl: ${OWNER_APP_URL:-https://admin.workit.is}
+      App__IosAppUrl: ${IOS_APP_URL:-https://apps.apple.com/app/id6810220458}
+      # Set once the Android app is published; the welcome email hides the link while blank.
+      App__AndroidAppUrl: ${ANDROID_APP_URL:-}
       # Job attachments — Cloudflare R2 (S3-compatible). If unset, the API falls
       # back to on-disk storage in the container (not durable across redeploys).
       Storage__ServiceUrl: ${R2_SERVICE_URL:-}

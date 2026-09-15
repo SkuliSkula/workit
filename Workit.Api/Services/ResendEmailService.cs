@@ -7,33 +7,52 @@ internal sealed class ResendEmailService : IEmailService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly string _from;
+    private readonly string _ownerAppUrl;
+    private readonly string _iosAppUrl;
+    private readonly string? _androidAppUrl;
     private readonly ILogger<ResendEmailService> _logger;
 
     public ResendEmailService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<ResendEmailService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _from = configuration["Resend:From"] ?? "Workit <noreply@workit.is>";
+        _ownerAppUrl = configuration["App:OwnerAppUrl"]?.TrimEnd('/') ?? "https://admin.workit.is";
+        _iosAppUrl = configuration["App:IosAppUrl"] ?? "https://apps.apple.com/app/id6810220458";
+        // Blank until the Android app is published — the link is omitted rather than dead.
+        _androidAppUrl = configuration["App:AndroidAppUrl"];
         _logger = logger;
     }
 
-    public Task SendOwnerWelcomeAsync(string name, string email, string password) =>
-        SendAsync(email, "Welcome to Workit – Your Account Details", $"""
+    public Task SendOwnerInviteAsync(string name, string email, string setupUrl) =>
+        SendAsync(email, "Welcome to Workit – Set your password", $"""
             <h2>Welcome to Workit, {H(name)}!</h2>
-            <p>Your owner account has been created. Log in with the credentials below.</p>
-            <p><strong>Email:</strong> {H(email)}</p>
-            <p><strong>Password:</strong> {H(password)}</p>
-            <p>Please change your password after your first login.</p>
-            <p><a href="https://admin.workit.is">Log in to Workit</a></p>
+            <p>Your owner account is ready. Choose a password to get started.</p>
+            <p><a href="{H(setupUrl)}">Set your password</a></p>
+            <p>This link works once and expires in 7 days. If it has expired, go to
+               <a href="{H(_ownerAppUrl)}">{H(_ownerAppUrl)}</a>, choose
+               <strong>Forgot password?</strong> and request a new one.</p>
+            <p>You will sign in at <a href="{H(_ownerAppUrl)}">{H(_ownerAppUrl)}</a>
+               with <strong>{H(email)}</strong>.</p>
             """);
 
-    public Task SendEmployeeWelcomeAsync(string name, string email, string password) =>
-        SendAsync(email, "Welcome to Workit – Your Account Details", $"""
+    /// <summary>
+    /// Employees sign in on the phone apps, never on the owner web app — that
+    /// login is rejected with "Employee accounts must use the Employee app".
+    /// </summary>
+    public Task SendEmployeeInviteAsync(string name, string email, string setupUrl) =>
+        SendAsync(email, "Welcome to Workit – Set your password", $"""
             <h2>Welcome to Workit, {H(name)}!</h2>
-            <p>Your employee account has been created. Log in with the credentials below.</p>
-            <p><strong>Email:</strong> {H(email)}</p>
-            <p><strong>Password:</strong> {H(password)}</p>
-            <p>Please change your password after your first login.</p>
-            <p><a href="https://admin.workit.is">Log in to Workit</a></p>
+            <p>Your Workit account is ready. Choose a password, then download the app
+               on your phone and sign in with <strong>{H(email)}</strong>.</p>
+            <p><a href="{H(setupUrl)}">Set your password</a></p>
+            <p>This link works once and expires in 7 days. If it has expired, tap
+               <strong>Forgot password?</strong> in the app to request a new one.</p>
+            <p>
+              <a href="{H(_iosAppUrl)}">Download Workit for iPhone</a>
+              {(string.IsNullOrWhiteSpace(_androidAppUrl)
+                  ? ""
+                  : $"""<br><a href="{H(_androidAppUrl)}">Download Workit for Android</a>""")}
+            </p>
             """);
 
     public Task SendPasswordResetAsync(string email, string resetUrl) =>

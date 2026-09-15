@@ -46,6 +46,21 @@ public sealed class AuthSessionService(IAuthApi authApi, IJSRuntime jsRuntime)
         return result;
     }
 
+    /// <summary>
+    /// Changes the signed-in user's password. The API revokes every refresh token
+    /// and hands back a fresh session, so this device stays signed in and all
+    /// others are cut off — store the replacement or the next refresh fails.
+    /// </summary>
+    public async Task<ApiResult<LoginResponse>> ChangePasswordAsync(ChangePasswordRequest request)
+    {
+        var result = await authApi.ChangePasswordAsync(request);
+        if (result.IsSuccess && result.Value is not null)
+        {
+            await SetSessionAsync(result.Value);
+        }
+        return result;
+    }
+
     public async Task LogoutAsync()
     {
         try

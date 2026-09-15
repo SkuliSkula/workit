@@ -47,7 +47,7 @@ internal static class EmployeeEndpoints
         securedApi.MapPost("/employees", async (
                 WorkitDbContext db,
                 HttpContext httpContext,
-                IEmailService emailService,
+                IAccountInviteService invites,
                 CreateEmployeeUserRequest request,
                 CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -60,11 +60,6 @@ internal static class EmployeeEndpoints
                     if (!IsValidEmployee(request.Employee))
                     {
                         return Results.BadRequest("Employee name, SSN, and email are required.");
-                    }
-
-                    if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
-                    {
-                        return Results.BadRequest("Employee password must be at least 8 characters.");
                     }
 
                     var normalizedEmail = request.Employee.Email.Trim().ToLowerInvariant();
@@ -99,7 +94,9 @@ internal static class EmployeeEndpoints
                         CompanyId = userContext.CompanyId,
                         EmployeeId = employee.Id,
                         Email = normalizedEmail,
-                        PasswordHash = PasswordHasher.HashPassword(request.Password),
+                        // Nobody holds this. The employee picks their own password from
+                        // the emailed link, so no password is transmitted or displayed.
+                        PasswordHash = PasswordHasher.HashPassword(invites.CreateUnusablePassword()),
                         Role = WorkitRoles.Employee
                     };
 
@@ -107,7 +104,7 @@ internal static class EmployeeEndpoints
                     db.AppUsers.Add(user);
                     await db.SaveChangesAsync(ct);
 
-                    await emailService.SendEmployeeWelcomeAsync(employee.DisplayName, employee.Email, request.Password);
+                    await invites.SendInviteAsync(employee.Email, employee.DisplayName, InviteKind.Employee, ct);
 
                     return Results.Created($"/api/employees/{employee.Id}", employee);
                 },
@@ -174,6 +171,38 @@ internal static class EmployeeEndpoints
                 logger,
                 "updating an employee"))
             .WithName("UpdateEmployee");
+
+        // ── Send a fresh setup link to an employee whose invite lapsed ──
+        securedApi.MapPost("/employees/{id:guid}/resend-invite", async (WorkitDbContext db, HttpContext httpContext, IAccountInviteService invites, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsOwnerOrAdmin())
+                    {
+                        return Results.Forbid();
+                    }
+
+                    var userContext = httpContext.User.ToUserContext();
+                    var appUser = await db.AppUsers.FirstOrDefaultAsync(x => x.EmployeeId == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (appUser is null)
+                    {
+                        return Results.NotFound();
+                    }
+
+                    if (DemoDataSeeder.IsProtectedAccount(appUser.Email))
+                    {
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
+                    }
+
+                    var employee = await db.Employees
+                        .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    var displayName = employee?.DisplayName is { Length: > 0 } name ? name : appUser.Email;
+
+                    await invites.SendInviteAsync(appUser.Email, displayName, InviteKind.Employee, ct);
+                    return Results.NoContent();
+                },
+                logger,
+                "resending an employee invite"))
+            .WithName("ResendEmployeeInvite");
 
         securedApi.MapPut("/employees/{id:guid}/password", async (WorkitDbContext db, HttpContext httpContext, Guid id, ResetPasswordRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>

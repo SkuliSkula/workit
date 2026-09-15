@@ -205,6 +205,50 @@ public abstract class ApiClientBase(HttpClient httpClient, IAccessTokenAccessor 
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response, string defaultErrorMessage)
     {
         var errorMessage = await response.Content.ReadAsStringAsync();
-        return string.IsNullOrWhiteSpace(errorMessage) ? defaultErrorMessage : errorMessage;
+        if (string.IsNullOrWhiteSpace(errorMessage))
+            return defaultErrorMessage;
+
+        return Unwrap(errorMessage) ?? errorMessage;
+    }
+
+    /// <summary>
+    /// The API reports validation failures as <c>Results.BadRequest("some message")</c>,
+    /// which serialises to a quoted JSON string — rendering it raw puts the quotes on
+    /// screen. Problem-details responses wrap the text in <c>detail</c>/<c>title</c>.
+    /// Returns null when the body is neither, so the caller falls back to it verbatim.
+    /// </summary>
+    private static string? Unwrap(string body)
+    {
+        var trimmed = body.TrimStart();
+        if (trimmed.Length == 0 || (trimmed[0] != '"' && trimmed[0] != '{'))
+            return null;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            var root = document.RootElement;
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.String)
+                return root.GetString();
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var name in new[] { "detail", "title", "message", "error" })
+                {
+                    if (root.TryGetProperty(name, out var value) &&
+                        value.ValueKind == System.Text.Json.JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(value.GetString()))
+                    {
+                        return value.GetString();
+                    }
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Not JSON after all — fall through and use the body as written.
+        }
+
+        return null;
     }
 }

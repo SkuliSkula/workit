@@ -115,6 +115,10 @@ git commit -am "..." && git push
 Pages: `/` (Icelandic), `/en`, `/privacy`, `/support`, `/reset-password`.
 `www.workit.is` 301-redirects to the apex.
 
+`/reset-password` is where both password resets and new-account invites land, so
+it is on the critical path for onboarding — deploy it before shipping an API
+change that alters those links.
+
 ---
 
 ## iOS app
@@ -128,6 +132,43 @@ Release: **Xcode → Product → Archive → Distribute App → App Store Connec
 
 Debug builds point at `localhost:5200`; Release builds at `api.workit.is`. To
 test against production, build Release.
+
+---
+
+## Onboarding a new customer
+
+Selling a seat is one form. Everything after it is self-service.
+
+1. **You create the owner login.** Sign in to <https://admin.workit.is> as the
+   admin account, go to **Admin → + Create Owner**, and enter their name and
+   email. No password is set: the account is created with a random one nobody
+   holds, and they are emailed a one-time link to choose their own. The link
+   lasts 7 days; **Resend invite** on their row issues a fresh one.
+2. **They set up their own company.** Their first sign-in lands on `/onboarding`
+   because the account has no company yet. They either fill in the details by
+   hand (name, kennitala, email, phone, address, contact) or paste their Payday
+   client ID/secret and have it imported. This creates the company, links them to
+   it, and gives them an employee record of their own.
+3. **They add their staff.** **Employees → New Employee** — again no password;
+   each is emailed a setup link and pointers to the phone apps. (Employees are
+   rejected by the owner web app on purpose.) **Send setup link** on a row
+   re-sends it. For someone who cannot use email, **Set password manually**
+   generates one and shows it on screen instead of mailing it.
+
+Admins can rename an owner or change their login address from the same Admin
+page (**Edit**), and remove a login entirely (**Delete**). Deleting removes only
+the sign-in: the company and all its jobs, time entries, invoices and employees
+survive, and the company stays reachable from the **All Companies** list. An
+owner's own employee record follows their email when it is changed, so they keep
+their timesheet.
+
+Passwords are never emailed. Anyone signed in can change their own under
+**My Account**, which revokes every other session. Forgotten passwords are
+self-service from the **Forgot password?** link on the web login and in both
+phone apps. Both the reset and the invite link land on `App:Url` — the marketing
+site, which hosts `/reset-password` — **not** the owner app. An invite link adds
+`&new=1`, which only changes the wording on that page; an older deploy of the
+site that ignores the parameter still redeems the token correctly.
 
 ---
 

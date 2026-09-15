@@ -37,7 +37,8 @@ else
         <FluentCard Class="admin-card" AreaRestricted="false">
             <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Create Owner Account</FluentLabel>
             <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-bottom:0.5rem;">
-                The owner will log in and set up their company themselves on first login.
+                They are emailed a link to choose their own password, then set up their
+                company themselves on first login. No password is set here.
             </FluentLabel>
 
             <div class="form-fields" style="max-width:480px; margin-top:0.75rem;">
@@ -48,10 +49,6 @@ else
                 <div>
                     <FluentLabel>Email *</FluentLabel>
                     <FluentTextField @bind-Value="regOwnerEmail" Style="width:100%;" Placeholder="e.g. jon@company.is" />
-                </div>
-                <div>
-                    <FluentLabel>Password *</FluentLabel>
-                    <FluentTextField @bind-Value="regOwnerPassword" Style="width:100%;" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" />
                 </div>
             </div>
 
@@ -104,6 +101,16 @@ else
         }
         else
         {
+            @if (!string.IsNullOrWhiteSpace(ownerActionError))
+            {
+                <div class="msg msg--error">@ownerActionError</div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(ownerActionSuccess))
+            {
+                <div class="msg msg--success">@ownerActionSuccess</div>
+            }
+
             <div class="company-grid">
                 @foreach (var o in owners)
                 {
@@ -113,15 +120,98 @@ else
                                 <span class="company-card-name">@o.Name</span>
                                 <span class="company-card-ssn">@o.Email</span>
                             </div>
-                            @if (o.HasCompany)
-                            {
-                                <span class="badge badge--green">Active · @o.CompanyName</span>
-                            }
-                            else
-                            {
-                                <span class="badge badge--amber">Setup Pending</span>
-                            }
+                            <div style="display:flex; gap:0.35rem; align-items:center;">
+                                @if (o.HasCompany)
+                                {
+                                    <span class="badge badge--green">Active · @o.CompanyName</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge--amber">Setup Pending</span>
+                                }
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                              @onclick="@(() => ResendOwnerInviteAsync(o))"
+                                              Disabled="@(editingOwnerId is not null || deletingOwnerId is not null || resendingInviteTo is not null)"
+                                              title="Email a fresh link for setting their password">
+                                    @(resendingInviteTo == o.Id ? "Sending…" : "Resend invite")
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                              @onclick="@(() => BeginEditOwner(o))"
+                                              Disabled="@(editingOwnerId is not null || deletingOwnerId is not null)">
+                                    Edit
+                                </FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                              @onclick="@(() => BeginDeleteOwner(o))"
+                                              Disabled="@(editingOwnerId is not null || deletingOwnerId is not null)">
+                                    Delete
+                                </FluentButton>
+                            </div>
                         </div>
+
+                        @* ── Inline edit ── *@
+                        @if (editingOwnerId == o.Id)
+                        {
+                            <div class="owner-panel">
+                                <div class="form-fields" style="max-width:420px;">
+                                    <div>
+                                        <FluentLabel>Full Name *</FluentLabel>
+                                        <FluentTextField @bind-Value="editOwnerName" Style="width:100%;" />
+                                    </div>
+                                    <div>
+                                        <FluentLabel>Login email *</FluentLabel>
+                                        <FluentTextField @bind-Value="editOwnerEmail" Style="width:100%;" />
+                                    </div>
+                                </div>
+                                <FluentLabel Style="color:#60758b; font-size:0.8rem; margin-top:0.5rem;">
+                                    Changing the email changes the address they sign in with.
+                                </FluentLabel>
+                                <div style="display:flex; gap:0.5rem; margin-top:0.85rem;">
+                                    <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
+                                                  @onclick="SaveOwnerAsync"
+                                                  Disabled="@(isSavingOwner || !CanSaveOwner)">
+                                        @(isSavingOwner ? "Saving…" : "Save")
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                                  @onclick="CancelOwnerAction" Disabled="@isSavingOwner">
+                                        Cancel
+                                    </FluentButton>
+                                </div>
+                            </div>
+                        }
+
+                        @* ── Inline delete confirmation ── *@
+                        @if (deletingOwnerId == o.Id)
+                        {
+                            <div class="owner-panel owner-panel--danger">
+                                <FluentLabel Style="font-weight:700;">
+                                    Delete the login for @o.Email?
+                                </FluentLabel>
+                                @if (o.HasCompany)
+                                {
+                                    <FluentLabel Style="font-size:0.85rem; margin-top:0.4rem;">
+                                        <strong>@o.CompanyName</strong> and all of its data — jobs, time entries,
+                                        invoices and employees — are kept. Only this owner's sign-in is removed,
+                                        and the company will be reachable by admins only.
+                                    </FluentLabel>
+                                }
+                                else
+                                {
+                                    <FluentLabel Style="font-size:0.85rem; margin-top:0.4rem;">
+                                        This owner never set up a company, so nothing else is affected.
+                                    </FluentLabel>
+                                }
+                                <div style="display:flex; gap:0.5rem; margin-top:0.85rem;">
+                                    <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small"
+                                                  @onclick="ConfirmDeleteOwnerAsync" Disabled="@isDeletingOwner">
+                                        @(isDeletingOwner ? "Deleting…" : "Delete owner")
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                                  @onclick="CancelOwnerAction" Disabled="@isDeletingOwner">
+                                        Cancel
+                                    </FluentButton>
+                                </div>
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -278,6 +368,20 @@ else
         color: #60758b;
     }
 
+    .owner-panel {
+        margin-top: 0.85rem;
+        padding: 0.9rem 1rem;
+        border-radius: 12px;
+        background: #ffffff;
+        border: 1px solid rgba(20, 48, 75, 0.12);
+    }
+
+    .owner-panel--danger {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+    }
+
     .badge {
         font-size: 0.65rem;
         font-weight: 700;
@@ -318,14 +422,29 @@ else
     // Create-owner form state
     private string regOwnerName = "";
     private string regOwnerEmail = "";
-    private string regOwnerPassword = "";
     private string? registerError;
     private string? registerSuccess;
+
+    // Edit / delete owner state — at most one row is open at a time
+    private Guid? editingOwnerId;
+    private Guid? deletingOwnerId;
+    private string editOwnerName = "";
+    private string editOwnerEmail = "";
+    private bool isSavingOwner;
+    private bool isDeletingOwner;
+    private Guid? resendingInviteTo;
+    private string? ownerActionError;
+    private string? ownerActionSuccess;
 
     private bool CanCreateOwner =>
         !string.IsNullOrWhiteSpace(regOwnerName) &&
         !string.IsNullOrWhiteSpace(regOwnerEmail) &&
-        regOwnerPassword.Length >= 8;
+        regOwnerEmail.Contains('@');
+
+    private bool CanSaveOwner =>
+        !string.IsNullOrWhiteSpace(editOwnerName) &&
+        !string.IsNullOrWhiteSpace(editOwnerEmail) &&
+        editOwnerEmail.Contains('@');
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -394,17 +513,15 @@ else
 
         var result = await AuthApi.CreateOwnerAsync(new CreateOwnerRequest
         {
-            Name     = regOwnerName,
-            Email    = regOwnerEmail,
-            Password = regOwnerPassword
+            Name  = regOwnerName,
+            Email = regOwnerEmail
         });
 
         if (result.IsSuccess)
         {
-            registerSuccess = $"Owner account created for {regOwnerEmail}. They will set up their company on first login.";
+            registerSuccess = $"Owner account created. {regOwnerEmail} has been emailed a link to set their password.";
             regOwnerName = "";
             regOwnerEmail = "";
-            regOwnerPassword = "";
             showRegisterForm = false;
             await LoadOwnersAsync();
         }
@@ -414,6 +531,118 @@ else
         }
 
         isRegistering = false;
+    }
+
+    private async Task ResendOwnerInviteAsync(AdminOwnerInfo owner)
+    {
+        if (resendingInviteTo is not null) return;
+
+        resendingInviteTo = owner.Id;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+
+        try
+        {
+            var result = await AuthApi.ResendOwnerInviteAsync(owner.Id);
+            if (result.IsSuccess)
+                ownerActionSuccess = $"Sent {owner.Email} a fresh link to set their password. It expires in 7 days.";
+            else
+                ownerActionError = result.ErrorMessage ?? "Could not send the setup link.";
+        }
+        finally
+        {
+            resendingInviteTo = null;
+        }
+    }
+
+    private void BeginEditOwner(AdminOwnerInfo owner)
+    {
+        editingOwnerId = owner.Id;
+        deletingOwnerId = null;
+        editOwnerName = owner.Name;
+        editOwnerEmail = owner.Email;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+    }
+
+    private void BeginDeleteOwner(AdminOwnerInfo owner)
+    {
+        deletingOwnerId = owner.Id;
+        editingOwnerId = null;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+    }
+
+    private void CancelOwnerAction()
+    {
+        editingOwnerId = null;
+        deletingOwnerId = null;
+        ownerActionError = null;
+    }
+
+    private async Task SaveOwnerAsync()
+    {
+        if (editingOwnerId is not Guid id || isSavingOwner) return;
+
+        isSavingOwner = true;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+
+        try
+        {
+            var result = await AuthApi.UpdateOwnerAsync(id, new UpdateOwnerRequest
+            {
+                Name  = editOwnerName,
+                Email = editOwnerEmail
+            });
+
+            if (!result.IsSuccess)
+            {
+                ownerActionError = result.ErrorMessage ?? "Could not update the owner account.";
+                return;
+            }
+
+            editingOwnerId = null;
+            ownerActionSuccess = $"Updated {editOwnerEmail}.";
+            await LoadOwnersAsync();
+            // The owner email is shown on the company rows too.
+            await LoadCompaniesAsync();
+        }
+        finally
+        {
+            isSavingOwner = false;
+        }
+    }
+
+    private async Task ConfirmDeleteOwnerAsync()
+    {
+        if (deletingOwnerId is not Guid id || isDeletingOwner) return;
+
+        var deleted = owners.FirstOrDefault(o => o.Id == id);
+        isDeletingOwner = true;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+
+        try
+        {
+            var result = await AuthApi.DeleteOwnerAsync(id);
+
+            if (!result.IsSuccess)
+            {
+                ownerActionError = result.ErrorMessage ?? "Could not delete the owner account.";
+                return;
+            }
+
+            deletingOwnerId = null;
+            ownerActionSuccess = deleted is null
+                ? "Owner account deleted."
+                : $"Deleted the login for {deleted.Email}.";
+            await LoadOwnersAsync();
+        }
+        finally
+        {
+            isDeletingOwner = false;
+        }
     }
 
     private async Task SwitchToCompanyAsync(Guid companyId)

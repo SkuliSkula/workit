@@ -292,7 +292,7 @@ internal static class AuthEndpoints
             .WithName("RegisterCompany");
 
         // ── Admin: create an owner account with no company yet ──
-        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, IEmailService emailService, CreateOwnerRequest request, CancellationToken ct) =>
+        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, IAccountInviteService invites, CreateOwnerRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsAdmin())
@@ -301,8 +301,8 @@ internal static class AuthEndpoints
                     if (string.IsNullOrWhiteSpace(request.Name))
                         return Results.BadRequest("Owner name is required.");
 
-                    if (!IsValidCredentials(request.Email, request.Password))
-                        return Results.BadRequest("A valid email and a password of at least 8 characters are required.");
+                    if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+                        return Results.BadRequest("A valid email address is required.");
 
                     var normalizedEmail = request.Email.Trim().ToLowerInvariant();
                     if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail, ct))
@@ -310,9 +310,11 @@ internal static class AuthEndpoints
 
                     var owner = new AppUser
                     {
-                        Name         = request.Name.Trim(),
-                        Email        = normalizedEmail,
-                        PasswordHash = PasswordHasher.HashPassword(request.Password),
+                        Name  = request.Name.Trim(),
+                        Email = normalizedEmail,
+                        // Nobody holds this. The owner picks their own password from the
+                        // emailed link, so no password is ever transmitted or displayed.
+                        PasswordHash = PasswordHasher.HashPassword(invites.CreateUnusablePassword()),
                         Role         = WorkitRoles.Owner,
                         CompanyId    = null   // no company yet — owner will set it up on first login
                     };
@@ -320,7 +322,7 @@ internal static class AuthEndpoints
                     db.AppUsers.Add(owner);
                     await db.SaveChangesAsync(ct);
 
-                    await emailService.SendOwnerWelcomeAsync(owner.Name, owner.Email, request.Password);
+                    await invites.SendInviteAsync(owner.Email, owner.Name, InviteKind.Owner, ct);
 
                     return Results.Ok(new { owner.Id, owner.Email, owner.Name });
                 },
@@ -328,6 +330,30 @@ internal static class AuthEndpoints
                 "creating an owner account"))
             .RequireAuthorization()
             .WithName("CreateOwner");
+
+        // ── Admin: send a fresh setup link to an owner whose invite lapsed ──
+        authApi.MapPost("/admin/owners/{id:guid}/resend-invite", async (WorkitDbContext db, HttpContext httpContext, IAccountInviteService invites, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    var owner = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == id && x.Role == WorkitRoles.Owner, ct);
+                    if (owner is null)
+                        return Results.NotFound();
+
+                    if (DemoDataSeeder.IsProtectedAccount(owner.Email))
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
+
+                    var displayName = string.IsNullOrWhiteSpace(owner.Name) ? owner.Email : owner.Name;
+                    await invites.SendInviteAsync(owner.Email, displayName, InviteKind.Owner, ct);
+
+                    return Results.NoContent();
+                },
+                logger,
+                "resending an owner invite"))
+            .RequireAuthorization()
+            .WithName("ResendOwnerInvite");
 
         // ── Admin: list all owner accounts with company status ──
         authApi.MapGet("/admin/owners", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
@@ -372,6 +398,88 @@ internal static class AuthEndpoints
                 "listing all owners for admin"))
             .RequireAuthorization()
             .WithName("GetAdminOwners");
+
+        // ── Admin: edit an owner's name and login email ──
+        authApi.MapPut("/admin/owners/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, UpdateOwnerRequest request, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    if (string.IsNullOrWhiteSpace(request.Name))
+                        return Results.BadRequest("Owner name is required.");
+
+                    if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+                        return Results.BadRequest("A valid email address is required.");
+
+                    var owner = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == id && x.Role == WorkitRoles.Owner, ct);
+                    if (owner is null)
+                        return Results.NotFound();
+
+                    if (DemoDataSeeder.IsProtectedAccount(owner.Email))
+                        return Results.BadRequest("This is a demo account. It cannot be edited.");
+
+                    var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                    if (normalizedEmail != owner.Email &&
+                        await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail && x.Id != id, ct))
+                        return Results.Conflict("That email address is already in use.");
+
+                    // The owner's Employee record is matched by email within the company,
+                    // so it has to move with the login or the owner loses their own timesheet.
+                    if (normalizedEmail != owner.Email && owner.CompanyId is { } companyId && companyId != Guid.Empty)
+                    {
+                        var employee = await db.Employees
+                            .FirstOrDefaultAsync(e => e.CompanyId == companyId && e.Email == owner.Email, ct);
+                        if (employee is not null)
+                            employee.Email = normalizedEmail;
+                    }
+
+                    owner.Name  = request.Name.Trim();
+                    owner.Email = normalizedEmail;
+                    await db.SaveChangesAsync(ct);
+
+                    return Results.NoContent();
+                },
+                logger,
+                "updating an owner account"))
+            .RequireAuthorization()
+            .WithName("UpdateOwner");
+
+        // ── Admin: delete an owner account ──
+        // Only the login is removed. Company records (jobs, time entries, invoices)
+        // are business data and are deliberately left intact; an admin can still
+        // reach an orphaned company from the Companies list.
+        authApi.MapDelete("/admin/owners/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    var owner = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == id && x.Role == WorkitRoles.Owner, ct);
+                    if (owner is null)
+                        return Results.NotFound();
+
+                    if (DemoDataSeeder.IsProtectedAccount(owner.Email))
+                        return Results.BadRequest("This is a demo account. It cannot be deleted.");
+
+                    var companyLinks = await db.UserCompanies.Where(x => x.UserId == id).ToListAsync(ct);
+                    db.UserCompanies.RemoveRange(companyLinks);
+
+                    var refreshTokens = await db.RefreshTokens.Where(x => x.UserId == id).ToListAsync(ct);
+                    db.RefreshTokens.RemoveRange(refreshTokens);
+
+                    var resetTokens = await db.PasswordResetTokens.Where(x => x.Email == owner.Email).ToListAsync(ct);
+                    db.PasswordResetTokens.RemoveRange(resetTokens);
+
+                    db.AppUsers.Remove(owner);
+                    await db.SaveChangesAsync(ct);
+
+                    return Results.NoContent();
+                },
+                logger,
+                "deleting an owner account"))
+            .RequireAuthorization()
+            .WithName("DeleteOwner");
 
         // ── Owner: self-provision a company on first login ──
         authApi.MapPost("/owner/setup-company", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, OwnerSetupCompanyRequest request, CancellationToken ct) =>
@@ -505,6 +613,55 @@ internal static class AuthEndpoints
                 "setting up company"))
             .RequireAuthorization()
             .WithName("SetupCompany");
+
+        // ── Signed-in user changes their own password ──
+        authApi.MapPost("/change-password", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, ChangePasswordRequest request, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (string.IsNullOrWhiteSpace(request.CurrentPassword))
+                        return Results.BadRequest("Your current password is required.");
+
+                    if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+                        return Results.BadRequest("Your new password must be at least 8 characters.");
+
+                    if (string.Equals(request.CurrentPassword, request.NewPassword, StringComparison.Ordinal))
+                        return Results.BadRequest("Your new password must be different from your current one.");
+
+                    var userContext = httpContext.User.ToUserContext();
+                    var user = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == userContext.UserId, ct);
+                    if (user is null)
+                        return Results.NotFound();
+
+                    if (!PasswordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+                        return Results.BadRequest("Your current password is not correct.");
+
+                    if (DemoDataSeeder.IsProtectedAccount(user.Email))
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
+
+                    user.PasswordHash = PasswordHasher.HashPassword(request.NewPassword);
+
+                    // Sign out every other device — a password change should end
+                    // sessions that may have been opened with the old credentials.
+                    var refreshTokens = await db.RefreshTokens
+                        .Where(x => x.UserId == userContext.UserId && !x.Revoked)
+                        .ToListAsync(ct);
+                    foreach (var token in refreshTokens) token.Revoked = true;
+
+                    // Re-issue for the caller so the device they just used stays signed in.
+                    // The overrides preserve whichever company they are currently viewing.
+                    var loginResponse = tokenFactory.CreateToken(user, userContext.CompanyId, userContext.EmployeeId);
+                    var replacement = tokenFactory.CreateRefreshToken(user.Id);
+                    db.RefreshTokens.Add(replacement);
+
+                    await db.SaveChangesAsync(ct);
+                    loginResponse.RefreshToken = replacement.Token;
+
+                    return Results.Ok(loginResponse);
+                },
+                logger,
+                "changing a password"))
+            .RequireAuthorization()
+            .WithName("ChangePassword");
 
         // ── Forgot password — always returns 200 to avoid email enumeration ──
         authApi.MapPost("/forgot-password", async (WorkitDbContext db, IEmailService emailService, IConfiguration config, ForgotPasswordRequest request, CancellationToken ct) =>

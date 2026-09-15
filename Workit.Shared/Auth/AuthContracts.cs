@@ -39,10 +39,13 @@ public sealed class RegisterCompanyRequest
     public string OwnerPassword { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Creates an employee and their login. No password is supplied — the employee
+/// chooses one from the setup link emailed to them.
+/// </summary>
 public sealed class CreateEmployeeUserRequest
 {
     public Models.Employee Employee { get; set; } = new();
-    public string Password { get; set; } = string.Empty;
 }
 
 public sealed class SetupCompanyRequest
@@ -67,6 +70,13 @@ public sealed class ForgotPasswordRequest
     public string Email { get; set; } = string.Empty;
 }
 
+/// <summary>A signed-in user changes their own password.</summary>
+public sealed class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public sealed class RedeemPasswordResetRequest
 {
     public string Token { get; set; } = string.Empty;
@@ -78,12 +88,14 @@ public sealed class SwitchCompanyRequest
     public Guid CompanyId { get; set; }
 }
 
-/// <summary>Admin creates an owner account with no company yet.</summary>
+/// <summary>
+/// Admin creates an owner account with no company yet. No password is supplied —
+/// the owner chooses one from the setup link emailed to them.
+/// </summary>
 public sealed class CreateOwnerRequest
 {
     public string Name { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
 }
 
 /// <summary>Owner self-provisions their first company (manual or from Payday).</summary>
@@ -103,4 +115,11 @@ public sealed class AdminOwnerInfo
     public string Email { get; set; } = string.Empty;
     public bool HasCompany { get; set; }
     public string CompanyName { get; set; } = string.Empty;
+}
+
+/// <summary>Admin edits an owner's name and login email.</summary>
+public sealed class UpdateOwnerRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 }
