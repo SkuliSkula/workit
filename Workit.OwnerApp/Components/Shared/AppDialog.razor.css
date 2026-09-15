@@ -4,40 +4,34 @@
     max-height: min(90dvh, 1000px);
     margin: auto;
     padding: 0;
-    border: 1px solid var(--neutral-stroke-rest, #dce3ea);
-    border-radius: 14px;
-    background: var(--neutral-layer-1, #fff);
-    color: var(--neutral-foreground-rest, #14304b);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    border: 0;
+    border-radius: 12px;
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
     overflow: hidden;
 }
 
-.app-dialog-wide { width: min(1100px, calc(100vw - 3rem)); }
-.app-dialog::backdrop { background: rgba(15, 23, 42, .45); }
+.app-dialog-wide { width: min(1000px, calc(100vw - 3rem)); }
+.app-dialog::backdrop { background: rgba(0, 0, 0, .72); }
 .dialog-layout { display: flex; flex-direction: column; max-height: inherit; }
 .dialog-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--neutral-stroke-rest, #dce3ea);
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0;
 }
-.dialog-header h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
-.dialog-close {
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    font-size: 1.1rem;
-    min-width: 44px;
-    min-height: 44px;
-    cursor: pointer;
+.dialog-header h2 {
+    margin: 0;
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
 }
-.dialog-close:hover { background: var(--neutral-fill-secondary-rest, #edf2f6); }
-.dialog-close:focus-visible { outline: 2px solid var(--accent-fill-rest, #0078d4); }
-.dialog-close:disabled { cursor: wait; opacity: .5; }
+.dialog-header ::deep fluent-button { flex-shrink: 0; }
 .dialog-body { padding: 1.25rem; overflow: auto; min-height: 0; overscroll-behavior: contain; }
 .dialog-body ::deep .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .dialog-body ::deep .dialog-line-editor { grid-template-columns: minmax(180px, 2fr) repeat(5, minmax(80px, 1fr)) auto; }
