@@ -89,8 +89,7 @@
 @* ── Edit form ── *@
 @if (editingEmployee is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>Edit Employee</strong></FluentLabel>
+    <AppDialog Title="Edit Employee" OnClose="CancelEmployeeEdit" Busy="savingEdit">
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
                 <FluentTextField Label="Name *" @bind-Value="editingEmployee.DisplayName" Placeholder="Full name" style="width:100%" />
@@ -132,10 +131,14 @@
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
-            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync">Save Changes</FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEmployeeAsync" Disabled="@savingEdit">Save Changes</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEmployeeEdit" Disabled="@savingEdit">Cancel</FluentButton>
         </div>
-    </FluentCard>
+        @if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <FluentLabel Color="Color.Error" role="alert">@loadError</FluentLabel>
+        }
+    </AppDialog>
 }
 
 @* ── List ── *@
@@ -214,6 +217,7 @@
     private bool showCreateForm;
     private readonly List<Employee> employees = [];
     private Company? company;
+    private bool savingEdit;
     private Employee? editingEmployee;
     private string newEmployeeName = string.Empty;
     private string newEmployeeTrade = Trades[0];
@@ -326,6 +330,7 @@
 
     private void BeginEditEmployee(Employee employee)
     {
+        loadError = null;
         showCreateForm = false;
         editingEmployee = new Employee
         {
@@ -345,20 +350,29 @@
 
     private async Task SaveEmployeeAsync()
     {
-        if (editingEmployee is null)
+        if (editingEmployee is null || savingEdit)
         {
             return;
         }
 
-        var result = await EmployeesApi.UpdateEmployeeAsync(editingEmployee);
-        if (result.IsSuccess)
+        savingEdit = true;
+        loadError = null;
+        try
         {
-            editingEmployee = null;
-            await LoadAsync();
-            return;
-        }
+            var result = await EmployeesApi.UpdateEmployeeAsync(editingEmployee);
+            if (result.IsSuccess)
+            {
+                editingEmployee = null;
+                await LoadAsync();
+                return;
+            }
 
-        loadError = result.ErrorMessage;
+            loadError = result.ErrorMessage;
+        }
+        finally
+        {
+            savingEdit = false;
+        }
     }
 
     private void CancelEmployeeEdit()

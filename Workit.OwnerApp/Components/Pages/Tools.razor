@@ -56,8 +56,7 @@
 @* ── Edit panel ── *@
 @if (editingTool is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.PaneHeader">Edit Tool</FluentLabel>
+    <AppDialog Title="Edit Tool" OnClose="CancelEdit" Busy="saving">
         <div class="admin-grid">
             <div>
                 <FluentTextField Label="Name" @bind-Value="editingTool.Name" style="width:100%" />
@@ -76,10 +75,14 @@
                               Disabled="@(string.IsNullOrWhiteSpace(editingTool.Name) || saving)">
                     @(saving ? "Saving…" : "Save Changes")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit">Cancel</FluentButton>
+                <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit" Disabled="@saving">Cancel</FluentButton>
             </div>
         </div>
-    </FluentCard>
+        @if (!string.IsNullOrWhiteSpace(saveResult))
+        {
+            <FluentLabel Color="Color.Error" role="alert">@saveResult</FluentLabel>
+        }
+    </AppDialog>
 }
 
 @* ── Tool list ── *@

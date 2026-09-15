@@ -60,8 +60,7 @@
 @* ── Edit form ── *@
 @if (editingCustomer is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>Edit Customer</strong></FluentLabel>
+    <AppDialog Title="Edit Customer" OnClose="CancelCustomerEdit" Busy="savingEdit">
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
                 <FluentTextField Label="Name *" @bind-Value="editingCustomer.Name" Placeholder="Customer name" style="width:100%" />
@@ -80,10 +79,14 @@
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
-            <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync">Save Changes</FluentButton>
-            <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync" Disabled="@savingEdit">Save Changes</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit" Disabled="@savingEdit">Cancel</FluentButton>
         </div>
-    </FluentCard>
+        @if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <FluentLabel Color="Color.Error" role="alert">@loadError</FluentLabel>
+        }
+    </AppDialog>
 }
 
 @* ── List ── *@
@@ -119,6 +122,7 @@
 @code {
     private readonly List<Customer> customers = [];
     private Company? company;
+    private bool savingEdit;
     private Customer? editingCustomer;
     private bool loading = true;
     private bool showCreateForm;
@@ -212,6 +216,7 @@
 
     private void BeginEditCustomer(Customer customer)
     {
+        loadError = null;
         showCreateForm = false;
         editingCustomer = new Customer
         {
@@ -227,20 +232,29 @@
 
     private async Task SaveCustomerAsync()
     {
-        if (editingCustomer is null)
+        if (editingCustomer is null || savingEdit)
         {
             return;
         }
 
-        var result = await CustomersApi.UpdateCustomerAsync(editingCustomer);
-        if (result.IsSuccess)
+        savingEdit = true;
+        loadError = null;
+        try
         {
-            editingCustomer = null;
-            await LoadAsync();
-            return;
-        }
+            var result = await CustomersApi.UpdateCustomerAsync(editingCustomer);
+            if (result.IsSuccess)
+            {
+                editingCustomer = null;
+                await LoadAsync();
+                return;
+            }
 
-        loadError = result.ErrorMessage;
+            loadError = result.ErrorMessage;
+        }
+        finally
+        {
+            savingEdit = false;
+        }
     }
 
     private void CancelCustomerEdit()

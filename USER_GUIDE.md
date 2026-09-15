@@ -43,7 +43,7 @@ Navigate to **Employees** in the sidebar.
 2. Fill in the employee's name, trade, SSN, email, phone, and emergency contact.
 3. Enter an initial password (minimum 8 characters).
 4. Click **Save**.
-5. Share the email and password with the employee so they can log in to the Employee App.
+5. Share the email and password with the employee so they can log in to the separately maintained iOS employee app.
 
 **Editing an employee**
 1. Click the employee's row in the grid.
@@ -117,7 +117,7 @@ Navigate to **Materials** in the sidebar.
 3. Click **Save**.
 
 **Editing a material**
-Click any material row to open the edit panel, adjust the fields, and click **Save**. Toggle the **Active** switch to hide a material from the Employee App without deleting it.
+Click any material row to open the edit panel, adjust the fields, and click **Save**. Toggle the **Active** switch to deactivate a material without deleting it.
 
 **Stock levels**
 Stock is reduced automatically each time an employee logs material usage. Update the stock quantity manually here after a resupply.
@@ -159,87 +159,6 @@ Select a **From** and **To** date range and click **Update** to refresh the numb
 
 ---
 
----
+## iOS Employee App
 
-## Employee App
-
-The Employee App is designed for phones. Open it in your mobile browser at your company's employee URL (e.g. `app.workit.is`) or install it as a PWA from the browser menu.
-
-### Logging in
-
-1. Open the Employee App URL.
-2. Enter the email and password given to you by your manager.
-3. Tap **Log in**.
-
----
-
-### Home
-
-The home screen shows your personal summary for the current month.
-
-- Your **avatar** shows your initials, name, and company.
-- **KPI cards**: total hours, jobs worked, and entries logged this month.
-- **Daily load chart**: bars show how many hours you worked each day.
-- **Top jobs**: where most of your hours went.
-- **Recent entries**: your last few time entries.
-
-**Changing the month**
-Swipe left to go to the next month, swipe right to go to the previous month. You can also tap the arrow buttons.
-
----
-
-### Logging Hours
-
-Tap **Hours** in the bottom navigation.
-
-**Creating an entry**
-1. Tap the **+** button (bottom right).
-2. Select the job.
-3. Choose the work date.
-4. Enter your regular hours.
-5. Enter overtime hours if applicable.
-6. Add optional notes.
-7. Tap **Save**.
-
-**Viewing past entries**
-The Hours screen lists all your entries, newest first, showing date, job, regular hours, overtime, and any notes.
-
-The header shows your rolling 30-day total hours, number of entries, and number of distinct jobs worked.
-
----
-
-### Materials
-
-Tap **Materials** in the bottom navigation.
-
-**Browsing the catalog**
-Tap a category pill to filter by category, or leave it on **All** to see everything. Each card shows the material name, code, unit, price, and current stock level (colour-coded: green = adequate, orange = low, red = out of stock).
-
-**Logging material use**
-1. Tap **Log use** on the material you used.
-2. Select the job this material was used on.
-3. Enter the quantity.
-4. Add optional notes.
-5. Tap **Save**.
-
-Stock is updated automatically.
-
----
-
-### Tools
-
-Tap **Tools** in the bottom navigation.
-
-**Taking a tool**
-Under **Available**, find the tool you need and tap **Take**. It moves to the **With me** section immediately.
-
-**Returning a tool**
-Under **With me**, find the tool and tap **Return**. It moves back to **Available**.
-
-Each tool in **With me** shows how long you have had it (e.g. "3 days").
-
----
-
-### Getting help
-
-If you forget your password, ask your manager to reset it for you. They will give you a new temporary password that you can use to log in.
+The iOS employee app is maintained in a separate repository. See the [deploy and release runbook](deploy/RUNBOOK.md#ios-app) for details.

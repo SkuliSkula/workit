@@ -58,9 +58,7 @@
 @* ── Create / Edit form ── *@
 @if (showCreateForm)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>@(editingExpense is not null ? "Edit Expense" : "New Expense")</strong></FluentLabel>
-
+    <AppDialog Title="@(editingExpense is not null ? "Edit Expense" : "New Expense")" Wide="true" OnClose="ToggleCreateForm" Busy="saving">
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
                 <FluentLabel>Creditor SSN</FluentLabel>
@@ -110,7 +108,7 @@
                 <FluentCheckbox @bind-Value="formDeductible" Label="VAT Deductible" />
             </div>
 
-            <div style="grid-column: span 3">
+            <div style="grid-column: 1 / -1">
                 <FluentLabel>Comments</FluentLabel>
                 <FluentTextField @bind-Value="formComments" Placeholder="Optional comments" style="width:100%" />
             </div>
@@ -127,7 +125,7 @@
             {
                 var idx = i;
                 var line = formLines[idx];
-                <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
+                <div class="admin-grid dialog-line-editor" style="gap:0.5rem; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
                     <div>
                         <FluentLabel>Description <span style="color:red">*</span></FluentLabel>
                         <FluentTextField @bind-Value="line.Description" Placeholder="Description" style="width:100%" />
@@ -198,9 +196,9 @@
                           Disabled="@(!CanSave || saving)">
                 @(saving ? "Saving…" : (editingExpense is not null ? "Update Expense" : "Create Expense"))
             </FluentButton>
-            <FluentButton Appearance="Appearance.Neutral" @onclick="ToggleCreateForm">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="ToggleCreateForm" Disabled="@saving">Cancel</FluentButton>
         </div>
-    </FluentCard>
+    </AppDialog>
 }
 
 @* ── Expense list ── *@
@@ -220,98 +218,100 @@
             @(totalExpenses > 0 ? $"(total in Payday: {totalExpenses})" : string.Empty)
         </div>
 
-        <FluentDataGrid TGridItem="PaydayExpense" Items="@DisplayedExpenses.AsQueryable()"
-                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table">
+        <div style="overflow-x:auto; min-width:0; max-width:100%;">
+            <FluentDataGrid TGridItem="PaydayExpense" Items="@DisplayedExpenses.AsQueryable()"
+                            AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="min-width:900px;">
 
-            <TemplateColumn Title="Creditor">
-                <FluentLabel>@(context.Creditor?.Name ?? context.Creditor?.Ssn ?? "—")</FluentLabel>
-            </TemplateColumn>
+                <TemplateColumn Title="Creditor">
+                    <FluentLabel>@(context.Creditor?.Name ?? context.Creditor?.Ssn ?? "—")</FluentLabel>
+                </TemplateColumn>
 
-            <TemplateColumn Title="Job">
-                @{
-                    var linkedJobId = expenseJobLinks.GetValueOrDefault(context.Id);
-                    var linkedJob   = linkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == linkedJobId.Value) : null;
-                    var detected    = autoDetectedJobs.GetValueOrDefault(context.Id);
-                }
-                @if (linkedJob is not null)
-                {
-                    <div style="display:flex; align-items:center; gap:0.25rem;">
-                        <span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@linkedJob.Code</span>
-                        <FluentButton Appearance="Appearance.Stealth" title="Unlink job"
-                                      @onclick="@(async () => await UnlinkJobAsync(context))"
-                                      style="padding:0 4px; min-width:0; font-size:0.75rem;">✕</FluentButton>
+                <TemplateColumn Title="Job">
+                    @{
+                        var linkedJobId = expenseJobLinks.GetValueOrDefault(context.Id);
+                        var linkedJob   = linkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == linkedJobId.Value) : null;
+                        var detected    = autoDetectedJobs.GetValueOrDefault(context.Id);
+                    }
+                    @if (linkedJob is not null)
+                    {
+                        <div style="display:flex; align-items:center; gap:0.25rem;">
+                            <span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@linkedJob.Code</span>
+                            <FluentButton Appearance="Appearance.Stealth" title="Unlink job"
+                                          @onclick="@(async () => await UnlinkJobAsync(context))"
+                                          style="padding:0 4px; min-width:0; font-size:0.75rem;">✕</FluentButton>
+                        </div>
+                    }
+                    else if (detected is not null)
+                    {
+                        <div style="display:flex; align-items:center; gap:0.25rem;">
+                            <span style="background:#fef3c7; color:#92400e; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@detected.Code ?</span>
+                            <FluentButton Appearance="Appearance.Stealth" title="Link to this job"
+                                          @onclick="@(() => OpenLinkDialog(context, detected))"
+                                          style="padding:0 4px; min-width:0; font-size:0.75rem;">Link</FluentButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <FluentButton Appearance="Appearance.Stealth" title="Link to job"
+                                      @onclick="@(() => OpenLinkDialog(context, null))"
+                                      style="padding:0 4px; min-width:0; font-size:0.78rem;">+ Link</FluentButton>
+                    }
+                </TemplateColumn>
+
+                <TemplateColumn Title="Status">
+                    <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                        @context.Status
+                    </span>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Date">
+                    <FluentLabel>@context.Date?.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Due Date">
+                    <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Amount" Align="Align.End">
+                    <FluentLabel>@context.AmountIncludingVat.ToString("N0") ISK</FluentLabel>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Deductible" Align="Align.Center">
+                    <FluentLabel>@(context.Deductible ? "✓" : "—")</FluentLabel>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Actions" Align="Align.End">
+                    <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      @onclick="@(() => ToggleDetail(context))"
+                                      title="View details">
+                            View
+                        </FluentButton>
+
+                        @if (context.Status is "DRAFT" or "UNPAID")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => BeginEdit(context))"
+                                          title="Edit expense">Edit</FluentButton>
+                        }
+
+                        @if (context.Status is "UNPAID" or "DRAFT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => BeginMarkPaid(context))"
+                                          title="Mark as paid">✓ Paid</FluentButton>
+                        }
+
+                        @if (context.Status is "DRAFT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => DeleteExpenseAsync(context))"
+                                          title="Delete draft">Delete</FluentButton>
+                        }
                     </div>
-                }
-                else if (detected is not null)
-                {
-                    <div style="display:flex; align-items:center; gap:0.25rem;">
-                        <span style="background:#fef3c7; color:#92400e; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@detected.Code ?</span>
-                        <FluentButton Appearance="Appearance.Stealth" title="Link to this job"
-                                      @onclick="@(() => OpenLinkDialog(context, detected))"
-                                      style="padding:0 4px; min-width:0; font-size:0.75rem;">Link</FluentButton>
-                    </div>
-                }
-                else
-                {
-                    <FluentButton Appearance="Appearance.Stealth" title="Link to job"
-                                  @onclick="@(() => OpenLinkDialog(context, null))"
-                                  style="padding:0 4px; min-width:0; font-size:0.78rem;">+ Link</FluentButton>
-                }
-            </TemplateColumn>
-
-            <TemplateColumn Title="Status">
-                <span style="@StatusStyle(context.Status) padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
-                    @context.Status
-                </span>
-            </TemplateColumn>
-
-            <TemplateColumn Title="Date">
-                <FluentLabel>@context.Date?.ToString("dd MMM yyyy")</FluentLabel>
-            </TemplateColumn>
-
-            <TemplateColumn Title="Due Date">
-                <FluentLabel>@context.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </TemplateColumn>
-
-            <TemplateColumn Title="Amount" Align="Align.End">
-                <FluentLabel>@context.AmountIncludingVat.ToString("N0") ISK</FluentLabel>
-            </TemplateColumn>
-
-            <TemplateColumn Title="Deductible" Align="Align.Center">
-                <FluentLabel>@(context.Deductible ? "✓" : "—")</FluentLabel>
-            </TemplateColumn>
-
-            <TemplateColumn Title="Actions" Align="Align.End">
-                <div style="display:flex; gap:0.25rem; justify-content:flex-end; flex-wrap:wrap;">
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  @onclick="@(() => ToggleDetail(context))"
-                                  title="View details">
-                        @(selectedExpense?.Id == context.Id ? "▲ Close" : "▼ View")
-                    </FluentButton>
-
-                    @if (context.Status is "DRAFT" or "UNPAID")
-                    {
-                        <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => BeginEdit(context))"
-                                      title="Edit expense">Edit</FluentButton>
-                    }
-
-                    @if (context.Status is "UNPAID" or "DRAFT")
-                    {
-                        <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => BeginMarkPaid(context))"
-                                      title="Mark as paid">✓ Paid</FluentButton>
-                    }
-
-                    @if (context.Status is "DRAFT")
-                    {
-                        <FluentButton Appearance="Appearance.Stealth"
-                                      @onclick="@(() => DeleteExpenseAsync(context))"
-                                      title="Delete draft">Delete</FluentButton>
-                    }
-                </div>
-            </TemplateColumn>
-        </FluentDataGrid>
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
 
         @if (expenses.Count < totalExpenses)
         {
@@ -340,175 +340,196 @@
 @* ── Mark Paid panel ── *@
 @if (markPaidExpense is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>Mark Expense as Paid</strong></FluentLabel>
+    <AppDialog Title="Mark Expense as Paid" OnClose="CancelMarkPaid" Busy="markingPaid">
+        <p><strong>@(markPaidExpense.Creditor?.Name ?? "Expense")</strong> · @markPaidExpense.AmountIncludingVat.ToString("N0") ISK</p>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <FluentDatePicker @bind-Value="markPaidDate" Label="Payment date" />
             <div style="display:flex; align-items:flex-end; gap:0.5rem;">
                 <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmMarkPaidAsync" Disabled="@markingPaid">
                     @(markingPaid ? "Saving…" : "Confirm")
                 </FluentButton>
-                <FluentButton Appearance="Appearance.Neutral" @onclick="CancelMarkPaid">Cancel</FluentButton>
+                <FluentButton Appearance="Appearance.Neutral" @onclick="CancelMarkPaid" Disabled="@markingPaid">Cancel</FluentButton>
             </div>
         </div>
         @if (!string.IsNullOrWhiteSpace(markPaidError))
         {
             <FluentLabel Color="Color.Error" style="margin-top:0.4rem;">@markPaidError</FluentLabel>
         }
-    </FluentCard>
+    </AppDialog>
 }
 
 @* ── Expense detail ── *@
 @if (selectedExpense is not null)
 {
-    <FluentCard Class="admin-card" AreaRestricted="false">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <FluentLabel Typo="Typography.Body">
-                <strong>Expense Detail</strong>
-                <span style="@StatusStyle(selectedExpense.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
-                    @selectedExpense.Status
-                </span>
-            </FluentLabel>
-            <FluentButton Appearance="Appearance.Stealth" @onclick="ClearSelected">✕ Close</FluentButton>
-        </div>
-
-        @{
-            var selLinkedJobId = expenseJobLinks.GetValueOrDefault(selectedExpense.Id);
-            var selLinkedJob   = selLinkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == selLinkedJobId.Value) : null;
-            var selDetected    = autoDetectedJobs.GetValueOrDefault(selectedExpense.Id);
-        }
-        <div style="margin-top:0.75rem; padding:0.6rem 0.75rem; background:var(--neutral-fill-secondary-rest); border-radius:6px; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-            <span style="font-size:0.78rem; font-weight:600; color:var(--neutral-foreground-hint-rest);">Linked Job:</span>
-            @if (selLinkedJob is not null)
-            {
-                <span style="background:#dcfce7; color:#15803d; padding:2px 10px; border-radius:4px; font-size:0.85rem; font-weight:700;">@selLinkedJob.Code</span>
-                <span style="font-size:0.82rem; color:#374151;">@selLinkedJob.Name</span>
-                <FluentButton Appearance="Appearance.Stealth" @onclick="@(async () => await UnlinkJobAsync(selectedExpense))" style="margin-left:auto;">
-                    ✕ Unlink
-                </FluentButton>
-                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenLinkDialog(selectedExpense, null))">
-                    Change
-                </FluentButton>
-            }
-            else if (selDetected is not null)
-            {
-                <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:4px; font-size:0.85rem; font-weight:600;">@selDetected.Code</span>
-                <span style="font-size:0.78rem; color:#92400e;">Detected in comments</span>
-                <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => OpenLinkDialog(selectedExpense, selDetected))" style="margin-left:auto;">
-                    Link to this job
-                </FluentButton>
-            }
-            else
-            {
-                <span style="font-size:0.82rem; color:#9ca3af;">No job linked</span>
-                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => OpenLinkDialog(selectedExpense, null))" style="margin-left:auto;">
-                    + Link to job
-                </FluentButton>
-            }
-        </div>
-
-        <div class="admin-grid" style="margin-top:0.75rem;">
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Creditor</FluentLabel>
-                <FluentLabel><strong>@(selectedExpense.Creditor?.Name ?? selectedExpense.Creditor?.Ssn ?? "—")</strong></FluentLabel>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(selectedExpense.Creditor?.Ssn))
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">SSN</FluentLabel>
-                    <FluentLabel>@selectedExpense.Creditor.Ssn</FluentLabel>
-                </div>
-            }
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Date</FluentLabel>
-                <FluentLabel>@selectedExpense.Date?.ToString("dd MMM yyyy")</FluentLabel>
-            </div>
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
-                <FluentLabel>@selectedExpense.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
-            </div>
-            @if (selectedExpense.FinalDueDate.HasValue)
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
-                    <FluentLabel>@selectedExpense.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
-                </div>
-            }
-            @if (selectedExpense.PaidDate.HasValue)
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
-                    <FluentLabel>@selectedExpense.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
-                </div>
-            }
-            <div>
-                <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT Deductible</FluentLabel>
-                <FluentLabel>@(selectedExpense.Deductible ? "Yes" : "No")</FluentLabel>
-            </div>
-            @if (!string.IsNullOrWhiteSpace(selectedExpense.Reference))
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Reference</FluentLabel>
-                    <FluentLabel>@selectedExpense.Reference</FluentLabel>
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(selectedExpense.Voucher))
-            {
-                <div>
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Voucher</FluentLabel>
-                    <FluentLabel>@selectedExpense.Voucher</FluentLabel>
-                </div>
-            }
-            @if (!string.IsNullOrWhiteSpace(selectedExpense.Comments))
-            {
-                <div style="grid-column:span 2">
-                    <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Comments</FluentLabel>
-                    <FluentLabel>@selectedExpense.Comments</FluentLabel>
-                </div>
-            }
-        </div>
-
-        @if (selectedExpense.Lines is { Count: > 0 })
+    <AppDialog Title="Expense Details" Wide="true" OnClose="ClearSelected" Busy="savingLink">
+        @if (detailLoading)
         {
-            <div style="margin-top:1rem;">
-                <FluentLabel><strong>Lines</strong></FluentLabel>
-                <FluentDataGrid TGridItem="PaydayExpenseLine" Items="@selectedExpense.Lines.AsQueryable()"
-                                AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
-                    <PropertyColumn Property="@(x => x.Description)" Title="Description" />
-                    <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty" />
-                    <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
-                        <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
-                    </TemplateColumn>
-                    <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
-                        <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
-                    </TemplateColumn>
-                    <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
-                    <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
-                </FluentDataGrid>
+            <div class="dialog-loading" role="status"><FluentProgressRing /> Loading details…</div>
+        }
+        else
+        {
+            <div>
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <FluentLabel Typo="Typography.Body">
+                        <strong>@(selectedExpense.Creditor?.Name ?? "Expense")</strong>
+                        <span style="@StatusStyle(selectedExpense.Status) margin-left:0.5rem; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">
+                            @selectedExpense.Status
+                        </span>
+                    </FluentLabel>
+                </div>
+
+                @{
+                    var selLinkedJobId = expenseJobLinks.GetValueOrDefault(selectedExpense.Id);
+                    var selLinkedJob   = selLinkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == selLinkedJobId.Value) : null;
+                    var selDetected    = autoDetectedJobs.GetValueOrDefault(selectedExpense.Id);
+                }
+                <div style="margin-top:0.75rem; padding:0.6rem 0.75rem; background:var(--neutral-fill-secondary-rest); border-radius:6px; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <span style="font-size:0.78rem; font-weight:600; color:var(--neutral-foreground-hint-rest);">Linked Job:</span>
+                    @if (selLinkedJob is not null)
+                    {
+                        <span style="background:#dcfce7; color:#15803d; padding:2px 10px; border-radius:4px; font-size:0.85rem; font-weight:700;">@selLinkedJob.Code</span>
+                        <span style="font-size:0.82rem; color:#374151;">@selLinkedJob.Name</span>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(async () => await UnlinkJobAsync(selectedExpense))" style="margin-left:auto;">
+                            ✕ Unlink
+                        </FluentButton>
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenLinkDialog(selectedExpense, null))">
+                            Change
+                        </FluentButton>
+                    }
+                    else if (selDetected is not null)
+                    {
+                        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:4px; font-size:0.85rem; font-weight:600;">@selDetected.Code</span>
+                        <span style="font-size:0.78rem; color:#92400e;">Detected in comments</span>
+                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => OpenLinkDialog(selectedExpense, selDetected))" style="margin-left:auto;">
+                            Link to this job
+                        </FluentButton>
+                    }
+                    else
+                    {
+                        <span style="font-size:0.82rem; color:#9ca3af;">No job linked</span>
+                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => OpenLinkDialog(selectedExpense, null))" style="margin-left:auto;">
+                            + Link to job
+                        </FluentButton>
+                    }
+                </div>
+
+                @if (linkingExpense is not null)
+                {
+                    @JobLinkForm
+                }
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <FluentLabel Color="Color.Error" role="alert">@actionError</FluentLabel>
+                }
+
+                <div class="admin-grid" style="margin-top:0.75rem;">
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Creditor</FluentLabel>
+                        <FluentLabel><strong>@(selectedExpense.Creditor?.Name ?? selectedExpense.Creditor?.Ssn ?? "—")</strong></FluentLabel>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(selectedExpense.Creditor?.Ssn))
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">SSN</FluentLabel>
+                            <FluentLabel>@selectedExpense.Creditor.Ssn</FluentLabel>
+                        </div>
+                    }
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Date</FluentLabel>
+                        <FluentLabel>@selectedExpense.Date?.ToString("dd MMM yyyy")</FluentLabel>
+                    </div>
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Due date</FluentLabel>
+                        <FluentLabel>@selectedExpense.DueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                    </div>
+                    @if (selectedExpense.FinalDueDate.HasValue)
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Final due date</FluentLabel>
+                            <FluentLabel>@selectedExpense.FinalDueDate?.ToString("dd MMM yyyy")</FluentLabel>
+                        </div>
+                    }
+                    @if (selectedExpense.PaidDate.HasValue)
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Paid on</FluentLabel>
+                            <FluentLabel>@selectedExpense.PaidDate?.ToString("dd MMM yyyy")</FluentLabel>
+                        </div>
+                    }
+                    <div>
+                        <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">VAT Deductible</FluentLabel>
+                        <FluentLabel>@(selectedExpense.Deductible ? "Yes" : "No")</FluentLabel>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(selectedExpense.Reference))
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Reference</FluentLabel>
+                            <FluentLabel>@selectedExpense.Reference</FluentLabel>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(selectedExpense.Voucher))
+                    {
+                        <div>
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Voucher</FluentLabel>
+                            <FluentLabel>@selectedExpense.Voucher</FluentLabel>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(selectedExpense.Comments))
+                    {
+                        <div style="grid-column:span 2">
+                            <FluentLabel style="font-size:0.75rem; color:var(--neutral-foreground-hint-rest);">Comments</FluentLabel>
+                            <FluentLabel>@selectedExpense.Comments</FluentLabel>
+                        </div>
+                    }
+                </div>
+
+                @if (selectedExpense.Lines is { Count: > 0 })
+                {
+                    <div class="dialog-table" style="margin-top:1rem;">
+                        <FluentLabel><strong>Lines</strong></FluentLabel>
+                        <FluentDataGrid TGridItem="PaydayExpenseLine" Items="@selectedExpense.Lines.AsQueryable()"
+                                        AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
+                            <PropertyColumn Property="@(x => x.Description)" Title="Description" />
+                            <PropertyColumn Property="@(x => x.Quantity)"    Title="Qty" />
+                            <TemplateColumn Title="Unit price (ex VAT)" Align="Align.End">
+                                <FluentLabel>@((context.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Unit price (incl VAT)" Align="Align.End">
+                                <FluentLabel>@((context.UnitPriceIncludingVat ?? 0).ToString("N0"))</FluentLabel>
+                            </TemplateColumn>
+                            <PropertyColumn Property="@(x => x.VatPercentage)"      Title="VAT %"  Format="0.##" />
+                            <PropertyColumn Property="@(x => x.DiscountPercentage)" Title="Disc %" Format="0.##" />
+                        </FluentDataGrid>
+                    </div>
+                }
+
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
+                    <div>Amount ex VAT: <strong>@selectedExpense.AmountExcludingVat.ToString("N0") ISK</strong></div>
+                    <div>VAT: <strong>@selectedExpense.AmountVat.ToString("N0") ISK</strong></div>
+                    <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedExpense.AmountIncludingVat.ToString("N0") ISK</strong></div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(detailError))
+                {
+                    <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
+                }
+
             </div>
         }
-
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:0.2rem; margin-top:1rem; font-size:0.9rem;">
-            <div>Amount ex VAT: <strong>@selectedExpense.AmountExcludingVat.ToString("N0") ISK</strong></div>
-            <div>VAT: <strong>@selectedExpense.AmountVat.ToString("N0") ISK</strong></div>
-            <div style="font-size:1rem;">Total incl. VAT: <strong>@selectedExpense.AmountIncludingVat.ToString("N0") ISK</strong></div>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(detailError))
-        {
-            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@detailError</FluentLabel>
-        }
-    </FluentCard>
+    </AppDialog>
 }
 
-@* ── Link job dialog ── *@
-@if (linkingExpense is not null)
+@* Linking from the list uses its own dialog; details contain the same form inline. *@
+@if (linkingExpense is not null && selectedExpense is null)
 {
-    <div style="position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200;" @onclick="CloseLinkDialog"></div>
-    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:min(480px,calc(100vw - 2rem)); background:#fff; border-radius:12px; padding:1.5rem; z-index:201; box-shadow:0 8px 40px rgba(0,0,0,0.18);">
-        <div style="font-size:1.05rem; font-weight:700; color:#111827; margin-bottom:0.25rem;">Link to Job</div>
-        <div style="font-size:0.85rem; color:#6b7280; margin-bottom:1rem;">@(linkingExpense.Creditor?.Name ?? linkingExpense.Creditor?.Ssn ?? "Expense")</div>
+    <AppDialog Title="Link to Job" OnClose="CloseLinkDialog" Busy="savingLink">
+        <p>@(linkingExpense.Creditor?.Name ?? linkingExpense.Creditor?.Ssn ?? "Expense")</p>
+        @JobLinkForm
+    </AppDialog>
+}
 
+@code {
+    private RenderFragment JobLinkForm => @<div>
         <FluentLabel>Select job</FluentLabel>
         <FluentSelect TValue="string" TOption="string" @bind-Value="pendingLinkJobId" style="width:100%; margin-top:0.25rem;">
             <FluentOption TOption="string" Value="">— Select job —</FluentOption>
@@ -530,10 +551,8 @@
             </FluentButton>
             <FluentButton Appearance="Appearance.Outline" @onclick="CloseLinkDialog" Disabled="@savingLink">Cancel</FluentButton>
         </div>
-    </div>
-}
+    </div>;
 
-@code {
 
     // ── Lookups ───────────────────────────────────────────────────────────────
     private readonly List<PaydayExpenseAccount> accounts = [];
@@ -608,6 +627,8 @@
     // ── Detail state ──────────────────────────────────────────────────────────
     private PaydayExpense? selectedExpense;
     private string?        detailError;
+    private bool detailLoading;
+    private int detailRequestVersion;
 
     // ── Job linking state ─────────────────────────────────────────────────────
     private readonly List<Job>                      jobs              = [];
@@ -867,24 +888,38 @@
     // ── Detail ────────────────────────────────────────────────────────────────
     private async Task ToggleDetail(PaydayExpense expense)
     {
-        if (selectedExpense?.Id == expense.Id)
-        {
-            selectedExpense = null;
-            return;
-        }
-
+        var requestVersion = ++detailRequestVersion;
+        selectedExpense = expense;
         detailError = null;
-        var result = await ExpensesApi.GetByIdAsync(expense.Id.ToString(), "lines");
-        if (result.IsSuccess)
-            selectedExpense = result.Value;
-        else
+        detailLoading = true;
+        try
         {
-            detailError     = result.ErrorMessage;
-            selectedExpense = expense;
+            var result = await ExpensesApi.GetByIdAsync(expense.Id.ToString(), "lines");
+            if (requestVersion != detailRequestVersion || selectedExpense?.Id != expense.Id) return;
+            if (result.IsSuccess && result.Value is not null)
+                selectedExpense = result.Value;
+            else
+                detailError = result.ErrorMessage ?? "Could not load full details. Showing the list information.";
+        }
+        catch (Exception)
+        {
+            if (requestVersion == detailRequestVersion)
+                detailError = "Could not load full details. Please close and try again.";
+        }
+        finally
+        {
+            if (requestVersion == detailRequestVersion) detailLoading = false;
         }
     }
 
-    private void ClearSelected() => selectedExpense = null;
+    private void ClearSelected()
+    {
+        detailRequestVersion++;
+        selectedExpense = null;
+        detailLoading = false;
+        detailError = null;
+        CloseLinkDialog();
+    }
 
     // ── Mark Paid ─────────────────────────────────────────────────────────────
     private void BeginMarkPaid(PaydayExpense expense)
