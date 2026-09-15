@@ -98,12 +98,14 @@ internal static class TimeEntryEndpoints
                         return Results.Forbid();
                     }
 
+                    var job = await FindUsableJobAsync(db, userContext, entry.JobId, ct);
+                    if (job is null)
+                        return Results.BadRequest("You are not assigned to that job.");
+
                     db.TimeEntries.Add(entry);
 
                     // Stamp the job as In Progress the first time a time entry is added.
-                    var job = await db.Jobs.FirstOrDefaultAsync(
-                        x => x.Id == entry.JobId && x.CompanyId == userContext.CompanyId, ct);
-                    if (job is not null && job.KanbanInProgressAt is null)
+                    if (job.KanbanInProgressAt is null)
                     {
                         job.KanbanInProgressAt = DateTimeOffset.UtcNow;
                     }

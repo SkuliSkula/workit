@@ -174,6 +174,9 @@ internal static class MaterialEndpoints
                     if (req.Quantity <= 0)
                         return Results.BadRequest("Quantity must be greater than zero.");
 
+                    if (req.JobId is Guid jobId && await FindUsableJobAsync(db, userContext, jobId, ct) is null)
+                        return Results.BadRequest("You are not assigned to that job.");
+
                     // Deduct from stock
                     material.Quantity = Math.Max(0, material.Quantity - req.Quantity);
 
