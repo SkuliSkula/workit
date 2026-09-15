@@ -1,10 +1,33 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Workit.Api.Auth;
+using Workit.Api.Data;
+using Workit.Shared.Auth;
+using Workit.Shared.Models;
 
 namespace Workit.Api.Endpoints;
 
 internal static class EndpointHelpers
 {
+    /// <summary>
+    /// Whether the caller may log work against a job. Owners and admins may
+    /// use any job in their company. An employee may use a job that has no
+    /// assignees — those are shared by the whole team — or one that names
+    /// them. The apps filter their pickers by the same rule; this is what
+    /// makes the filter real rather than cosmetic.
+    /// </summary>
+    internal static bool CanUseJob(this UserContext user, Job job) =>
+        !string.Equals(user.Role, WorkitRoles.Employee, StringComparison.Ordinal)
+        || job.AssignedEmployeeIds.Count == 0
+        || (user.EmployeeId is Guid me && job.AssignedEmployeeIds.Contains(me));
+
+    /// <summary>The job if it is in the caller's company and they may use it; otherwise null.</summary>
+    internal static async Task<Job?> FindUsableJobAsync(WorkitDbContext db, UserContext user, Guid jobId, CancellationToken ct)
+    {
+        var job = await db.Jobs.FirstOrDefaultAsync(j => j.Id == jobId && j.CompanyId == user.CompanyId, ct);
+        return job is not null && user.CanUseJob(job) ? job : null;
+    }
+
     internal static async Task<IResult> ExecuteDbAsync(
         Func<Task<IResult>> action,
         ILogger logger,
