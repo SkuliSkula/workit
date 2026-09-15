@@ -1,0 +1,130 @@
+.employee-multiselect {
+    display: grid;
+    gap: 0.25rem;
+    position: relative;
+}
+
+.employee-multiselect-label {
+    font-size: 0.85rem;
+    color: #14304b;
+}
+
+.employee-multiselect-dropdown {
+    position: relative;
+}
+
+/* Sized and aligned like the FluentTextField / FluentSelect fields beside it. */
+.employee-multiselect-trigger {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 32px;
+    padding: 0 0.6rem;
+    border: 1px solid rgba(20, 48, 75, 0.35);
+    border-radius: 4px;
+    background: #fff;
+    font-size: 0.9rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.employee-multiselect-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.employee-multiselect-dropdown[open] .employee-multiselect-trigger {
+    border-color: #0f6cbd;
+    box-shadow: 0 0 0 1px #0f6cbd;
+}
+
+.employee-multiselect-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.employee-multiselect-chevron {
+    color: #60758b;
+    font-size: 1rem;
+    line-height: 1;
+    transition: transform 0.15s;
+}
+
+.employee-multiselect-dropdown[open] .employee-multiselect-chevron {
+    transform: rotate(180deg);
+}
+
+.employee-multiselect-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 0.6rem 0.75rem;
+    background: #fff;
+    border: 1px solid rgba(20, 48, 75, 0.14);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(18, 41, 63, 0.14);
+}
+
+.employee-multiselect-options {
+    display: grid;
+    gap: 0.2rem;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.employee-multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.3rem 0.35rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.employee-multiselect-option:hover {
+    background: rgba(20, 48, 75, 0.05);
+}
+
+.employee-multiselect-option input {
+    accent-color: #0f6cbd;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+.employee-multiselect-empty,
+.employee-multiselect-hint {
+    margin: 0;
+    color: #60758b;
+    font-size: 0.8rem;
+}
+
+.employee-multiselect-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(20, 48, 75, 0.08);
+}
+
+.employee-multiselect-clear {
+    background: none;
+    border: none;
+    color: #0f6cbd;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 6px;
+}
+
+.employee-multiselect-clear:hover {
+    background: rgba(15, 108, 189, 0.08);
+}
