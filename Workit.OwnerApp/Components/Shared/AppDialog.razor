@@ -6,8 +6,8 @@
     <div class="dialog-layout">
         <header class="dialog-header">
             <h2 id="@titleId">@Title</h2>
-            <button type="button" class="dialog-close" aria-label="Close dialog" autofocus
-                    disabled="@Busy" @onclick="RequestClose">✕</button>
+            <FluentButton Appearance="Appearance.Accent" aria-label="Close dialog" autofocus
+                          Disabled="@Busy" @onclick="RequestClose">Close</FluentButton>
         </header>
         <div class="dialog-body">
             @ChildContent
