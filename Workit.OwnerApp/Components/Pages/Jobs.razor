@@ -65,10 +65,7 @@
                 else { <FluentLabel>No customers available yet.</FluentLabel> }
             </div>
             <div>
-                <FluentSelect Label="Assigned employees" TOption="Employee" Items="@employees"
-                              OptionValue="@(e => e.Id.ToString())" OptionText="@(e => e.DisplayName)"
-                              Multiple="true" @bind-SelectedOptions="selectedEmployees"
-                              Placeholder="— Unassigned —" style="width:100%" />
+                <EmployeeMultiSelect Employees="employees" @bind-SelectedIds="selectedEmployeeIds" />
             </div>
             <div>
                 <FluentTextField Label="Job name *" @bind-Value="newJobName" Placeholder="e.g. Electrical installation" style="width:100%" />
@@ -319,10 +316,7 @@ else if (jobs.Count > 0)
                                             </FluentSelect>
                                         </div>
                                         <div>
-                                            <FluentSelect Label="Assigned employees" TOption="Employee" Items="@employees"
-                                                          OptionValue="@(e => e.Id.ToString())" OptionText="@(e => e.DisplayName)"
-                                                          Multiple="true" @bind-SelectedOptions="editingEmployees"
-                                                          Placeholder="— Unassigned —" style="width:100%" />
+                                            <EmployeeMultiSelect Employees="employees" @bind-SelectedIds="editingEmployeeIds" />
                                         </div>
                                         <div>
                                             <FluentTextField Label="Job name" @bind-Value="editingJob.Name" style="width:100%" />
@@ -390,9 +384,9 @@ else if (company is not null)
     private Guid?    expandedJobId;
     private Job?     editingJob;
     private string?  editingCustomerId;
-    private IEnumerable<Employee>? editingEmployees;
+    private List<Guid> editingEmployeeIds = [];
     private string?     selectedCustomerId;
-    private IEnumerable<Employee>? selectedEmployees;
+    private List<Guid> selectedEmployeeIds = [];
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
     private JobCategory newCategory    = JobCategory.NewInstallation;
@@ -400,9 +394,6 @@ else if (company is not null)
 
     private bool HasSelectedCustomer => Guid.TryParse(selectedCustomerId, out _);
     private bool HasEditingCustomer  => Guid.TryParse(editingCustomerId,  out _);
-
-    private static List<Guid> ToIds(IEnumerable<Employee>? selected) =>
-        (selected ?? []).Select(e => e.Id).ToList();
 
     /// <summary>
     /// One pill, not one per person, so a busy job does not push the badges off
@@ -633,13 +624,13 @@ else if (company is not null)
         {
             CompanyId          = company.Id,
             CustomerId         = customerId,
-            AssignedEmployeeIds = ToIds(selectedEmployees),
+            AssignedEmployeeIds = [.. selectedEmployeeIds],
             Name               = newJobName.Trim(),
             BillingType        = newBillingType,
             Category           = newCategory
         });
 
-        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployees = null; showCreateForm = false; await LoadAsync(); }
+        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = []; showCreateForm = false; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
@@ -647,20 +638,20 @@ else if (company is not null)
     {
         editingJob = new Job { Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeIds = [.. job.AssignedEmployeeIds], Code = job.Code, Name = job.Name, BillingType = job.BillingType };
         editingCustomerId = job.CustomerId.ToString();
-        editingEmployees  = employees.Where(e => job.AssignedEmployeeIds.Contains(e.Id)).ToList();
+        editingEmployeeIds = [.. job.AssignedEmployeeIds];
     }
 
     private async Task SaveJobAsync()
     {
         if (editingJob is null || !Guid.TryParse(editingCustomerId, out var customerId)) return;
         editingJob.CustomerId         = customerId;
-        editingJob.AssignedEmployeeIds = ToIds(editingEmployees);
+        editingJob.AssignedEmployeeIds = [.. editingEmployeeIds];
         var result = await JobsApi.UpdateJobAsync(editingJob);
-        if (result.IsSuccess) { editingJob = null; editingCustomerId = null; editingEmployees = null; await LoadAsync(); }
+        if (result.IsSuccess) { editingJob = null; editingCustomerId = null; editingEmployeeIds = []; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
     }
 
-    private void CancelJobEdit() { editingJob = null; editingCustomerId = null; editingEmployees = null; }
+    private void CancelJobEdit() { editingJob = null; editingCustomerId = null; editingEmployeeIds = []; }
 
     // ── Company settings ──────────────────────────────────────────────────────
     private async Task SaveCompanySettingsAsync()

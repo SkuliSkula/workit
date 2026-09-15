@@ -1,0 +1,103 @@
+@* A dropdown for picking any number of employees. FluentSelect with
+   Multiple="true" renders as a permanently open listbox, which looked like a
+   stray list in the job form; this keeps the closed-until-clicked shape of the
+   other fields and shows the selection as a summary. Built on <details> so it
+   opens and closes natively — JS is only needed to close it on an outside
+   click, the same pattern AppDialog uses. *@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="employee-multiselect">
+    <span class="employee-multiselect-label">@Label</span>
+    <details @ref="dropdown" class="employee-multiselect-dropdown">
+        <summary class="employee-multiselect-trigger" title="@FullNames">
+            <span class="employee-multiselect-summary">@Summary</span>
+            <span class="employee-multiselect-chevron" aria-hidden="true">⌄</span>
+        </summary>
+        <div class="employee-multiselect-panel" role="group" aria-label="@Label">
+            @if (Employees.Count == 0)
+            {
+                <p class="employee-multiselect-empty">No employees yet.</p>
+            }
+            else
+            {
+                <div class="employee-multiselect-options">
+                    @foreach (var employee in Employees)
+                    {
+                        <label class="employee-multiselect-option" @key="employee.Id">
+                            <input type="checkbox" checked="@SelectedIds.Contains(employee.Id)"
+                                   @onchange="@(e => ToggleAsync(employee.Id, e.Value is true))" />
+                            <span>@employee.DisplayName</span>
+                        </label>
+                    }
+                </div>
+                <div class="employee-multiselect-footer">
+                    <span class="employee-multiselect-hint">
+                        @(SelectedIds.Count == 0 ? "Nobody assigned — shared by the whole team." : $"{SelectedIds.Count} assigned.")
+                    </span>
+                    @if (SelectedIds.Count > 0)
+                    {
+                        <button type="button" class="employee-multiselect-clear" @onclick="ClearAsync">Clear</button>
+                    }
+                </div>
+            }
+        </div>
+    </details>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Assigned employees";
+    [Parameter] public IReadOnlyList<Employee> Employees { get; set; } = [];
+    [Parameter] public List<Guid> SelectedIds { get; set; } = [];
+    [Parameter] public EventCallback<List<Guid>> SelectedIdsChanged { get; set; }
+
+    private ElementReference dropdown;
+    private IJSObjectReference? module;
+
+    private IEnumerable<string> SelectedNames =>
+        Employees.Where(e => SelectedIds.Contains(e.Id)).Select(e => e.DisplayName);
+
+    private string FullNames => string.Join(", ", SelectedNames);
+
+    /// <summary>Two names in full, then a count — the same collapse the job row uses.</summary>
+    private string Summary
+    {
+        get
+        {
+            var names = SelectedNames.ToList();
+            return names.Count switch
+            {
+                0 => "— Unassigned —",
+                1 or 2 => string.Join(", ", names),
+                _ => $"{names[0]}, {names[1]} +{names.Count - 2}",
+            };
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/EmployeeMultiSelect.razor.js");
+        await module.InvokeVoidAsync("closeOnOutsideClick", dropdown);
+    }
+
+    private Task ToggleAsync(Guid id, bool isChecked)
+    {
+        var next = SelectedIds.Where(x => x != id).ToList();
+        if (isChecked) next.Add(id);
+        return SelectedIdsChanged.InvokeAsync(next);
+    }
+
+    private Task ClearAsync() => SelectedIdsChanged.InvokeAsync([]);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (module is null) return;
+        try
+        {
+            await module.InvokeVoidAsync("dispose", dropdown);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
+}
