@@ -1,6 +1,7 @@
 @page "/login"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AuthSessionService AuthSession
+@inject IAuthApi AuthApi
 @inject NavigationManager Navigation
 
 <PageTitle>Login — Workit Owner</PageTitle>
@@ -22,40 +23,78 @@
                 </svg>
             </div>
             <h1>Workit Owner</h1>
-            <p class="login-subtitle">Sign in to manage your business</p>
+            <p class="login-subtitle">
+                @(showForgot ? "We'll email you a link to set a new password" : "Sign in to manage your business")
+            </p>
         </div>
 
-        <div class="login-form">
-            <div class="login-field">
-                <label for="email">Email</label>
-                <input id="email" type="email" class="login-input" placeholder="you@company.com"
-                       @bind="email" @bind:event="oninput" @onkeydown="OnKeyDown" />
-            </div>
-
-            <div class="login-field">
-                <label for="password">Password</label>
-                <input id="password" type="password" class="login-input" placeholder="Enter your password"
-                       @bind="password" @bind:event="oninput" @onkeydown="OnKeyDown" />
-            </div>
-
-            @if (!string.IsNullOrWhiteSpace(errorMessage))
-            {
-                <div class="login-error">
-                    <span>@errorMessage</span>
+        @if (!showForgot)
+        {
+            <div class="login-form">
+                <div class="login-field">
+                    <label for="email">Email</label>
+                    <input id="email" type="email" class="login-input" placeholder="you@company.com"
+                           @bind="email" @bind:event="oninput" @onkeydown="OnKeyDown" />
                 </div>
-            }
 
-            <button class="login-button" @onclick="LoginAsync" disabled="@isLoggingIn">
-                @if (isLoggingIn)
+                <div class="login-field">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" class="login-input" placeholder="Enter your password"
+                           @bind="password" @bind:event="oninput" @onkeydown="OnKeyDown" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
                 {
-                    <span>Signing in...</span>
+                    <div class="login-error">
+                        <span>@errorMessage</span>
+                    </div>
                 }
-                else
+
+                <button class="login-button" @onclick="LoginAsync" disabled="@isLoggingIn">
+                    @if (isLoggingIn)
+                    {
+                        <span>Signing in...</span>
+                    }
+                    else
+                    {
+                        <span>Sign in</span>
+                    }
+                </button>
+
+                <button type="button" class="login-link" @onclick="ShowForgot">Forgot password?</button>
+            </div>
+        }
+        else
+        {
+            <div class="login-form">
+                <div class="login-field">
+                    <label for="reset-email">Email</label>
+                    <input id="reset-email" type="email" class="login-input" placeholder="you@company.com"
+                           @bind="email" @bind:event="oninput" @onkeydown="OnForgotKeyDown" />
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(forgotMessage))
                 {
-                    <span>Sign in</span>
+                    <div class="login-notice">
+                        <span>@forgotMessage</span>
+                    </div>
                 }
-            </button>
-        </div>
+
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <div class="login-error">
+                        <span>@errorMessage</span>
+                    </div>
+                }
+
+                <button class="login-button" @onclick="SendResetLinkAsync"
+                        disabled="@(isSendingReset || string.IsNullOrWhiteSpace(email))">
+                    @(isSendingReset ? "Sending..." : "Send reset link")
+                </button>
+
+                <button type="button" class="login-link" @onclick="ShowSignIn">← Back to sign in</button>
+            </div>
+        }
 
         <div class="login-footer">
             <span>Workit &mdash; Construction management</span>
@@ -69,11 +108,68 @@
     private string? errorMessage;
     private bool isLoggingIn;
 
+    private bool showForgot;
+    private bool isSendingReset;
+    private string? forgotMessage;
+
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
             await LoginAsync();
+        }
+    }
+
+    private async Task OnForgotKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SendResetLinkAsync();
+        }
+    }
+
+    private void ShowForgot()
+    {
+        showForgot = true;
+        errorMessage = null;
+        forgotMessage = null;
+        password = string.Empty;
+    }
+
+    private void ShowSignIn()
+    {
+        showForgot = false;
+        errorMessage = null;
+        forgotMessage = null;
+    }
+
+    private async Task SendResetLinkAsync()
+    {
+        if (isSendingReset || string.IsNullOrWhiteSpace(email)) return;
+
+        errorMessage = null;
+        forgotMessage = null;
+        isSendingReset = true;
+
+        try
+        {
+            var result = await AuthApi.ForgotPasswordAsync(new ForgotPasswordRequest { Email = email.Trim() });
+
+            // The API answers identically whether or not the address is registered,
+            // so this message must not imply the account exists.
+            if (result.IsSuccess)
+            {
+                forgotMessage = "If that email is registered, a reset link is on its way. "
+                              + "The link expires in one hour.";
+            }
+            else
+            {
+                errorMessage = result.ErrorMessage ?? "Could not send a reset link. Please try again.";
+            }
+        }
+        finally
+        {
+            isSendingReset = false;
         }
     }
 

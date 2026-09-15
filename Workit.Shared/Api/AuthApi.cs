@@ -14,7 +14,12 @@ public interface IAuthApi
     Task<ApiResult<List<AdminCompanyInfo>?>> GetAdminCompaniesAsync();
     Task<ApiResult> CreateOwnerAsync(CreateOwnerRequest request);
     Task<ApiResult<List<AdminOwnerInfo>?>> GetAdminOwnersAsync();
+    Task<ApiResult> UpdateOwnerAsync(Guid id, UpdateOwnerRequest request);
+    Task<ApiResult> DeleteOwnerAsync(Guid id);
     Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request);
+    /// <summary>Returns a re-issued session — every other device is signed out.</summary>
+    Task<ApiResult<LoginResponse>> ChangePasswordAsync(ChangePasswordRequest request);
+    Task<ApiResult> ForgotPasswordAsync(ForgotPasswordRequest request);
 }
 
 internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -47,8 +52,20 @@ internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor access
     public Task<ApiResult<List<AdminOwnerInfo>?>> GetAdminOwnersAsync() =>
         GetAsync<List<AdminOwnerInfo>?>("api/auth/admin/owners", "Could not load owners list.");
 
+    public Task<ApiResult> UpdateOwnerAsync(Guid id, UpdateOwnerRequest request) =>
+        PutAsync($"api/auth/admin/owners/{id}", request, "Could not update owner account.");
+
+    public Task<ApiResult> DeleteOwnerAsync(Guid id) =>
+        DeleteAsync($"api/auth/admin/owners/{id}", "Could not delete owner account.");
+
     public Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request) =>
         PostForJsonAsync<OwnerSetupCompanyRequest, LoginResponse>("api/auth/owner/setup-company", request, "Company setup failed.");
+
+    public Task<ApiResult<LoginResponse>> ChangePasswordAsync(ChangePasswordRequest request) =>
+        PostForJsonAsync<ChangePasswordRequest, LoginResponse>("api/auth/change-password", request, "Could not change your password.");
+
+    public Task<ApiResult> ForgotPasswordAsync(ForgotPasswordRequest request) =>
+        PostAsync("api/auth/forgot-password", request, "Could not send a reset link.");
 }
 
 public sealed class AdminCompanyInfo

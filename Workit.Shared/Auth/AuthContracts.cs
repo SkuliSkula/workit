@@ -67,6 +67,13 @@ public sealed class ForgotPasswordRequest
     public string Email { get; set; } = string.Empty;
 }
 
+/// <summary>A signed-in user changes their own password.</summary>
+public sealed class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public sealed class RedeemPasswordResetRequest
 {
     public string Token { get; set; } = string.Empty;
@@ -103,4 +110,11 @@ public sealed class AdminOwnerInfo
     public string Email { get; set; } = string.Empty;
     public bool HasCompany { get; set; }
     public string CompanyName { get; set; } = string.Empty;
+}
+
+/// <summary>Admin edits an owner's name and login email.</summary>
+public sealed class UpdateOwnerRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 }

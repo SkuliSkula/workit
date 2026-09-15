@@ -1,0 +1,174 @@
+@page "/account"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject AuthSessionService AuthSession
+@inject NavigationManager Navigation
+
+<PageTitle>My Account — Workit</PageTitle>
+
+<FluentCard Class="account-card" AreaRestricted="false">
+    <span class="eyebrow">Account</span>
+    <h1 style="margin:0;">My Account</h1>
+    @if (!string.IsNullOrWhiteSpace(signedInEmail))
+    {
+        <FluentLabel Style="color:#60758b; margin-top:0.35rem;">
+            Signed in as <strong>@signedInEmail</strong>
+        </FluentLabel>
+    }
+</FluentCard>
+
+<FluentCard Class="account-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Change password</FluentLabel>
+    <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.35rem;">
+        Changing your password signs you out everywhere else, including the phone apps.
+    </FluentLabel>
+
+    <div class="account-fields">
+        <div>
+            <FluentLabel>Current password *</FluentLabel>
+            <FluentTextField @bind-Value="currentPassword" Style="width:100%;"
+                             TextFieldType="TextFieldType.Password" Placeholder="Your current password" />
+        </div>
+        <div>
+            <FluentLabel>New password *</FluentLabel>
+            <FluentTextField @bind-Value="newPassword" Style="width:100%;"
+                             TextFieldType="TextFieldType.Password" Placeholder="Min. 8 characters" />
+        </div>
+        <div>
+            <FluentLabel>Confirm new password *</FluentLabel>
+            <FluentTextField @bind-Value="confirmPassword" Style="width:100%;"
+                             TextFieldType="TextFieldType.Password" Placeholder="Repeat the new password" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="msg msg--error">@errorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="msg msg--success">@successMessage</div>
+    }
+
+    <div style="margin-top:1.25rem;">
+        <FluentButton Appearance="Appearance.Accent" @onclick="ChangePasswordAsync"
+                      Disabled="@(isSaving || !CanSubmit)">
+            @(isSaving ? "Updating…" : "Update password")
+        </FluentButton>
+    </div>
+</FluentCard>
+
+<style>
+    .account-card {
+        display: block;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .eyebrow {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #60758b;
+    }
+
+    .account-fields {
+        display: grid;
+        gap: 0.75rem;
+        max-width: 420px;
+        margin-top: 1rem;
+    }
+
+    .msg {
+        margin-top: 0.9rem;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-size: 0.85rem;
+        max-width: 420px;
+    }
+
+    .msg--error {
+        background: #fef2f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    .msg--success {
+        background: #ecfdf5;
+        color: #065f46;
+        border: 1px solid #a7f3d0;
+    }
+</style>
+
+@code {
+    private string currentPassword = string.Empty;
+    private string newPassword = string.Empty;
+    private string confirmPassword = string.Empty;
+
+    private string? signedInEmail;
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isSaving;
+
+    private bool CanSubmit =>
+        !string.IsNullOrWhiteSpace(currentPassword) &&
+        newPassword.Length >= 8 &&
+        !string.IsNullOrWhiteSpace(confirmPassword);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var session = await AuthSession.GetSessionAsync();
+        if (session is null)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        signedInEmail = session.Email;
+        StateHasChanged();
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        if (isSaving) return;
+
+        errorMessage = null;
+        successMessage = null;
+
+        if (newPassword != confirmPassword)
+        {
+            errorMessage = "The new passwords do not match.";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            var result = await AuthSession.ChangePasswordAsync(new ChangePasswordRequest
+            {
+                CurrentPassword = currentPassword,
+                NewPassword     = newPassword
+            });
+
+            if (!result.IsSuccess)
+            {
+                errorMessage = result.ErrorMessage ?? "Could not change your password.";
+                return;
+            }
+
+            currentPassword = string.Empty;
+            newPassword = string.Empty;
+            confirmPassword = string.Empty;
+            successMessage = "Your password has been updated. Any other devices signed in "
+                           + "with the old password have been signed out.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

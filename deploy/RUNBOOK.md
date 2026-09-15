@@ -131,6 +131,38 @@ test against production, build Release.
 
 ---
 
+## Onboarding a new customer
+
+Selling a seat is one form. Everything after it is self-service.
+
+1. **You create the owner login.** Sign in to <https://admin.workit.is> as the
+   admin account, go to **Admin → + Create Owner**, and enter their name, email
+   and a starting password. The account is created with no company attached, and
+   a welcome email goes out with those credentials.
+2. **They set up their own company.** Their first sign-in lands on `/onboarding`
+   because the account has no company yet. They either fill in the details by
+   hand (name, kennitala, email, phone, address, contact) or paste their Payday
+   client ID/secret and have it imported. This creates the company, links them to
+   it, and gives them an employee record of their own.
+3. **They add their staff.** **Employees → New Employee**. Each one gets a
+   welcome email pointing at the phone apps — employees are rejected by the owner
+   web app on purpose.
+
+Admins can rename an owner or change their login address from the same Admin
+page (**Edit**), and remove a login entirely (**Delete**). Deleting removes only
+the sign-in: the company and all its jobs, time entries, invoices and employees
+survive, and the company stays reachable from the **All Companies** list. An
+owner's own employee record follows their email when it is changed, so they keep
+their timesheet.
+
+Anyone signed in can change their own password under **My Account**; that
+revokes every other session. Forgotten passwords are self-service from the
+**Forgot password?** link on the web login and in both phone apps — the link in
+the email goes to `App:Url` (the marketing site, which hosts `/reset-password`),
+**not** to the owner app.
+
+---
+
 ## Demo accounts
 
 Filed with Apple App Review:

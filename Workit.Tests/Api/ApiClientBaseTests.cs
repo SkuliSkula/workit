@@ -79,6 +79,67 @@ public class ApiClientBaseTests
         result.ErrorMessage.Should().Be("Something went wrong");
     }
 
+    /// <summary>
+    /// Minimal APIs return <c>Results.BadRequest("text")</c> as a quoted JSON string.
+    /// Surfacing it raw put the quotation marks on screen in the owner app.
+    /// </summary>
+    [Fact]
+    public async Task GetAsync_JsonStringBody_UnwrapsTheQuotes()
+    {
+        var handler = new MockHandler(new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("\"Your current password is not correct.\"")
+        });
+        var (client, _) = CreateClient(handler);
+
+        var result = await client.TestGetAsync<TestResponse>("/api/test", "Default error");
+
+        result.ErrorMessage.Should().Be("Your current password is not correct.");
+    }
+
+    [Fact]
+    public async Task GetAsync_ProblemDetailsBody_UsesTheDetail()
+    {
+        var handler = new MockHandler(new HttpResponseMessage(HttpStatusCode.Conflict)
+        {
+            Content = new StringContent("""{"title":"Conflict","detail":"That email address is already in use."}""")
+        });
+        var (client, _) = CreateClient(handler);
+
+        var result = await client.TestGetAsync<TestResponse>("/api/test", "Default error");
+
+        result.ErrorMessage.Should().Be("That email address is already in use.");
+    }
+
+    [Fact]
+    public async Task GetAsync_NonJsonBody_IsLeftAsWritten()
+    {
+        var handler = new MockHandler(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("upstream timed out")
+        });
+        var (client, _) = CreateClient(handler);
+
+        var result = await client.TestGetAsync<TestResponse>("/api/test", "Default error");
+
+        result.ErrorMessage.Should().Be("upstream timed out");
+    }
+
+    /// <summary>A body that only looks like JSON must not be swallowed.</summary>
+    [Fact]
+    public async Task GetAsync_MalformedJsonBody_IsLeftAsWritten()
+    {
+        var handler = new MockHandler(new HttpResponseMessage(HttpStatusCode.BadGateway)
+        {
+            Content = new StringContent("{not really json")
+        });
+        var (client, _) = CreateClient(handler);
+
+        var result = await client.TestGetAsync<TestResponse>("/api/test", "Default error");
+
+        result.ErrorMessage.Should().Be("{not really json");
+    }
+
     [Fact]
     public async Task GetAsync_ServerErrorEmptyBody_ReturnsDefaultMessage()
     {
