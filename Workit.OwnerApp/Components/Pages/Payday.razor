@@ -125,11 +125,12 @@
                 @if (createdEmployees.Count > 0)
                 {
                     <div style="margin-top:0.75rem;">
-                        <FluentLabel Typo="Typography.Body"><strong>New employees created — save these passwords now:</strong></FluentLabel>
+                        <FluentLabel Typo="Typography.Body">
+                            <strong>New employees created.</strong> Each has been emailed a link to set their own password.
+                        </FluentLabel>
                         <FluentDataGrid TGridItem="CreatedEmployeeRow" Items="@createdEmployees.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.4rem;">
-                            <PropertyColumn Property="@(x => x.Name)"     Title="Name" />
-                            <PropertyColumn Property="@(x => x.Email)"    Title="Email" />
-                            <PropertyColumn Property="@(x => x.Password)" Title="Temporary Password" />
+                            <PropertyColumn Property="@(x => x.Name)"  Title="Name" />
+                            <PropertyColumn Property="@(x => x.Email)" Title="Email" />
                         </FluentDataGrid>
                     </div>
                 }
@@ -201,9 +202,8 @@
 
     private sealed class CreatedEmployeeRow
     {
-        public string Name     { get; set; } = string.Empty;
-        public string Email    { get; set; } = string.Empty;
-        public string Password { get; set; } = string.Empty;
+        public string Name  { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
     }
 
     // ── Timesheet state ─────────────────────────────────────────────────────
@@ -459,7 +459,6 @@
                         continue;
                     }
 
-                    var password = GeneratePassword();
                     var r = await EmployeesApi.CreateEmployeeAsync(new CreateEmployeeUserRequest
                     {
                         Employee = new Employee
@@ -477,8 +476,7 @@
                             IsActive      = pe.Active,
                             Source        = DataSource.Payday,
                             PaydayId      = pe.Id
-                        },
-                        Password = password
+                        }
                     });
 
                     if (r.IsSuccess)
@@ -486,9 +484,8 @@
                         created++;
                         createdEmployees.Add(new CreatedEmployeeRow
                         {
-                            Name     = pe.Name ?? pe.Email,
-                            Email    = pe.Email,
-                            Password = password
+                            Name  = pe.Name ?? pe.Email,
+                            Email = pe.Email
                         });
                     }
                     else
@@ -506,12 +503,6 @@
         {
             syncingEmployees = false;
         }
-    }
-
-    private static string GeneratePassword()
-    {
-        var raw = Guid.NewGuid().ToString("N"); // 32 lowercase hex chars
-        return char.ToUpper(raw[0]) + raw[1..9] + "!1";
     }
 
     // ── Timesheet Preview ────────────────────────────────────────────────────

@@ -37,7 +37,8 @@ else
         <FluentCard Class="admin-card" AreaRestricted="false">
             <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.75rem;">Create Owner Account</FluentLabel>
             <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-bottom:0.5rem;">
-                The owner will log in and set up their company themselves on first login.
+                They are emailed a link to choose their own password, then set up their
+                company themselves on first login. No password is set here.
             </FluentLabel>
 
             <div class="form-fields" style="max-width:480px; margin-top:0.75rem;">
@@ -48,10 +49,6 @@ else
                 <div>
                     <FluentLabel>Email *</FluentLabel>
                     <FluentTextField @bind-Value="regOwnerEmail" Style="width:100%;" Placeholder="e.g. jon@company.is" />
-                </div>
-                <div>
-                    <FluentLabel>Password *</FluentLabel>
-                    <FluentTextField @bind-Value="regOwnerPassword" Style="width:100%;" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" />
                 </div>
             </div>
 
@@ -132,6 +129,12 @@ else
                                 {
                                     <span class="badge badge--amber">Setup Pending</span>
                                 }
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                              @onclick="@(() => ResendOwnerInviteAsync(o))"
+                                              Disabled="@(editingOwnerId is not null || deletingOwnerId is not null || resendingInviteTo is not null)"
+                                              title="Email a fresh link for setting their password">
+                                    @(resendingInviteTo == o.Id ? "Sending…" : "Resend invite")
+                                </FluentButton>
                                 <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
                                               @onclick="@(() => BeginEditOwner(o))"
                                               Disabled="@(editingOwnerId is not null || deletingOwnerId is not null)">
@@ -419,7 +422,6 @@ else
     // Create-owner form state
     private string regOwnerName = "";
     private string regOwnerEmail = "";
-    private string regOwnerPassword = "";
     private string? registerError;
     private string? registerSuccess;
 
@@ -430,13 +432,14 @@ else
     private string editOwnerEmail = "";
     private bool isSavingOwner;
     private bool isDeletingOwner;
+    private Guid? resendingInviteTo;
     private string? ownerActionError;
     private string? ownerActionSuccess;
 
     private bool CanCreateOwner =>
         !string.IsNullOrWhiteSpace(regOwnerName) &&
         !string.IsNullOrWhiteSpace(regOwnerEmail) &&
-        regOwnerPassword.Length >= 8;
+        regOwnerEmail.Contains('@');
 
     private bool CanSaveOwner =>
         !string.IsNullOrWhiteSpace(editOwnerName) &&
@@ -510,17 +513,15 @@ else
 
         var result = await AuthApi.CreateOwnerAsync(new CreateOwnerRequest
         {
-            Name     = regOwnerName,
-            Email    = regOwnerEmail,
-            Password = regOwnerPassword
+            Name  = regOwnerName,
+            Email = regOwnerEmail
         });
 
         if (result.IsSuccess)
         {
-            registerSuccess = $"Owner account created for {regOwnerEmail}. They will set up their company on first login.";
+            registerSuccess = $"Owner account created. {regOwnerEmail} has been emailed a link to set their password.";
             regOwnerName = "";
             regOwnerEmail = "";
-            regOwnerPassword = "";
             showRegisterForm = false;
             await LoadOwnersAsync();
         }
@@ -530,6 +531,28 @@ else
         }
 
         isRegistering = false;
+    }
+
+    private async Task ResendOwnerInviteAsync(AdminOwnerInfo owner)
+    {
+        if (resendingInviteTo is not null) return;
+
+        resendingInviteTo = owner.Id;
+        ownerActionError = null;
+        ownerActionSuccess = null;
+
+        try
+        {
+            var result = await AuthApi.ResendOwnerInviteAsync(owner.Id);
+            if (result.IsSuccess)
+                ownerActionSuccess = $"Sent {owner.Email} a fresh link to set their password. It expires in 7 days.";
+            else
+                ownerActionError = result.ErrorMessage ?? "Could not send the setup link.";
+        }
+        finally
+        {
+            resendingInviteTo = null;
+        }
     }
 
     private void BeginEditOwner(AdminOwnerInfo owner)

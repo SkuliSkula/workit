@@ -290,7 +290,7 @@ internal static class AuthEndpoints
             .WithName("RegisterCompany");
 
         // ── Admin: create an owner account with no company yet ──
-        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, IEmailService emailService, CreateOwnerRequest request, CancellationToken ct) =>
+        authApi.MapPost("/admin/create-owner", async (WorkitDbContext db, HttpContext httpContext, IAccountInviteService invites, CreateOwnerRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsAdmin())
@@ -299,8 +299,8 @@ internal static class AuthEndpoints
                     if (string.IsNullOrWhiteSpace(request.Name))
                         return Results.BadRequest("Owner name is required.");
 
-                    if (!IsValidCredentials(request.Email, request.Password))
-                        return Results.BadRequest("A valid email and a password of at least 8 characters are required.");
+                    if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
+                        return Results.BadRequest("A valid email address is required.");
 
                     var normalizedEmail = request.Email.Trim().ToLowerInvariant();
                     if (await db.AppUsers.AnyAsync(x => x.Email == normalizedEmail, ct))
@@ -308,9 +308,11 @@ internal static class AuthEndpoints
 
                     var owner = new AppUser
                     {
-                        Name         = request.Name.Trim(),
-                        Email        = normalizedEmail,
-                        PasswordHash = PasswordHasher.HashPassword(request.Password),
+                        Name  = request.Name.Trim(),
+                        Email = normalizedEmail,
+                        // Nobody holds this. The owner picks their own password from the
+                        // emailed link, so no password is ever transmitted or displayed.
+                        PasswordHash = PasswordHasher.HashPassword(invites.CreateUnusablePassword()),
                         Role         = WorkitRoles.Owner,
                         CompanyId    = null   // no company yet — owner will set it up on first login
                     };
@@ -318,7 +320,7 @@ internal static class AuthEndpoints
                     db.AppUsers.Add(owner);
                     await db.SaveChangesAsync(ct);
 
-                    await emailService.SendOwnerWelcomeAsync(owner.Name, owner.Email, request.Password);
+                    await invites.SendInviteAsync(owner.Email, owner.Name, InviteKind.Owner, ct);
 
                     return Results.Ok(new { owner.Id, owner.Email, owner.Name });
                 },
@@ -326,6 +328,30 @@ internal static class AuthEndpoints
                 "creating an owner account"))
             .RequireAuthorization()
             .WithName("CreateOwner");
+
+        // ── Admin: send a fresh setup link to an owner whose invite lapsed ──
+        authApi.MapPost("/admin/owners/{id:guid}/resend-invite", async (WorkitDbContext db, HttpContext httpContext, IAccountInviteService invites, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsAdmin())
+                        return Results.Forbid();
+
+                    var owner = await db.AppUsers.FirstOrDefaultAsync(x => x.Id == id && x.Role == WorkitRoles.Owner, ct);
+                    if (owner is null)
+                        return Results.NotFound();
+
+                    if (DemoDataSeeder.IsProtectedAccount(owner.Email))
+                        return Results.BadRequest("This is a demo account. Its password cannot be changed.");
+
+                    var displayName = string.IsNullOrWhiteSpace(owner.Name) ? owner.Email : owner.Name;
+                    await invites.SendInviteAsync(owner.Email, displayName, InviteKind.Owner, ct);
+
+                    return Results.NoContent();
+                },
+                logger,
+                "resending an owner invite"))
+            .RequireAuthorization()
+            .WithName("ResendOwnerInvite");
 
         // ── Admin: list all owner accounts with company status ──
         authApi.MapGet("/admin/owners", async (WorkitDbContext db, HttpContext httpContext, CancellationToken ct) =>
@@ -586,7 +612,6 @@ internal static class AuthEndpoints
             .RequireAuthorization()
             .WithName("SetupCompany");
 
-        // ── Forgot password — always returns 200 to avoid email enumeration ──
         // ── Signed-in user changes their own password ──
         authApi.MapPost("/change-password", async (WorkitDbContext db, HttpContext httpContext, TokenFactory tokenFactory, ChangePasswordRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -636,6 +661,7 @@ internal static class AuthEndpoints
             .RequireAuthorization()
             .WithName("ChangePassword");
 
+        // ── Forgot password — always returns 200 to avoid email enumeration ──
         authApi.MapPost("/forgot-password", async (WorkitDbContext db, IEmailService emailService, IConfiguration config, ForgotPasswordRequest request, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Email))

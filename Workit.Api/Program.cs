@@ -151,6 +151,8 @@ else
     builder.Services.AddSingleton<IEmailService, NullEmailService>();
 }
 
+builder.Services.AddScoped<IAccountInviteService, AccountInviteService>();
+
 var app = builder.Build();
 Microsoft.Extensions.Logging.ILogger apiLogger = app.Logger;
 

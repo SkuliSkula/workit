@@ -56,6 +56,18 @@ public class AuthApiTests
     }
 
     [Fact]
+    public async Task ResendOwnerInviteAsync_PostsToTheResendRoute()
+    {
+        var id = Guid.NewGuid();
+        var (api, calls) = CreateApi(HttpStatusCode.NoContent);
+
+        await api.ResendOwnerInviteAsync(id);
+
+        calls.Single().Method.Should().Be(HttpMethod.Post);
+        calls.Single().Url.Should().Be($"/api/auth/admin/owners/{id}/resend-invite");
+    }
+
+    [Fact]
     public async Task ChangePasswordAsync_PostsToChangePassword()
     {
         var (api, calls) = CreateApi(responseBody: new LoginResponse { AccessToken = "token", Role = WorkitRoles.Owner });

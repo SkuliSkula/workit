@@ -16,6 +16,7 @@ public interface IAuthApi
     Task<ApiResult<List<AdminOwnerInfo>?>> GetAdminOwnersAsync();
     Task<ApiResult> UpdateOwnerAsync(Guid id, UpdateOwnerRequest request);
     Task<ApiResult> DeleteOwnerAsync(Guid id);
+    Task<ApiResult> ResendOwnerInviteAsync(Guid id);
     Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request);
     /// <summary>Returns a re-issued session — every other device is signed out.</summary>
     Task<ApiResult<LoginResponse>> ChangePasswordAsync(ChangePasswordRequest request);
@@ -57,6 +58,9 @@ internal sealed class AuthApi(HttpClient httpClient, IAccessTokenAccessor access
 
     public Task<ApiResult> DeleteOwnerAsync(Guid id) =>
         DeleteAsync($"api/auth/admin/owners/{id}", "Could not delete owner account.");
+
+    public Task<ApiResult> ResendOwnerInviteAsync(Guid id) =>
+        PostAsync($"api/auth/admin/owners/{id}/resend-invite", new { }, "Could not send the setup link.");
 
     public Task<ApiResult<LoginResponse>> SetupOwnerCompanyAsync(OwnerSetupCompanyRequest request) =>
         PostForJsonAsync<OwnerSetupCompanyRequest, LoginResponse>("api/auth/owner/setup-company", request, "Company setup failed.");

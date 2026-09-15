@@ -33,6 +33,10 @@
 {
     <FluentCard Class="admin-card" AreaRestricted="false">
         <FluentLabel Typo="Typography.Body"><strong>New Employee</strong></FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.35rem;">
+            They are emailed a link to choose their own password and download the app.
+            No password is set here.
+        </FluentLabel>
         <div class="admin-grid" style="margin-top:0.75rem;">
             <div>
                 <FluentTextField Label="Name *" @bind-Value="newEmployeeName" Placeholder="Full name" style="width:100%" />
@@ -52,7 +56,6 @@
                 <FluentTextField Label="Email" @bind-Value="newEmployeeEmail" Placeholder="employee@example.com" style="width:100%" />
             </div>
             <div>
-                <FluentTextField Label="Password" @bind-Value="newEmployeePassword" Placeholder="Min. 8 characters" TextFieldType="TextFieldType.Password" style="width:100%" />
             </div>
             <div>
                 <FluentTextField Label="Phone" @bind-Value="newEmployeePhone" Placeholder="Phone number" style="width:100%" />
@@ -176,10 +179,20 @@
             <TemplateColumn Title="Actions">
                 <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
                     <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditEmployee(context))">Edit</FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
-                                  Disabled="@resettingIds.Contains(context.Id)">
-                        @(resettingIds.Contains(context.Id) ? "Resetting…" : "Reset Password")
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResendInviteAsync(context))"
+                                  Disabled="@invitingIds.Contains(context.Id)"
+                                  title="Email them a fresh link for setting their own password">
+                        @(invitingIds.Contains(context.Id) ? "Sending…" : "Send setup link")
                     </FluentButton>
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ResetEmployeePasswordAsync(context))"
+                                  Disabled="@resettingIds.Contains(context.Id)"
+                                  title="Generate a password to read out — for someone who cannot use email">
+                        @(resettingIds.Contains(context.Id) ? "Resetting…" : "Set password manually")
+                    </FluentButton>
+                    @if (invitedIds.Contains(context.Id))
+                    {
+                        <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">Setup link sent</FluentLabel>
+                    }
                     @if (resetPasswords.TryGetValue(context.Id, out var pw))
                     {
                         <FluentLabel style="font-weight:600; color:var(--accent-fill-rest);">New password: @pw</FluentLabel>
@@ -206,7 +219,6 @@
     private string newEmployeeTrade = Trades[0];
     private string newEmployeeSsn = string.Empty;
     private string newEmployeeEmail = string.Empty;
-    private string newEmployeePassword = string.Empty;
     private string newEmployeePhone = string.Empty;
     private string newEmployeeContactPerson = string.Empty;
     private EmploymentType newEmploymentType = EmploymentType.Employed;
@@ -217,6 +229,8 @@
     // ── Reset Password state ─────────────────────────────────────────────────
     private readonly HashSet<Guid> resettingIds = [];
     private readonly Dictionary<Guid, string> resetPasswords = [];
+    private readonly HashSet<Guid> invitingIds = [];
+    private readonly HashSet<Guid> invitedIds = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -268,7 +282,6 @@
         newEmployeeTrade = Trades[0];
         newEmployeeSsn = string.Empty;
         newEmployeeEmail = string.Empty;
-        newEmployeePassword = string.Empty;
         newEmployeePhone = string.Empty;
         newEmployeeContactPerson = string.Empty;
         newEmploymentType = EmploymentType.Employed;
@@ -298,7 +311,6 @@
                 HourlySalary = newHourlySalary,
                 HourlyBillableRate = newHourlyBillableRate
             },
-            Password = newEmployeePassword
         });
 
         if (result.IsSuccess)
@@ -352,6 +364,28 @@
     private void CancelEmployeeEdit()
     {
         editingEmployee = null;
+    }
+
+    private async Task ResendInviteAsync(Employee employee)
+    {
+        if (invitingIds.Contains(employee.Id)) return;
+
+        invitingIds.Add(employee.Id);
+        invitedIds.Remove(employee.Id);
+        loadError = null;
+
+        try
+        {
+            var result = await EmployeesApi.ResendInviteAsync(employee.Id);
+            if (result.IsSuccess)
+                invitedIds.Add(employee.Id);
+            else
+                loadError = result.ErrorMessage;
+        }
+        finally
+        {
+            invitingIds.Remove(employee.Id);
+        }
     }
 
     private async Task ResetEmployeePasswordAsync(Employee employee)
