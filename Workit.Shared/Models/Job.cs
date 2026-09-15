@@ -7,10 +7,11 @@ public sealed class Job
     public Guid CustomerId { get; set; }
 
     /// <summary>
-    /// The employee responsible for this job, if one has been picked. Optional —
-    /// most jobs are shared, and a job can exist before anyone is put on it.
+    /// The employees put on this job. Empty for most jobs — they are shared —
+    /// and a job can exist before anyone is assigned. Stored as a Postgres
+    /// uuid[]; order is not significant and ids are unique.
     /// </summary>
-    public Guid? AssignedEmployeeId { get; set; }
+    public List<Guid> AssignedEmployeeIds { get; set; } = [];
 
     public string       Name          { get; set; } = string.Empty;
     public string       Code          { get; set; } = string.Empty;
