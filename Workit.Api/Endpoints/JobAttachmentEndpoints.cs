@@ -35,7 +35,7 @@ internal static class JobAttachmentEndpoints
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
-                    if (!await JobInCompanyAsync(db, jobId, userContext.CompanyId, ct))
+                    if (await FindUsableJobAsync(db, userContext, jobId, ct) is null)
                         return Results.NotFound();
 
                     var items = await db.JobAttachments
@@ -54,7 +54,7 @@ internal static class JobAttachmentEndpoints
                 await ExecuteDbAsync(async () =>
                 {
                     var userContext = httpContext.User.ToUserContext();
-                    if (!await JobInCompanyAsync(db, jobId, userContext.CompanyId, ct))
+                    if (await FindUsableJobAsync(db, userContext, jobId, ct) is null)
                         return Results.NotFound();
 
                     if (file is null || file.Length == 0)
@@ -156,9 +156,6 @@ internal static class JobAttachmentEndpoints
                 }, logger, "deleting a job attachment"))
             .WithName("DeleteJobAttachment");
     }
-
-    private static Task<bool> JobInCompanyAsync(WorkitDbContext db, Guid jobId, Guid companyId, CancellationToken ct) =>
-        db.Jobs.AnyAsync(j => j.Id == jobId && j.CompanyId == companyId, ct);
 
     private static async Task<string> ResolveUploaderNameAsync(
         WorkitDbContext db, HttpContext httpContext, UserContext userContext, CancellationToken ct)
