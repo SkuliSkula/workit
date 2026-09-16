@@ -54,6 +54,12 @@
     border-color: rgba(20, 48, 75, 0.14);
     border-left: 3px solid #14304b;
     box-shadow: 0 4px 20px rgba(18, 41, 63, 0.10);
+    /* backdrop-filter makes every card its own stacking context, so a
+       dropdown inside the edit form — however high its z-index — cannot
+       escape the card and the cards below paint over it. Lift the open
+       card above its siblings so its dropdowns overlap them. */
+    position: relative;
+    z-index: 1;
 }
 
 /* ── Header row ─────────────────────────────────────────────────────────── */
