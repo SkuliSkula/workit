@@ -33,7 +33,7 @@
                 </div>
                 <div class="employee-multiselect-footer">
                     <span class="employee-multiselect-hint">
-                        @(SelectedIds.Count == 0 ? "Nobody assigned — shared by the whole team." : $"{SelectedIds.Count} assigned.")
+                        @(SelectedIds.Count == 0 ? "Nobody assigned — no employee can log against this job yet." : $"{SelectedIds.Count} assigned.")
                     </span>
                     @if (SelectedIds.Count > 0)
                     {

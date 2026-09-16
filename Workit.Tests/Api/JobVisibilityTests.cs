@@ -9,7 +9,7 @@ namespace Workit.Tests.Api;
 /// <summary>
 /// Which jobs an employee may log work against. The apps filter their pickers
 /// by this rule and the API enforces it on writes, so the two must agree — and
-/// the rule has to stay: unassigned jobs are shared, assigned ones are not.
+/// the rule has to stay: an employee may use only a job that names them.
 /// </summary>
 public class JobVisibilityTests
 {
@@ -23,10 +23,11 @@ public class JobVisibilityTests
 
     private static Job JobAssignedTo(params Guid[] ids) => new() { AssignedEmployeeIds = [.. ids] };
 
+    /// <summary>Unassigned is not shared: nobody can log against a job until someone is put on it.</summary>
     [Fact]
-    public void Employee_MayUseAnUnassignedJob()
+    public void Employee_MayNotUseAnUnassignedJob()
     {
-        Employee().CanUseJob(JobAssignedTo()).Should().BeTrue();
+        Employee().CanUseJob(JobAssignedTo()).Should().BeFalse();
     }
 
     [Fact]
@@ -41,12 +42,12 @@ public class JobVisibilityTests
         Employee().CanUseJob(JobAssignedTo(Colleague)).Should().BeFalse();
     }
 
-    /// <summary>A login with no employee record cannot be "assigned", so it sees only shared jobs.</summary>
+    /// <summary>A login with no employee record cannot be "assigned", so it may use no job at all.</summary>
     [Fact]
-    public void EmployeeWithoutEmployeeRecord_SeesOnlySharedJobs()
+    public void EmployeeWithoutEmployeeRecord_MayUseNoJob()
     {
         var user = new UserContext { UserId = Guid.NewGuid(), CompanyId = Guid.NewGuid(), EmployeeId = null, Role = WorkitRoles.Employee };
-        user.CanUseJob(JobAssignedTo()).Should().BeTrue();
+        user.CanUseJob(JobAssignedTo()).Should().BeFalse();
         user.CanUseJob(JobAssignedTo(Colleague)).Should().BeFalse();
     }
 
@@ -56,6 +57,7 @@ public class JobVisibilityTests
     public void OwnersAndAdmins_MayUseAnyJob(string role)
     {
         var user = new UserContext { UserId = Guid.NewGuid(), CompanyId = Guid.NewGuid(), EmployeeId = null, Role = role };
+        user.CanUseJob(JobAssignedTo()).Should().BeTrue();
         user.CanUseJob(JobAssignedTo(Colleague)).Should().BeTrue();
     }
 }

@@ -11,14 +11,13 @@ internal static class EndpointHelpers
 {
     /// <summary>
     /// Whether the caller may log work against a job. Owners and admins may
-    /// use any job in their company. An employee may use a job that has no
-    /// assignees — those are shared by the whole team — or one that names
-    /// them. The apps filter their pickers by the same rule; this is what
-    /// makes the filter real rather than cosmetic.
+    /// use any job in their company. An employee may use only a job that
+    /// names them; a job with no assignees is open to nobody until someone
+    /// is put on it. The apps filter their pickers by the same rule; this is
+    /// what makes the filter real rather than cosmetic.
     /// </summary>
     internal static bool CanUseJob(this UserContext user, Job job) =>
         !string.Equals(user.Role, WorkitRoles.Employee, StringComparison.Ordinal)
-        || job.AssignedEmployeeIds.Count == 0
         || (user.EmployeeId is Guid me && job.AssignedEmployeeIds.Contains(me));
 
     /// <summary>The job if it is in the caller's company and they may use it; otherwise null.</summary>
