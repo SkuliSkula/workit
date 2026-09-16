@@ -7,9 +7,10 @@ public sealed class Job
     public Guid CustomerId { get; set; }
 
     /// <summary>
-    /// The employees put on this job. Empty for most jobs — they are shared —
-    /// and a job can exist before anyone is assigned. Stored as a Postgres
-    /// uuid[]; order is not significant and ids are unique.
+    /// The employees put on this job. A job can exist before anyone is
+    /// assigned, but until then no employee can see it or log against it —
+    /// owners and admins always can. Stored as a Postgres uuid[]; order is
+    /// not significant and ids are unique.
     /// </summary>
     public List<Guid> AssignedEmployeeIds { get; set; } = [];
 
