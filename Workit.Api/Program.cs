@@ -304,23 +304,33 @@ if (!isDesignTime)
     }
 }
 
-try
+// Flush any queued PostHog events on shutdown. This has to run while the host
+// is still alive: app.Run() disposes the service provider before returning, so
+// resolving services after it throws ObjectDisposedException.
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopped.Register(() =>
 {
-    app.Run();
-}
-finally
-{
-    // Flush any queued PostHog events before process exits
     var analytics = app.Services.GetService<IAnalyticsService>();
-    if (analytics is PostHogAnalyticsService)
-    {
-        var postHog = app.Services.GetService<IPostHogClient>();
-        if (postHog is not null)
-            await postHog.FlushAsync();
-    }
+    if (analytics is not PostHogAnalyticsService)
+        return;
 
-    Log.CloseAndFlush();
-}
+    var postHog = app.Services.GetService<IPostHogClient>();
+    if (postHog is null)
+        return;
+
+    try
+    {
+        postHog.FlushAsync().GetAwaiter().GetResult();
+    }
+    catch (Exception ex)
+    {
+        apiLogger.LogWarning(ex, "Failed to flush PostHog events during shutdown.");
+    }
+});
+
+app.Run();
+
+Log.CloseAndFlush();
 
 static async Task LogStartupDatabaseStatusAsync(
     IServiceProvider services,
