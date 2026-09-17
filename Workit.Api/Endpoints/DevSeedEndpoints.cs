@@ -387,7 +387,7 @@ public static class DevSeedEndpoints
             CompanyId          = companyId,
             CustomerId         = customers[d.CustomerIdx].Id,
             Name               = d.Name,
-            Code               = d.Code,
+            Code               = JobEndpoints.FormatJobCode(d.Category, i + 1),
             BillingType        = d.Billing,
             Category           = d.Category,
             JobNumber          = i + 1,
