@@ -77,7 +77,7 @@ Navigate to **Jobs** in the sidebar.
 
 **Creating a job**
 1. Click **New job**.
-2. Select a customer, enter a job code and name, and choose a billing type (Hourly or Fixed Price).
+2. Select a customer, enter a name, and choose a category and a billing type (Hourly or Fixed Price). The job code — the category's short code plus a running number, e.g. `REP007` — is assigned automatically and cannot be edited.
 3. Click **Save**.
 
 **Viewing job details**

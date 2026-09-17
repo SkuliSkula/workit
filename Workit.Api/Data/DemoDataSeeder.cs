@@ -151,12 +151,12 @@ public static class DemoDataSeeder
         // ── Jobs ──────────────────────────────────────────────────────────────
         var jobDefs = new (string Name, string Code, int Number, Customer Cust, JobCategory Cat, BillingType Bill)[]
         {
-            ("Nýbygging – Kópavogstún 4",  "DF-101", 101, customers[0], JobCategory.NewInstallation, BillingType.Hourly),
-            ("Viðhald – skrifstofuhúsnæði", "NL-102", 102, customers[1], JobCategory.Maintenance,     BillingType.Hourly),
-            ("Endurnýjun raflagna",         "BB-103", 103, customers[2], JobCategory.Repair,          BillingType.FixedPrice),
-            ("Hótel Sæbraut – lýsing",      "SH-104", 104, customers[3], JobCategory.InnerWork,       BillingType.Hourly),
-            ("Bilanaþjónusta",              "DF-105", 105, customers[0], JobCategory.Repair,          BillingType.Hourly),
-            ("Teikningar og úttekt",        "BB-106", 106, customers[2], JobCategory.Drawings,        BillingType.FixedPrice),
+            ("Nýbygging – Kópavogstún 4",  "NI101", 101, customers[0], JobCategory.NewInstallation, BillingType.Hourly),
+            ("Viðhald – skrifstofuhúsnæði", "MNT102", 102, customers[1], JobCategory.Maintenance,     BillingType.Hourly),
+            ("Endurnýjun raflagna",         "REP103", 103, customers[2], JobCategory.Repair,          BillingType.FixedPrice),
+            ("Hótel Sæbraut – lýsing",      "IW104", 104, customers[3], JobCategory.InnerWork,       BillingType.Hourly),
+            ("Bilanaþjónusta",              "REP105", 105, customers[0], JobCategory.Repair,          BillingType.Hourly),
+            ("Teikningar og úttekt",        "DWG106", 106, customers[2], JobCategory.Drawings,        BillingType.FixedPrice),
         };
 
         var jobs = jobDefs.Select(d => new Job
