@@ -1,0 +1,196 @@
+@* The platform administrator's cross-company usage view: totals with the
+   recent window's share, then one row per company with a last-activity
+   status. Loads itself; the host only supplies what "Enter" should do. *@
+@inject IAuthApi AuthApi
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div class="overview-head">
+        <div>
+            <span class="eyebrow">Platform overview</span>
+            <h2 class="overview-title">All companies</h2>
+        </div>
+        <div class="overview-head-right">
+            @if (overview is not null)
+            {
+                <span class="overview-stamp">Last @overview.RecentDays days · refreshed @overview.GeneratedAt.LocalDateTime.ToString("HH:mm")</span>
+            }
+            <FluentButton Appearance="Appearance.Accent" @onclick="LoadAsync" Disabled="@isLoading">
+                @(isLoading ? "Loading…" : "Refresh")
+            </FluentButton>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="msg msg--error">@error</div>
+    }
+
+    @if (isLoading && overview is null)
+    {
+        <div class="overview-loading"><FluentProgressRing /> <FluentLabel>Loading usage…</FluentLabel></div>
+    }
+    else if (overview is not null)
+    {
+        var t = overview.Totals;
+        var days = overview.RecentDays;
+
+        <div class="kpis">
+            <Kpi Label="Companies" Value="@t.Companies.ToString()" Foot="@($"{t.CompaniesActiveRecent} active in {days}d")" Tone="@(t.CompaniesActiveRecent == t.Companies ? "good" : "")" />
+            <Kpi Label="Owners" Value="@t.Owners.ToString()" Foot="@(t.OwnersWithoutCompany > 0 ? $"{t.OwnersWithoutCompany} still setting up" : "all set up")" Tone="@(t.OwnersWithoutCompany > 0 ? "warn" : "")" />
+            <Kpi Label="Employees" Value="@t.EmployeesActive.ToString()" Foot="@($"of {t.Employees} active")" />
+            <Kpi Label="Jobs" Value="@t.Jobs.ToString()" Foot="@Recent(t.JobsRecent, days)" Tone="@(t.JobsRecent > 0 ? "good" : "")" />
+            <Kpi Label="Hours logged" Value="@t.Hours.ToString("N0")" Foot="@($"{t.HoursRecent:N0} h in {days}d")" Tone="@(t.HoursRecent > 0 ? "good" : "")" />
+            <Kpi Label="Time entries" Value="@t.TimeEntries.ToString("N0")" Foot="@Recent(t.TimeEntriesRecent, days)" />
+            <Kpi Label="Materials logged" Value="@t.MaterialUsages.ToString("N0")" Foot="@Recent(t.MaterialUsagesRecent, days)" />
+            <Kpi Label="Files" Value="@t.Attachments.ToString("N0")" Foot="@Recent(t.AttachmentsRecent, days)" />
+            <Kpi Label="Sign-ins" Value="@t.LoginsRecent.ToString("N0")" Foot="@($"in the last {days}d")" />
+        </div>
+
+        <div class="table-wrap">
+            <table class="usage">
+                <thead>
+                    <tr>
+                        <th class="sortable" @onclick="@(() => SortBy(SortKey.Name))">Company @Arrow(SortKey.Name)</th>
+                        <th class="sortable" @onclick="@(() => SortBy(SortKey.LastActivity))">Status @Arrow(SortKey.LastActivity)</th>
+                        <th class="num sortable" @onclick="@(() => SortBy(SortKey.Employees))">Employees @Arrow(SortKey.Employees)</th>
+                        <th class="num sortable" @onclick="@(() => SortBy(SortKey.Jobs))">Jobs @Arrow(SortKey.Jobs)</th>
+                        <th class="num sortable" @onclick="@(() => SortBy(SortKey.HoursRecent))">Hours @days d @Arrow(SortKey.HoursRecent)</th>
+                        <th class="num sortable" @onclick="@(() => SortBy(SortKey.Hours))">Hours total @Arrow(SortKey.Hours)</th>
+                        <th class="num">Entries @days d</th>
+                        <th class="num">Materials @days d</th>
+                        <th class="num">Files</th>
+                        <th class="num sortable" @onclick="@(() => SortBy(SortKey.Logins))">Sign-ins @days d @Arrow(SortKey.Logins)</th>
+                        <th class="sortable" @onclick="@(() => SortBy(SortKey.Since))">Since @Arrow(SortKey.Since)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Sorted())
+                    {
+                        var status = StatusOf(c);
+                        <tr class="@(c.IsDemo ? "row--demo" : "")">
+                            <td>
+                                <div class="co-name">
+                                    <strong>@c.Name</strong>
+                                    @if (c.IsDemo) { <span class="badge badge--amber" title="Seeded demo company">Demo</span> }
+                                    @if (c.HasPayday) { <span class="badge badge--green" title="Payday connected">Payday</span> }
+                                </div>
+                                <div class="co-sub">@(c.OwnerEmails.Count > 0 ? string.Join(", ", c.OwnerEmails) : "no owner login")</div>
+                            </td>
+                            <td>
+                                <span class="status status--@status.Tone" title="@(c.LastActivity is DateTimeOffset la ? $"Last activity {la.LocalDateTime:d MMM yyyy}" : "Nothing logged yet")">@status.Label</span>
+                                <div class="co-sub">@Ago(c.LastActivity)@(c.LastLogin is not null ? $" · signed in {Ago(c.LastLogin)}" : "")</div>
+                            </td>
+                            <td class="num">@c.EmployeesActive<span class="dim">/@c.Employees</span></td>
+                            <td class="num">@c.Jobs @Delta(c.JobsRecent)</td>
+                            <td class="num">@c.HoursRecent.ToString("N0")</td>
+                            <td class="num">@c.Hours.ToString("N0")</td>
+                            <td class="num">@c.TimeEntriesRecent</td>
+                            <td class="num">@c.MaterialUsagesRecent</td>
+                            <td class="num">@c.Attachments</td>
+                            <td class="num">@c.LoginsRecent</td>
+                            <td>@(c.Since is DateTimeOffset s ? s.LocalDateTime.ToString("MMM yyyy") : "—")</td>
+                            <td class="actions">
+                                @if (OnEnterCompany.HasDelegate)
+                                {
+                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small"
+                                                  @onclick="@(() => OnEnterCompany.InvokeAsync(c.Id))">Enter</FluentButton>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    /// <summary>Invoked with the company id when the admin wants to enter that company.</summary>
+    [Parameter] public EventCallback<Guid> OnEnterCompany { get; set; }
+
+    private AdminOverview? overview;
+    private bool isLoading;
+    private string? error;
+    private SortKey sortKey = SortKey.LastActivity;
+    private bool sortDesc = true;
+
+    private enum SortKey { Name, LastActivity, Employees, Jobs, HoursRecent, Hours, Logins, Since }
+
+    // Same pattern as the Admin page: the session token is only reachable
+    // once the circuit is up, so load after the first render.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        error = null;
+        StateHasChanged();
+        var result = await AuthApi.GetAdminOverviewAsync();
+        if (result.IsSuccess && result.Value is not null)
+            overview = result.Value;
+        else
+            error = result.ErrorMessage ?? "Could not load the platform overview.";
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private void SortBy(SortKey key)
+    {
+        if (sortKey == key) sortDesc = !sortDesc;
+        else { sortKey = key; sortDesc = key != SortKey.Name; }
+    }
+
+    private string Arrow(SortKey key) => sortKey == key ? (sortDesc ? "↓" : "↑") : "";
+
+    private IEnumerable<AdminCompanyUsage> Sorted()
+    {
+        if (overview is null) return [];
+        IOrderedEnumerable<AdminCompanyUsage> ordered = sortKey switch
+        {
+            SortKey.Name         => overview.Companies.OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase),
+            SortKey.Employees    => overview.Companies.OrderBy(c => c.EmployeesActive),
+            SortKey.Jobs         => overview.Companies.OrderBy(c => c.Jobs),
+            SortKey.HoursRecent  => overview.Companies.OrderBy(c => c.HoursRecent),
+            SortKey.Hours        => overview.Companies.OrderBy(c => c.Hours),
+            SortKey.Logins       => overview.Companies.OrderBy(c => c.LoginsRecent),
+            SortKey.Since        => overview.Companies.OrderBy(c => c.Since ?? DateTimeOffset.MaxValue),
+            _                    => overview.Companies.OrderBy(c => c.LastActivity ?? DateTimeOffset.MinValue),
+        };
+        var list = sortDesc ? ordered.Reverse() : ordered;
+        // Demo company last regardless, so real customers lead.
+        return list.OrderBy(c => c.IsDemo);
+    }
+
+    private static (string Label, string Tone) StatusOf(AdminCompanyUsage c)
+    {
+        if (c.LastActivity is not DateTimeOffset last) return ("Never used", "never");
+        var age = DateTimeOffset.UtcNow - last;
+        if (age.TotalDays <= 7)  return ("Active", "active");
+        if (age.TotalDays <= 30) return ("Quiet", "quiet");
+        return ("Dormant", "dormant");
+    }
+
+    private static string Ago(DateTimeOffset? at)
+    {
+        if (at is not DateTimeOffset t) return "never";
+        var days = (int)Math.Floor((DateTimeOffset.UtcNow - t).TotalDays);
+        return days switch
+        {
+            < 1 => "today",
+            1 => "yesterday",
+            < 7 => $"{days} days ago",
+            < 30 => $"{days / 7} wk ago",
+            < 365 => $"{days / 30} mo ago",
+            _ => $"{days / 365} yr ago",
+        };
+    }
+
+    private static string Recent(int n, int days) => n > 0 ? $"+{n:N0} in {days}d" : $"none in {days}d";
+
+    private static MarkupString Delta(int n) =>
+        new(n > 0 ? $"<span class=\"delta\">+{n}</span>" : "");
+}
