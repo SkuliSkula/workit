@@ -149,6 +149,9 @@ public class MaterialsApiTests
         public Task<ApiResult> DeleteMaterialAsync(Guid id) =>
             DeleteAsync($"api/materials/{id}", "The material could not be deleted right now.");
 
+        public Task<ApiResult> DeleteMaterialUsageAsync(Guid id) =>
+            DeleteAsync($"api/materials/usage/{id}", "The material usage could not be deleted right now.");
+
         public async Task<ApiResult<List<MaterialUsage>>> GetMaterialUsageAsync(Guid? jobId = null)
         {
             var url = jobId is null ? "api/materials/usage" : $"api/materials/usage?jobId={jobId}";

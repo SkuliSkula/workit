@@ -200,6 +200,36 @@ internal static class MaterialEndpoints
                 "logging material usage"))
             .WithName("CreateMaterialUsage");
 
+        // ── Delete a usage — logged by mistake, or the wrong material/quantity ──
+        securedApi.MapDelete("/materials/usage/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var userContext = httpContext.User.ToUserContext();
+                    var usage = await db.MaterialUsages.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (usage is null) return Results.NotFound();
+
+                    // Employees can only delete their own usages; owners and admins any.
+                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
+                        usage.EmployeeId != userContext.EmployeeId)
+                        return Results.Forbid();
+
+                    // Material already billed to a customer stays; the invoice is the record.
+                    if (usage.IsInvoiced)
+                        return Results.Conflict("This material usage has been invoiced and can't be deleted.");
+
+                    // Logging took the quantity out of stock; deleting puts it back.
+                    var material = await db.Materials.FirstOrDefaultAsync(x => x.Id == usage.MaterialId && x.CompanyId == userContext.CompanyId, ct);
+                    if (material is not null)
+                        material.Quantity += usage.Quantity;
+
+                    db.MaterialUsages.Remove(usage);
+                    await db.SaveChangesAsync(ct);
+                    return Results.NoContent();
+                },
+                logger,
+                "deleting material usage"))
+            .WithName("DeleteMaterialUsage");
+
         securedApi.MapPost("/materials/usage/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, MarkInvoicedRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
