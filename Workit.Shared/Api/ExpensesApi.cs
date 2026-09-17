@@ -15,6 +15,8 @@ public interface IExpensesApi
 
     /// <summary>Import a Payday expense into the Workit DB. Idempotent — deduped by PaydayId.</summary>
     Task<ApiResult<Expense>>        ImportPaydayExpenseAsync(Expense expense);
+    /// <summary>Links Payday expenses to the jobs whose codes appear on them; see ExpenseAutoLinkEndpoints.</summary>
+    Task<ApiResult<ExpenseAutoLinkResult>> AutoLinkAsync(string? dateFrom = null, string? dateTo = null);
 
     /// <summary>Record partial/full billings of expense lines, tagged with an invoice number.</summary>
     Task<ApiResult>                 BillLinesAsync(BillExpenseLinesRequest request);
@@ -55,6 +57,15 @@ internal sealed class ExpensesApi(HttpClient httpClient, IAccessTokenAccessor to
 
     public Task<ApiResult<Expense>> ImportPaydayExpenseAsync(Expense expense) =>
         PostForJsonAsync<Expense, Expense>("/api/expenses/import-payday", expense, "Failed to import Payday expense.");
+
+    public Task<ApiResult<ExpenseAutoLinkResult>> AutoLinkAsync(string? dateFrom = null, string? dateTo = null)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(dateFrom)) query.Add($"dateFrom={Uri.EscapeDataString(dateFrom)}");
+        if (!string.IsNullOrWhiteSpace(dateTo))   query.Add($"dateTo={Uri.EscapeDataString(dateTo)}");
+        var url = "/api/expenses/auto-link" + (query.Count > 0 ? "?" + string.Join("&", query) : "");
+        return PostForJsonAsync<object, ExpenseAutoLinkResult>(url, new { }, "Could not link expenses to jobs automatically.");
+    }
 
     public Task<ApiResult> BillLinesAsync(BillExpenseLinesRequest request) =>
         PostAsync("/api/expenses/lines/bill", request, "Failed to record expense billing.");

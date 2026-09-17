@@ -274,6 +274,7 @@ app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
 app.MapSalesInvoiceEndpoints();
 app.MapExpenseEndpoints();
+app.MapExpenseAutoLinkEndpoints();
 app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapDevSeedEndpoints();

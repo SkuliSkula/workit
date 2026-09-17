@@ -34,6 +34,9 @@ public sealed class Expense
     /// <summary>Optional link to a Workit job.</summary>
     public Guid? JobId { get; set; }
 
+    /// <summary>Whether <see cref="JobId"/> was set by an owner or found automatically, or removed by an owner.</summary>
+    public ExpenseJobLinkSource JobLinkSource { get; set; } = ExpenseJobLinkSource.None;
+
     /// <summary>Where this record came from.</summary>
     public DataSource Source { get; set; } = DataSource.Workit;
 

@@ -3,7 +3,6 @@
 @inject IPaydayExpensesApi ExpensesApi
 @inject IJobsApi JobsApi
 @inject IExpensesApi WorkitExpensesApi
-@using System.Text.RegularExpressions
 
 <PageTitle>Payday Expenses</PageTitle>
 
@@ -34,9 +33,13 @@
                 <FluentOption TOption="string" Value="PAID">Paid</FluentOption>
             </FluentSelect>
         </div>
-        <div style="display:flex; align-items:flex-end;">
+        <div style="display:flex; align-items:flex-end; gap:0.5rem;">
             <FluentButton Appearance="Appearance.Accent" @onclick="LoadExpensesAsync" Disabled="@isLoading">
                 @(isLoading ? "Loading…" : "Load")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="AutoLinkAsync" Disabled="@(isLoading || isAutoLinking)"
+                          title="Link expenses to the jobs whose code the vendor wrote on them">
+                @(isAutoLinking ? "Linking…" : "Link jobs")
             </FluentButton>
         </div>
     </div>
@@ -230,23 +233,28 @@
                     @{
                         var linkedJobId = expenseJobLinks.GetValueOrDefault(context.Id);
                         var linkedJob   = linkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == linkedJobId.Value) : null;
-                        var detected    = autoDetectedJobs.GetValueOrDefault(context.Id);
+                        var detected    = detectedJobs.GetValueOrDefault(context.Id) ?? [];
+                        var isAuto      = workitExpensesById.GetValueOrDefault(context.Id)?.JobLinkSource == ExpenseJobLinkSource.Automatic;
                     }
                     @if (linkedJob is not null)
                     {
                         <div style="display:flex; align-items:center; gap:0.25rem;">
-                            <span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@linkedJob.Code</span>
+                            <span style="background:#dcfce7; color:#15803d; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;"
+                                  title="@(isAuto ? "Linked automatically from the job code on the expense" : "Linked by an owner")">@linkedJob.Code@(isAuto ? " · auto" : "")</span>
                             <FluentButton Appearance="Appearance.Stealth" title="Unlink job"
                                           @onclick="@(async () => await UnlinkJobAsync(context))"
                                           style="padding:0 4px; min-width:0; font-size:0.75rem;">✕</FluentButton>
                         </div>
                     }
-                    else if (detected is not null)
+                    else if (detected.Count > 0)
                     {
+                        @* One code found but not linked — the owner unlinked it before, so it is only offered.
+                           Several codes — the expense names more than one job; the owner decides. *@
                         <div style="display:flex; align-items:center; gap:0.25rem;">
-                            <span style="background:#fef3c7; color:#92400e; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;">@detected.Code ?</span>
-                            <FluentButton Appearance="Appearance.Stealth" title="Link to this job"
-                                          @onclick="@(() => OpenLinkDialog(context, detected))"
+                            <span style="background:#fef3c7; color:#92400e; padding:2px 7px; border-radius:4px; font-size:0.78rem; font-weight:600;"
+                                  title="@(detected.Count > 1 ? "This expense mentions several jobs" : "Job code found on the expense")">@string.Join(" / ", detected.Select(j => j.Code)) ?</span>
+                            <FluentButton Appearance="Appearance.Stealth" title="@(detected.Count > 1 ? "Choose which job" : "Link to this job")"
+                                          @onclick="@(() => OpenLinkDialog(context, detected.Count == 1 ? detected[0] : null))"
                                           style="padding:0 4px; min-width:0; font-size:0.75rem;">Link</FluentButton>
                         </div>
                     }
@@ -381,7 +389,8 @@
                 @{
                     var selLinkedJobId = expenseJobLinks.GetValueOrDefault(selectedExpense.Id);
                     var selLinkedJob   = selLinkedJobId.HasValue ? jobs.FirstOrDefault(j => j.Id == selLinkedJobId.Value) : null;
-                    var selDetected    = autoDetectedJobs.GetValueOrDefault(selectedExpense.Id);
+                    var selDetectedAll = detectedJobs.GetValueOrDefault(selectedExpense.Id) ?? [];
+                    var selDetected    = selDetectedAll.Count == 1 ? selDetectedAll[0] : null;
                 }
                 <div style="margin-top:0.75rem; padding:0.6rem 0.75rem; background:var(--neutral-fill-secondary-rest); border-radius:6px; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                     <span style="font-size:0.78rem; font-weight:600; color:var(--neutral-foreground-hint-rest);">Linked Job:</span>
@@ -634,14 +643,12 @@
     private readonly List<Job>                      jobs              = [];
     private readonly Dictionary<Guid, Guid?>        expenseJobLinks   = new();   // paydayExpenseId → jobId
     private readonly Dictionary<Guid, Expense>      workitExpensesById = new();  // paydayExpenseId → imported Workit expense
-    private readonly Dictionary<Guid, Job?>         autoDetectedJobs  = new();   // expenseId → detected job
+    private readonly Dictionary<Guid, List<Job>>    detectedJobs      = new();   // paydayExpenseId → jobs its text names
+    private bool    isAutoLinking;
     private PaydayExpense? linkingExpense;
     private string         pendingLinkJobId  = string.Empty;
     private bool           savingLink;
     private string?        linkDialogError;
-
-    private static readonly Regex JobCodeRegex =
-        new(@"\b([A-Z]{2,3}-[A-Z]{1,4}-\d{3})\b", RegexOptions.Compiled);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -659,8 +666,48 @@
         if (jr.IsSuccess && jr.Value is not null)
             jobs.AddRange(jr.Value);
 
+        await AutoLinkAsync();
         await LoadAllLinksAsync();
-        DetectJobsFromComments();
+        DetectJobs();
+    }
+
+    /// <summary>
+    /// Asks the API to link every Payday expense in the current date range
+    /// whose text names exactly one job. Runs on load and on demand; the
+    /// API leaves owner-made links and owner-removed links alone.
+    /// </summary>
+    private async Task AutoLinkAsync()
+    {
+        isAutoLinking = true;
+        try
+        {
+            var from = filterFrom.HasValue ? filterFrom.Value.ToString("yyyy-MM-dd") : null;
+            var to   = filterTo.HasValue   ? filterTo.Value.ToString("yyyy-MM-dd")   : null;
+            var result = await WorkitExpensesApi.AutoLinkAsync(from, to);
+            if (!result.IsSuccess || result.Value is null)
+            {
+                // If Payday itself is down the list already says so; don't say it twice.
+                if (loadError is null)
+                    actionError = result.ErrorMessage ?? "Could not link expenses to jobs automatically.";
+                return;
+            }
+            var r = result.Value;
+            if (r.Linked.Count > 0)
+            {
+                await LoadAllLinksAsync();
+                actionResult = $"✓ Linked {r.Linked.Count} expense{(r.Linked.Count == 1 ? "" : "s")} to jobs from their job codes"
+                             + (r.Ambiguous.Count > 0 ? $"; {r.Ambiguous.Count} mention several jobs — see the ? marks." : ".");
+                actionError = null;
+            }
+            else if (r.Ambiguous.Count > 0)
+            {
+                actionResult = $"{r.Ambiguous.Count} expense{(r.Ambiguous.Count == 1 ? "" : "s")} mention several jobs — see the ? marks.";
+            }
+        }
+        finally
+        {
+            isAutoLinking = false;
+        }
     }
 
     // ── Load ──────────────────────────────────────────────────────────────────
@@ -716,7 +763,7 @@
             {
                 expenses.AddRange(result.Value.Expenses);
                 totalExpenses = result.Value.Total;
-                DetectJobsFromComments();
+                DetectJobs();
             }
         }
         finally
@@ -1000,17 +1047,14 @@
         }
     }
 
-    private void DetectJobsFromComments()
+    /// <summary>Which jobs each unlinked expense's text names, for the suggestion in the Job column.</summary>
+    private void DetectJobs()
     {
-        autoDetectedJobs.Clear();
+        detectedJobs.Clear();
         foreach (var expense in expenses)
         {
-            if (string.IsNullOrWhiteSpace(expense.Comments)) continue;
-            var match = JobCodeRegex.Match(expense.Comments.ToUpperInvariant());
-            if (!match.Success) continue;
-            var code = match.Groups[1].Value;
-            var job  = jobs.FirstOrDefault(j => string.Equals(j.Code, code, StringComparison.OrdinalIgnoreCase));
-            autoDetectedJobs[expense.Id] = job;
+            var found = JobCodeMatcher.FindJobs(JobCodeMatcher.TextsOf(expense), jobs);
+            if (found.Count > 0) detectedJobs[expense.Id] = found.ToList();
         }
     }
 
