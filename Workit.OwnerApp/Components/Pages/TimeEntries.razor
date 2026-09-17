@@ -116,6 +116,15 @@
         <FluentDatePicker @bind-Value="filterFrom" Label="From" />
         <FluentDatePicker @bind-Value="filterTo"   Label="To" />
         <div>
+            <FluentSelect Label="Employee" TValue="string" TOption="string" @bind-Value="filterEmployeeId" style="width:100%">
+                <FluentOption TOption="string" Value="">— All employees —</FluentOption>
+                @foreach (var emp in employees)
+                {
+                    <FluentOption TOption="string" Value="@emp.Id.ToString()">@emp.DisplayName</FluentOption>
+                }
+            </FluentSelect>
+        </div>
+        <div>
             <FluentSelect Label="Job" TValue="string" TOption="string" @bind-Value="filterJobId" style="width:100%">
                 <FluentOption TOption="string" Value="">— All jobs —</FluentOption>
                 @foreach (var job in jobs)
@@ -138,6 +147,23 @@
 
     @if (entries.Count > 0)
     {
+        @* The totals sit above the grid so they are read without scrolling past it. *@
+        <div class="entry-totals">
+            <div class="entry-total"><span class="entry-total-label">Total</span><strong>@entries.Sum(e => e.Hours).ToString("0.##") h</strong></div>
+            <div class="entry-total"><span class="entry-total-label">Overtime</span><strong>@entries.Sum(e => e.OvertimeHours).ToString("0.##") h</strong></div>
+            @if (entries.Sum(e => e.DrivingUnits) > 0)
+            {
+                <div class="entry-total"><span class="entry-total-label">Driving</span><strong>@entries.Sum(e => e.DrivingUnits) units</strong></div>
+            }
+            <div class="entry-total"><span class="entry-total-label">Entries</span><strong>@entries.Count</strong></div>
+            @{ var invoicedCount = entries.Count(e => e.IsInvoiced); }
+            <div class="entry-total"><span class="entry-total-label">Invoiced</span><strong>@invoicedCount<span class="entry-total-dim"> / @entries.Count</span></strong></div>
+            @if (entries.Count - invoicedCount > 0)
+            {
+                <div class="entry-total entry-total--open"><span class="entry-total-label">To invoice</span><strong>@entries.Where(e => !e.IsInvoiced).Sum(e => e.Hours).ToString("0.##") h</strong></div>
+            }
+        </div>
+
         <FluentDataGrid TGridItem="EntryRow" Items="@entries.AsQueryable()" AutoFit="true"
                         DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.5rem;">
             <PropertyColumn Property="@(x => x.Date)"         Title="Date"     Format="dd MMM yyyy" />
@@ -213,20 +239,6 @@
             </TemplateColumn>
         </FluentDataGrid>
 
-        <FluentLabel style="margin-top:0.4rem; font-size:0.85rem;">
-            Total: <strong>@entries.Sum(e => e.Hours).ToString("0.##") hrs</strong>
-            · Overtime: <strong>@entries.Sum(e => e.OvertimeHours).ToString("0.##") hrs</strong>
-            @if (entries.Sum(e => e.DrivingUnits) > 0)
-            {
-                <span> · Driving: <strong>@entries.Sum(e => e.DrivingUnits) units</strong></span>
-            }
-            · across @entries.Count entries
-            @{ var invoicedCount = entries.Count(e => e.IsInvoiced); }
-            @if (invoicedCount > 0)
-            {
-                <span> · <strong>@invoicedCount</strong> invoiced</span>
-            }
-        </FluentLabel>
     }
     else if (!loadingEntries && hasLoadedEntries)
     {
@@ -288,6 +300,7 @@
     private DateTime? filterFrom  = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime? filterTo    = DateTime.Today;
     private string    filterJobId = string.Empty;
+    private string    filterEmployeeId = string.Empty;
     private bool loadingEntries;
     private bool hasLoadedEntries;
     private readonly List<EntryRow> entries = [];
@@ -571,7 +584,10 @@
             var jobSlug = Guid.TryParse(filterJobId, out var exportJobId) && jobNames.TryGetValue(exportJobId, out var jName)
                 ? $"-{jName.Replace(" ", "-").Replace("–", "").Trim('-')}"
                 : string.Empty;
-            var filename = $"time-entries{jobSlug}-{from}-to-{to}.xlsx";
+            var employeeSlug = Guid.TryParse(filterEmployeeId, out var exportEmployeeId) && employeeNames.TryGetValue(exportEmployeeId, out var eName)
+                ? $"-{eName.Replace(" ", "-")}"
+                : string.Empty;
+            var filename = $"time-entries{employeeSlug}{jobSlug}-{from}-to-{to}.xlsx";
 
             await JS.InvokeVoidAsync("triggerFileDownload", filename, base64,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -596,8 +612,9 @@
             var from  = DateOnly.FromDateTime(filterFrom.Value);
             var to    = DateOnly.FromDateTime(filterTo.Value);
             var jobId = Guid.TryParse(filterJobId, out var jid) ? jid : (Guid?)null;
+            var employeeId = Guid.TryParse(filterEmployeeId, out var eid) ? eid : (Guid?)null;
 
-            var result = await TimeEntriesApi.GetTimeEntriesAsync(from, to, jobId: jobId);
+            var result = await TimeEntriesApi.GetTimeEntriesAsync(from, to, employeeId: employeeId, jobId: jobId);
             if (!result.IsSuccess)
             {
                 loadError ??= result.ErrorMessage;
