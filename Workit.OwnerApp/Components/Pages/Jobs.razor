@@ -525,7 +525,10 @@ else if (company is not null)
         selectedCustomerId = customers.FirstOrDefault()?.Id.ToString();
         foreach (var c in customers) customerLookup[c.Id] = c.Name;
 
-        jobs.AddRange(jobR.Value ?? []);
+        // Newest first. The API orders by code, which groups by category now
+        // that the code is category + number; the running number says which
+        // job came last. Same order as the employee apps.
+        jobs.AddRange((jobR.Value ?? []).OrderByDescending(j => j.JobNumber).ThenByDescending(j => j.Code));
 
         employees.AddRange(empR.Value ?? []);
         foreach (var e in employees) employeeLookup[e.Id] = e.DisplayName;

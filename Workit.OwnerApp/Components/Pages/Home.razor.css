@@ -347,6 +347,43 @@
     background: linear-gradient(90deg, #b4862f 0%, #ebc769 100%);
 }
 
+/* The bar wrap is the positioning context for the open (not yet invoiced) overlay. */
+.summary-bar-wrap {
+    position: relative;
+}
+
+.summary-bar--open {
+    position: absolute;
+    top: 0;
+    background: repeating-linear-gradient(
+        135deg,
+        rgba(180, 134, 47, 0.85) 0 4px,
+        rgba(235, 199, 105, 0.85) 4px 8px
+    );
+}
+
+.kpi-unit {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #425468;
+    margin-left: 0.15rem;
+}
+
+.invoice-progress {
+    height: 6px;
+    margin-top: 0.35rem;
+    border-radius: 999px;
+    background: rgba(20, 48, 75, 0.12);
+    overflow: hidden;
+}
+
+.invoice-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1d6fb8 0%, #5ba4e0 100%);
+    transition: width 0.3s ease;
+}
+
 .entry-table {
     display: grid;
     grid-template-columns: 110px 1fr 1fr 1fr 80px;
