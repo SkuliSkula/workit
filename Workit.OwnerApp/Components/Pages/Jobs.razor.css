@@ -335,3 +335,92 @@
     font-size: 0.8rem;
     color: #60758b;
 }
+
+/* ── Tasks ──────────────────────────────────────────────────────────────── */
+
+.badge--tasks {
+    background: rgba(29, 111, 184, 0.10);
+    color: #1d6fb8;
+}
+
+.job-tasks-count {
+    margin-left: auto;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #60758b;
+}
+
+.job-task {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.job-task-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.job-task-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #1d6fb8;
+    background: rgba(29, 111, 184, 0.10);
+    padding: 1px 6px;
+    border-radius: 5px;
+    margin-right: 0.4rem;
+}
+
+.job-task-name {
+    font-weight: 600;
+    color: #14304b;
+}
+
+.job-task--done .job-task-name {
+    color: #60758b;
+    text-decoration: line-through;
+}
+
+.job-task-sub {
+    font-size: 0.78rem;
+    color: #60758b;
+    margin-top: 0.1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.job-task-hours {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    color: #425468;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.job-task-hours--over {
+    color: #b45309;
+    font-weight: 600;
+}
+
+.job-task-edit {
+    margin: 0.35rem 0 0.5rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    background: rgba(20, 48, 75, 0.04);
+    border: 1px solid rgba(20, 48, 75, 0.09);
+}
+
+.first-tasks {
+    margin-top: 0.75rem;
+}
+
+.first-task-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.4rem;
+}

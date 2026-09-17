@@ -35,3 +35,17 @@
     border-radius: 999px;
     padding: 2px 8px;
 }
+
+/* "Plan jobs in tasks" default — a switch with its explanation beside it. */
+.plan-tasks {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+}
+
+.plan-tasks-hint {
+    font-size: 0.82rem;
+    color: #60758b;
+}

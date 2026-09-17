@@ -49,6 +49,10 @@
             <div>
                 <FluentTextField Label="Contact person" @bind-Value="newCustomerContactPerson" Placeholder="Contact person" style="width:100%" />
             </div>
+            <div class="plan-tasks">
+                <FluentSwitch @bind-Value="newCustomerPlanJobsInTasks" Label="Plan jobs in tasks" />
+                <span class="plan-tasks-hint">New jobs for this customer open with a Tasks section. Any job can still get tasks.</span>
+            </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
             <FluentButton Appearance="Appearance.Accent" @onclick="CreateCustomerAsync">Save</FluentButton>
@@ -76,6 +80,10 @@
             </div>
             <div>
                 <FluentTextField Label="Contact person" @bind-Value="editingCustomer.ContactPerson" Placeholder="Contact person" style="width:100%" />
+            </div>
+            <div class="plan-tasks">
+                <FluentSwitch @bind-Value="editingCustomer.PlanJobsInTasks" Label="Plan jobs in tasks" />
+                <span class="plan-tasks-hint">New jobs for this customer open with a Tasks section. Any job can still get tasks.</span>
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -131,6 +139,7 @@
     private string newCustomerEmail = string.Empty;
     private string newCustomerPhone = string.Empty;
     private string newCustomerContactPerson = string.Empty;
+    private bool newCustomerPlanJobsInTasks;
     private string? loadError;
 
     protected override async Task OnInitializedAsync()
@@ -179,6 +188,7 @@
 
     private void ResetCreateForm()
     {
+        newCustomerPlanJobsInTasks = false;
         newCustomerName = string.Empty;
         newCustomerSsn = string.Empty;
         newCustomerEmail = string.Empty;
@@ -200,7 +210,8 @@
             Ssn = newCustomerSsn.Trim(),
             Email = newCustomerEmail.Trim(),
             Phone = newCustomerPhone.Trim(),
-            ContactPerson = newCustomerContactPerson.Trim()
+            ContactPerson = newCustomerContactPerson.Trim(),
+            PlanJobsInTasks = newCustomerPlanJobsInTasks
         });
 
         if (result.IsSuccess)
