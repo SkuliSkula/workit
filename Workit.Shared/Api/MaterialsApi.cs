@@ -11,6 +11,8 @@ public interface IMaterialsApi
 
     Task<ApiResult<List<MaterialUsage>>> GetMaterialUsageAsync(Guid? jobId = null);
     Task<ApiResult<MaterialUsage>> LogMaterialUsageAsync(Guid materialId, decimal quantity, Guid? jobId, string? notes);
+    /// <summary>Removes a usage and returns its quantity to stock. Employees only their own; invoiced usages are refused (409).</summary>
+    Task<ApiResult> DeleteMaterialUsageAsync(Guid id);
     Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request);
     Task<ApiResult> MarkMaterialUsageUninvoicedAsync(MarkUninvoicedRequest request);
 }
@@ -55,6 +57,9 @@ internal sealed class MaterialsApi(HttpClient httpClient, IAccessTokenAccessor a
         var payload = new { materialId, quantity, jobId, notes };
         return PostForJsonAsync<object, MaterialUsage>("api/materials/usage", payload, "Material usage could not be logged right now.");
     }
+
+    public Task<ApiResult> DeleteMaterialUsageAsync(Guid id) =>
+        DeleteAsync($"api/materials/usage/{id}", "The material usage could not be deleted right now.");
 
     public Task<ApiResult> MarkMaterialUsageInvoicedAsync(MarkInvoicedRequest request) =>
         PostAsync("api/materials/usage/mark-invoiced", request, "Material usage could not be marked as invoiced.");
