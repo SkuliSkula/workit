@@ -2,6 +2,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
+@inject IJobTasksApi JobTasksApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IJSRuntime JS
 @using ClosedXML.Excel
@@ -125,7 +126,7 @@
             </FluentSelect>
         </div>
         <div>
-            <FluentSelect Label="Job" TValue="string" TOption="string" @bind-Value="filterJobId" style="width:100%">
+            <FluentSelect Label="Job" TValue="string" TOption="string" @bind-Value="filterJobId" @bind-Value:after="@(() => filterTaskId = string.Empty)" style="width:100%">
                 <FluentOption TOption="string" Value="">— All jobs —</FluentOption>
                 @foreach (var job in jobs)
                 {
@@ -133,6 +134,20 @@
                 }
             </FluentSelect>
         </div>
+        @{ var filterJobTasks = Guid.TryParse(filterJobId, out var fj) ? allTasks.Where(t => t.JobId == fj).OrderBy(t => t.TaskNumber).ToList() : []; }
+        @if (filterJobTasks.Count > 0)
+        {
+            <div>
+                <FluentSelect Label="Task" TValue="string" TOption="string" @bind-Value="filterTaskId" style="width:100%">
+                    <FluentOption TOption="string" Value="">— All tasks —</FluentOption>
+                    <FluentOption TOption="string" Value="none">— No task —</FluentOption>
+                    @foreach (var t in filterJobTasks)
+                    {
+                        <FluentOption TOption="string" Value="@t.Id.ToString()">@t.Code – @t.Name</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+        }
         <div style="display:flex; align-items:flex-end;">
             <FluentButton Appearance="Appearance.Accent" @onclick="LoadEntriesAsync" Disabled="@loadingEntries">
                 @(loadingEntries ? "Loading…" : "Load")
@@ -169,6 +184,10 @@
             <PropertyColumn Property="@(x => x.Date)"         Title="Date"     Format="dd MMM yyyy" />
             <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
             <PropertyColumn Property="@(x => x.JobName)"      Title="Job" />
+            @if (entries.Any(e => e.TaskCode is not null))
+            {
+                <PropertyColumn Property="@(x => x.TaskCode)" Title="Task" />
+            }
             <TemplateColumn Title="Hours">
                 @if (editingRow == context)
                 {
@@ -301,6 +320,8 @@
     private DateTime? filterTo    = DateTime.Today;
     private string    filterJobId = string.Empty;
     private string    filterEmployeeId = string.Empty;
+    private string    filterTaskId = string.Empty;
+    private readonly List<JobTask> allTasks = [];
     private bool loadingEntries;
     private bool hasLoadedEntries;
     private readonly List<EntryRow> entries = [];
@@ -313,6 +334,8 @@
         public DateOnly Date          { get; set; }
         public string   EmployeeName  { get; set; } = string.Empty;
         public string   JobName       { get; set; } = string.Empty;
+        public Guid?    TaskId        { get; set; }
+        public string?  TaskCode      { get; set; }
         public decimal  Hours         { get; set; }
         public decimal  OvertimeHours { get; set; }
         public int      DrivingUnits  { get; set; }
@@ -463,6 +486,13 @@
             foreach (var j in jobs)
                 jobNames[j.Id] = $"{j.Code} – {j.Name}";
             selectedJobId = jobs.FirstOrDefault()?.Id.ToString();
+        }
+
+        var taskResult = await JobTasksApi.GetTasksAsync();
+        if (taskResult.IsSuccess)
+        {
+            allTasks.Clear();
+            allTasks.AddRange(taskResult.Value ?? []);
         }
         else
         {
@@ -632,6 +662,8 @@
                     Date          = e.WorkDate,
                     EmployeeName  = employeeNames.GetValueOrDefault(e.EmployeeId, e.EmployeeId.ToString()),
                     JobName       = jobNames.GetValueOrDefault(e.JobId, e.JobId.ToString()),
+                    TaskId        = e.TaskId,
+                    TaskCode      = e.TaskId is Guid tid ? allTasks.FirstOrDefault(t => t.Id == tid)?.Code : null,
                     Hours         = e.Hours,
                     OvertimeHours = e.OvertimeHours,
                     DrivingUnits  = e.DrivingUnits,
@@ -639,6 +671,12 @@
                     IsInvoiced    = e.IsInvoiced,
                     PaydayInvoiceNumber = e.PaydayInvoiceNumber
                 });
+
+            // The task filter is applied here: the API filters by job, tasks are few.
+            if (filterTaskId == "none")
+                rows = rows.Where(r => r.TaskId is null);
+            else if (Guid.TryParse(filterTaskId, out var ftid))
+                rows = rows.Where(r => r.TaskId == ftid);
 
             entries.AddRange(rows);
         }

@@ -3,6 +3,7 @@
 @inject ICustomersApi CustomersApi
 @inject BusyService Busy
 @inject IJobsApi JobsApi
+@inject IJobTasksApi JobTasksApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
 @inject IEmployeesApi EmployeesApi
@@ -246,6 +247,13 @@
                 </div>
             }
 
+            @if (jobSelections.Any(j => j.IsSelected && allTasks.Any(t => t.JobId == j.Job.Id)))
+            {
+                <div style="margin-top:1rem; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <FluentSwitch @bind-Value="groupLinesByTask" Label="One labor line per task" />
+                    <span style="font-size:0.82rem; color:#60758b;">Hours read "Vinna · MNT102-3 Ný lýsing í móttöku" on the invoice; hours logged without a task stay as "Vinna".</span>
+                </div>
+            }
             <div style="display:flex; gap:0.75rem; margin-top:1rem;">
                 <FluentButton Appearance="Appearance.Accent" @onclick="GenerateInvoiceLines">Generate Invoice Lines →</FluentButton>
             </div>
@@ -478,6 +486,9 @@
     private List<Customer> customersWithJobs = [];
     private List<Job> allJobs = [];
     private List<Employee> allEmployees = [];
+    private List<JobTask> allTasks = [];
+    /// <summary>Whether labor lines are split per task as well as per employee. Defaults on when any selected job has tasks.</summary>
+    private bool groupLinesByTask = true;
     private List<Material> allMaterials = [];
     private Company? company;
 
@@ -611,6 +622,8 @@
 
         var er = await employeesTask;
         if (er.IsSuccess) allEmployees = er.Value ?? [];
+        var tr = await JobTasksApi.GetTasksAsync();
+        if (tr.IsSuccess) allTasks = tr.Value ?? [];
 
         var mr = await materialsTask;
         if (mr.IsSuccess) allMaterials = mr.Value ?? [];
@@ -821,35 +834,56 @@
 
             if (isHourly)
             {
-                foreach (var empHours in js.EmployeeBreakdown.Where(e => e.Hours > 0 || e.OvertimeHours > 0))
+                // Labor is priced per employee (their billable rate). With tasks on
+                // the job and grouping on, each employee's hours are further split
+                // per task so the customer sees what the hours were for; hours
+                // logged without a task keep the plain "Vinna" line.
+                var jobTasks = allTasks.Where(t => t.JobId == js.Job.Id).ToDictionary(t => t.Id);
+                var splitByTask = groupLinesByTask && jobTasks.Count > 0;
+                var employeeMap = allEmployees.ToDictionary(e => e.Id);
+
+                var groups = js.TimeEntries
+                    .GroupBy(te => (te.EmployeeId, TaskId: splitByTask ? te.TaskId : null))
+                    .OrderBy(g => g.Key.TaskId is null ? 1 : 0)
+                    .ThenBy(g => g.Key.TaskId is Guid tid && jobTasks.TryGetValue(tid, out var t0) ? t0.TaskNumber : int.MaxValue)
+                    .ThenBy(g => employeeMap.GetValueOrDefault(g.Key.EmployeeId)?.DisplayName);
+
+                foreach (var group in groups)
                 {
-                    // Labor line per employee
-                    if (empHours.Hours > 0)
+                    var emp   = employeeMap.GetValueOrDefault(group.Key.EmployeeId);
+                    var trade = emp?.Trade ?? string.Empty;
+                    var rate  = emp?.HourlyBillableRate ?? 0;
+                    var hours = group.Sum(te => te.Hours);
+                    var ot    = group.Sum(te => te.OvertimeHours);
+                    var taskSuffix = group.Key.TaskId is Guid tid && jobTasks.TryGetValue(tid, out var task)
+                        ? $" · {task.Code} {task.Name}"
+                        : string.Empty;
+
+                    if (hours > 0)
                     {
                         invoiceLines.Add(new InvoiceLineForm
                         {
-                            Description = string.IsNullOrWhiteSpace(empHours.Trade) ? "Vinna" : $"Vinna {empHours.Trade}",
-                            Quantity = empHours.Hours,
-                            UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate, 0, MidpointRounding.AwayFromZero),
+                            Description = (string.IsNullOrWhiteSpace(trade) ? "Vinna" : $"Vinna {trade}") + taskSuffix,
+                            Quantity = hours,
+                            UnitPriceExcludingVat = Math.Round(rate, 0, MidpointRounding.AwayFromZero),
                             VatPercentage = 24m,
                             LineType = "labor",
                             JobCode = code,
-                            EmployeeId = empHours.EmployeeId
+                            EmployeeId = group.Key.EmployeeId
                         });
                     }
 
-                    // Overtime line per employee
-                    if (empHours.OvertimeHours > 0)
+                    if (ot > 0)
                     {
                         invoiceLines.Add(new InvoiceLineForm
                         {
-                            Description = string.IsNullOrWhiteSpace(empHours.Trade) ? "Yfirvinna" : $"Yfirvinna {empHours.Trade}",
-                            Quantity = empHours.OvertimeHours,
-                            UnitPriceExcludingVat = Math.Round(empHours.HourlyBillableRate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
+                            Description = (string.IsNullOrWhiteSpace(trade) ? "Yfirvinna" : $"Yfirvinna {trade}") + taskSuffix,
+                            Quantity = ot,
+                            UnitPriceExcludingVat = Math.Round(rate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
                             VatPercentage = 24m,
                             LineType = "overtime",
                             JobCode = code,
-                            EmployeeId = empHours.EmployeeId
+                            EmployeeId = group.Key.EmployeeId
                         });
                     }
                 }
