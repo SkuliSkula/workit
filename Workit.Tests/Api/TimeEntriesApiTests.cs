@@ -149,6 +149,9 @@ public class TimeEntriesApiTests
         public Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry) =>
             PostAsync("api/timeentries", timeEntry, "The time entry could not be saved right now.");
 
+        public Task<ApiResult> DeleteTimeEntryAsync(Guid id) =>
+            DeleteAsync($"api/timeentries/{id}", "The time entry could not be deleted right now.");
+
         public Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry) =>
             PutAsync($"api/timeentries/{timeEntry.Id}", timeEntry, "The time entry could not be updated right now.");
 

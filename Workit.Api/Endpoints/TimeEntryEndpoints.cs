@@ -160,6 +160,31 @@ internal static class TimeEntryEndpoints
                 "updating a time entry"))
             .WithName("UpdateTimeEntry");
 
+        // ── Delete — a mistaken entry, or hours that became an absence ──────────
+        securedApi.MapDelete("/timeentries/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var userContext = httpContext.User.ToUserContext();
+                    var existing = await db.TimeEntries.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (existing is null) return Results.NotFound();
+
+                    // Employees can only delete their own entries, like editing.
+                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
+                        existing.EmployeeId != userContext.EmployeeId)
+                        return Results.Forbid();
+
+                    // Hours already billed to a customer stay; the invoice is the record.
+                    if (existing.IsInvoiced)
+                        return Results.Conflict("This entry has been invoiced and can't be deleted.");
+
+                    db.TimeEntries.Remove(existing);
+                    await db.SaveChangesAsync(ct);
+                    return Results.NoContent();
+                },
+                logger,
+                "deleting a time entry"))
+            .WithName("DeleteTimeEntry");
+
         securedApi.MapPost("/timeentries/mark-invoiced", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, MarkInvoicedRequest request, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
