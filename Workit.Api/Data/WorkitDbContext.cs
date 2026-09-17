@@ -83,6 +83,13 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Code })
             .IsUnique(false);
 
+        // JobNumber is a per-company counter allocated as MAX + 1 on create.
+        // The index makes a concurrent double allocation fail instead of
+        // producing two jobs with the same number and code; CreateJob retries.
+        modelBuilder.Entity<Job>()
+            .HasIndex(x => new { x.CompanyId, x.JobNumber })
+            .IsUnique();
+
         modelBuilder.Entity<TimeEntry>()
             .HasIndex(x => new { x.CompanyId, x.EmployeeId, x.WorkDate });
 

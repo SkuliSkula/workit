@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
@@ -76,16 +77,37 @@ internal static class JobEndpoints
                         return Results.BadRequest("Employee not found.");
                     job.AssignedEmployeeIds = assignees;
 
-                    // Assign globally unique sequential job number for this company
-                    var nextNumber = (await db.Jobs
-                        .Where(j => j.CompanyId == userContext.CompanyId)
-                        .MaxAsync(j => (int?)j.JobNumber, ct) ?? 0) + 1;
-
-                    job.JobNumber = nextNumber;
-                    job.Code      = $"{GetCategoryCode(job.Category)}-{GetCustomerInitials(customer.Name)}-{nextNumber:D3}";
-
+                    // The job number is the company's MAX + 1. Creates in the same
+                    // company take a per-company advisory lock for the transaction,
+                    // so concurrent requests allocate one after another instead of
+                    // all reading the same MAX. Should a collision get through
+                    // anyway, the unique (CompanyId, JobNumber) index rejects it
+                    // and the loser re-reads and tries again.
                     db.Jobs.Add(job);
-                    await db.SaveChangesAsync(ct);
+                    for (var attempt = 1; ; attempt++)
+                    {
+                        await using var tx = await db.Database.BeginTransactionAsync(ct);
+                        await db.Database.ExecuteSqlAsync(
+                            $"SELECT pg_advisory_xact_lock({JobNumberLockKey(userContext.CompanyId)})", ct);
+
+                        var nextNumber = await NextJobNumberAsync(db, userContext.CompanyId, ct);
+                        job.JobNumber = nextNumber;
+                        job.Code      = $"{GetCategoryCode(job.Category)}-{GetCustomerInitials(customer.Name)}-{nextNumber:D3}";
+
+                        try
+                        {
+                            await db.SaveChangesAsync(ct);
+                            await tx.CommitAsync(ct);
+                            break;
+                        }
+                        catch (DbUpdateException ex) when (IsUniqueViolation(ex) && attempt < MaxJobNumberAttempts)
+                        {
+                            await tx.RollbackAsync(ct);
+                            logger.LogInformation(
+                                "Job number {JobNumber} was taken concurrently in company {CompanyId}; retrying ({Attempt}/{Max}).",
+                                nextNumber, userContext.CompanyId, attempt, MaxJobNumberAttempts);
+                        }
+                    }
 
                     analytics.Capture(userContext.UserId.ToString(), "job_created", new
                     {
@@ -193,6 +215,28 @@ internal static class JobEndpoints
     /// client, so a guid from another tenant must not be storable — and a
     /// duplicate must not make one person count twice.
     /// </summary>
+    /// <summary>How many times CreateJob re-reads MAX + 1 after losing a race for a number.</summary>
+    internal const int MaxJobNumberAttempts = 5;
+
+    /// <summary>
+    /// Key for the per-company advisory lock that serialises job-number
+    /// allocation. Advisory locks take a bigint, so this is the first eight
+    /// bytes of the company id; a collision between companies only means they
+    /// queue behind each other for a moment.
+    /// </summary>
+    internal static long JobNumberLockKey(Guid companyId) =>
+        BitConverter.ToInt64(companyId.ToByteArray(), 0);
+
+    /// <summary>The next job number for a company: one past the highest in use, starting at 1.</summary>
+    private static async Task<int> NextJobNumberAsync(WorkitDbContext db, Guid companyId, CancellationToken ct) =>
+        (await db.Jobs
+            .Where(j => j.CompanyId == companyId)
+            .MaxAsync(j => (int?)j.JobNumber, ct) ?? 0) + 1;
+
+    /// <summary>True when a save failed on a unique index (Postgres SQLSTATE 23505).</summary>
+    internal static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
     private static async Task<List<Guid>?> NormalizeAssigneesAsync(WorkitDbContext db, Guid companyId, List<Guid>? requested, CancellationToken ct)
     {
         var ids = (requested ?? []).Distinct().ToList();
