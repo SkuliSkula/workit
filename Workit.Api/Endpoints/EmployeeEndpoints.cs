@@ -100,6 +100,7 @@ internal static class EmployeeEndpoints
                         Role = WorkitRoles.Employee
                     };
 
+                    await employee.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.Employees.Add(employee);
                     db.AppUsers.Add(user);
                     await db.SaveChangesAsync(ct);

@@ -58,6 +58,7 @@ internal static class CustomerEndpoints
                     customer.Language = customer.Language.Trim();
                     customer.Comment = customer.Comment.Trim();
 
+                    await customer.StampCreatedAsync(db, httpContext, httpContext.User.ToUserContext(), ct);
                     db.Customers.Add(customer);
                     await db.SaveChangesAsync(ct);
                     return Results.Created($"/api/customers/{customer.Id}", customer);
