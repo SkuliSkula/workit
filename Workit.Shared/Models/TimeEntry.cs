@@ -6,6 +6,8 @@ public sealed class TimeEntry : ICreatedAudit
     public Guid CompanyId { get; set; }
     public Guid JobId { get; set; }
     public Guid EmployeeId { get; set; }
+    /// <summary>The task within the job this time was spent on, if the job is planned in tasks.</summary>
+    public Guid? TaskId { get; set; }
     public DateOnly WorkDate { get; set; }
     public decimal Hours { get; set; }
     public decimal OvertimeHours { get; set; }

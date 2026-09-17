@@ -264,6 +264,7 @@ app.MapCompanyEndpoints();
 app.MapCustomerEndpoints();
 app.MapEmployeeEndpoints();
 app.MapJobEndpoints();
+app.MapJobTaskEndpoints();
 app.MapTimeEntryEndpoints();
 app.MapToolEndpoints();
 app.MapMaterialEndpoints();

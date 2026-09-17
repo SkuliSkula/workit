@@ -105,6 +105,7 @@ internal static class CustomerEndpoints
                     existing.Comment = customer.Comment.Trim();
                     existing.Source = customer.Source;
                     existing.PaydayId = customer.PaydayId;
+                    existing.PlanJobsInTasks = customer.PlanJobsInTasks;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);

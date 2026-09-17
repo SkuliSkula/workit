@@ -17,6 +17,13 @@ public sealed class Customer : ICreatedAudit
     public string Language { get; set; } = string.Empty;
     public string Comment { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Whether new jobs for this customer open with a Tasks section. A default
+    /// only — it never restricts: any job can get tasks, and a job with none
+    /// behaves as before. Not touched by the Payday customer sync.
+    /// </summary>
+    public bool PlanJobsInTasks { get; set; }
+
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
     public DataSource Source { get; set; } = DataSource.Workit;
 

@@ -29,6 +29,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<ExpenseLine>        ExpenseLines       => Set<ExpenseLine>();
     public DbSet<ExpenseLineBilling> ExpenseLineBillings => Set<ExpenseLineBilling>();
     public DbSet<JobAttachment>      JobAttachments     => Set<JobAttachment>();
+    public DbSet<JobTask>            JobTasks           => Set<JobTask>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -220,6 +221,19 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<ExpenseLineBilling>()
             .HasIndex(x => new { x.CompanyId, x.JobId })
             .HasFilter("\"JobId\" IS NOT NULL");
+
+        // ── Job tasks ─────────────────────────────────────────────────────────
+        modelBuilder.Entity<JobTask>().ToTable("JobTasks");
+        modelBuilder.Entity<JobTask>()
+            .HasIndex(x => new { x.CompanyId, x.JobId });
+        // TaskNumber is MAX + 1 within the job, allocated under a lock; the
+        // index makes a concurrent double allocation fail instead of producing
+        // two tasks with the same number and code.
+        modelBuilder.Entity<JobTask>()
+            .HasIndex(x => new { x.JobId, x.TaskNumber })
+            .IsUnique();
+        modelBuilder.Entity<TimeEntry>()
+            .HasIndex(x => x.TaskId);
 
         // ── Job attachments ───────────────────────────────────────────────────
         modelBuilder.Entity<JobAttachment>().ToTable("JobAttachments");
