@@ -106,7 +106,8 @@ internal static class ExpenseEndpoints
                         // Already imported — only (re)link to a job, never overwrite lines/billings.
                         if (expense.JobId.HasValue && existing.JobId != expense.JobId)
                         {
-                            existing.JobId = expense.JobId;
+                            existing.JobId         = expense.JobId;
+                            existing.JobLinkSource = ExpenseJobLinkSource.Manual;
                             await db.SaveChangesAsync(ct);
                         }
                         existing.Lines = await db.ExpenseLines
@@ -118,6 +119,7 @@ internal static class ExpenseEndpoints
                     expense.CompanyId = companyId;
                     expense.Source    = DataSource.Payday;
                     expense.CreatedAt = DateTimeOffset.UtcNow;
+                    expense.JobLinkSource = expense.JobId.HasValue ? ExpenseJobLinkSource.Manual : ExpenseJobLinkSource.None;
 
                     foreach (var line in expense.Lines)
                     {
@@ -237,6 +239,15 @@ internal static class ExpenseEndpoints
                     existing.AmountExcludingVat  = expense.AmountExcludingVat;
                     existing.AmountIncludingVat  = expense.AmountIncludingVat;
                     existing.AmountVat           = expense.AmountVat;
+                    // A change of link is the owner's decision; remember it so
+                    // automatic linking neither overrides a choice nor re-links
+                    // an expense they took a job off.
+                    if (existing.JobId != expense.JobId)
+                    {
+                        existing.JobLinkSource = expense.JobId is null
+                            ? ExpenseJobLinkSource.RemovedByOwner
+                            : ExpenseJobLinkSource.Manual;
+                    }
                     existing.JobId               = expense.JobId;
                     existing.Source              = expense.Source;
                     existing.PaydayId            = expense.PaydayId;

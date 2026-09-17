@@ -12,25 +12,8 @@ internal sealed record UpdateKanbanStatusRequest(KanbanStatus Status, string? Wa
 
 internal static class JobEndpoints
 {
-    /// <summary>
-    /// The job code: the category's short code and the company's running job
-    /// number, e.g. <c>REP007</c>. Assigned by the API on create, never edited.
-    /// </summary>
-    internal static string FormatJobCode(JobCategory category, int jobNumber) =>
-        $"{GetCategoryCode(category)}{jobNumber:D3}";
-
-    internal static string GetCategoryCode(JobCategory category) => category switch
-    {
-        JobCategory.NewInstallation => "NI",
-        JobCategory.Repair          => "REP",
-        JobCategory.InnerWork       => "IW",
-        JobCategory.Drawings        => "DWG",
-        JobCategory.Offer           => "OFF",
-        JobCategory.Maintenance     => "MNT",
-        JobCategory.Inspection      => "INS",
-        JobCategory.Consultation    => "CON",
-        _                           => "JOB"
-    };
+    /// <summary>See <see cref="JobCodes.Format"/>; kept as the API's entry point for tests and seeders.</summary>
+    internal static string FormatJobCode(JobCategory category, int jobNumber) => JobCodes.Format(category, jobNumber);
 
     internal static void MapJobEndpoints(this WebApplication app)
     {
