@@ -1,6 +1,6 @@
 namespace Workit.Shared.Models;
 
-public sealed class Employee
+public sealed class Employee : ICreatedAudit
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CompanyId { get; set; }
@@ -26,4 +26,11 @@ public sealed class Employee
 
     /// <summary>The corresponding Payday employee id, when synced from Payday.</summary>
     public Guid? PaydayId { get; set; }
+
+    /// <inheritdoc/>
+    public DateTimeOffset? CreatedAt { get; set; }
+    /// <inheritdoc/>
+    public Guid? CreatedByUserId { get; set; }
+    /// <inheritdoc/>
+    public string? CreatedByName { get; set; }
 }

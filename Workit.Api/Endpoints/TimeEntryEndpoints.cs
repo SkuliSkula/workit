@@ -102,6 +102,7 @@ internal static class TimeEntryEndpoints
                     if (job is null)
                         return Results.BadRequest("You are not assigned to that job.");
 
+                    await entry.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.TimeEntries.Add(entry);
 
                     // Stamp the job as In Progress the first time a time entry is added.

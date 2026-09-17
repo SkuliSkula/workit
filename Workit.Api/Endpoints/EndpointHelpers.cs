@@ -20,6 +20,46 @@ internal static class EndpointHelpers
         !string.Equals(user.Role, WorkitRoles.Employee, StringComparison.Ordinal)
         || (user.EmployeeId is Guid me && job.AssignedEmployeeIds.Contains(me));
 
+    /// <summary>
+    /// Records who is creating <paramref name="record"/> and when. Overwrites
+    /// whatever the client sent — these are the API's to set.
+    /// </summary>
+    internal static async Task StampCreatedAsync(
+        this ICreatedAudit record, WorkitDbContext db, HttpContext httpContext, UserContext user, CancellationToken ct)
+    {
+        record.CreatedAt       = DateTimeOffset.UtcNow;
+        record.CreatedByUserId = user.UserId;
+        record.CreatedByName   = await ResolveDisplayNameAsync(db, httpContext, user, ct);
+    }
+
+    /// <summary>
+    /// The caller's display name: the AppUser's name, else their Employee
+    /// record's (employee logins have no AppUser name), else their email.
+    /// </summary>
+    internal static async Task<string> ResolveDisplayNameAsync(
+        WorkitDbContext db, HttpContext httpContext, UserContext user, CancellationToken ct)
+    {
+        var name = await db.AppUsers
+            .Where(u => u.Id == user.UserId)
+            .Select(u => u.Name)
+            .FirstOrDefaultAsync(ct);
+        if (!string.IsNullOrWhiteSpace(name))
+            return name;
+
+        if (user.EmployeeId is Guid employeeId)
+        {
+            var displayName = await db.Employees
+                .Where(e => e.Id == employeeId)
+                .Select(e => e.DisplayName)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(displayName))
+                return displayName;
+        }
+
+        var email = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        return string.IsNullOrWhiteSpace(email) ? "Unknown" : email;
+    }
+
     /// <summary>The job if it is in the caller's company and they may use it; otherwise null.</summary>
     internal static async Task<Job?> FindUsableJobAsync(WorkitDbContext db, UserContext user, Guid jobId, CancellationToken ct)
     {

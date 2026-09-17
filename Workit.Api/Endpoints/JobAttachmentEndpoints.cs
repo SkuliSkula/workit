@@ -76,7 +76,7 @@ internal static class JobAttachmentEndpoints
                         await storage.SaveAsync(storageKey, stream, contentType, ct);
                     }
 
-                    var uploaderName = await ResolveUploaderNameAsync(db, httpContext, userContext, ct);
+                    var uploaderName = await ResolveDisplayNameAsync(db, httpContext, userContext, ct);
 
                     var attachment = new JobAttachment
                     {
@@ -155,31 +155,6 @@ internal static class JobAttachmentEndpoints
                     return Results.NoContent();
                 }, logger, "deleting a job attachment"))
             .WithName("DeleteJobAttachment");
-    }
-
-    private static async Task<string> ResolveUploaderNameAsync(
-        WorkitDbContext db, HttpContext httpContext, UserContext userContext, CancellationToken ct)
-    {
-        var name = await db.AppUsers
-            .Where(u => u.Id == userContext.UserId)
-            .Select(u => u.Name)
-            .FirstOrDefaultAsync(ct);
-        if (!string.IsNullOrWhiteSpace(name))
-            return name;
-
-        // Employee AppUsers have no Name; use their Employee display name.
-        if (userContext.EmployeeId is Guid employeeId)
-        {
-            var displayName = await db.Employees
-                .Where(e => e.Id == employeeId)
-                .Select(e => e.DisplayName)
-                .FirstOrDefaultAsync(ct);
-            if (!string.IsNullOrWhiteSpace(displayName))
-                return displayName;
-        }
-
-        var email = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-        return string.IsNullOrWhiteSpace(email) ? "Unknown" : email;
     }
 
     private static JobAttachmentInfo ToInfo(JobAttachment a) => new()

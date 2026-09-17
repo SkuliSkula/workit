@@ -83,6 +83,7 @@ internal static class JobEndpoints
                     // all reading the same MAX. Should a collision get through
                     // anyway, the unique (CompanyId, JobNumber) index rejects it
                     // and the loser re-reads and tries again.
+                    await job.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.Jobs.Add(job);
                     for (var attempt = 1; ; attempt++)
                     {

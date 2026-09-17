@@ -346,6 +346,14 @@ else if (jobs.Count > 0)
                             else
                             {
                                 <div class="job-actions">
+                                    @* Who made the job; blank for jobs that predate the audit columns. *@
+                                    @if (job.CreatedAt is DateTimeOffset createdAt)
+                                    {
+                                        <span class="job-created">
+                                            Created @createdAt.LocalDateTime.ToString("d MMM yyyy HH:mm")
+                                            @if (!string.IsNullOrWhiteSpace(job.CreatedByName)) { <text>by @job.CreatedByName</text> }
+                                        </span>
+                                    }
                                     <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">Details</FluentButton>
                                     <FluentButton Appearance="Appearance.Outline" @onclick="@(() => BeginEditJob(job))">Edit job</FluentButton>
                                 </div>

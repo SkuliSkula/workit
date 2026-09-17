@@ -747,12 +747,18 @@ internal static class OwnerEmployeeHelper
     /// </summary>
     internal static Employee CreateEmployeeForOwner(AppUser owner, Guid companyId)
     {
+        var displayName = string.IsNullOrWhiteSpace(owner.Name) ? owner.Email : owner.Name;
         var employee = new Employee
         {
             CompanyId = companyId,
-            DisplayName = string.IsNullOrWhiteSpace(owner.Name) ? owner.Email : owner.Name,
+            DisplayName = displayName,
             Email = owner.Email,
-            EmploymentType = EmploymentType.Employed
+            EmploymentType = EmploymentType.Employed,
+            // The owner creates their own record; the AppUser may not be saved
+            // yet, so stamp from it directly rather than via a lookup.
+            CreatedAt       = DateTimeOffset.UtcNow,
+            CreatedByUserId = owner.Id,
+            CreatedByName   = displayName,
         };
         owner.EmployeeId = employee.Id;
         return employee;

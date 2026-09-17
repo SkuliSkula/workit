@@ -191,6 +191,7 @@ internal static class MaterialEndpoints
                         UsedAt     = req.UsedAt ?? DateTimeOffset.UtcNow,
                     };
 
+                    await usage.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.MaterialUsages.Add(usage);
                     await db.SaveChangesAsync(ct);
                     return Results.Created($"/api/materials/usage/{usage.Id}", usage);

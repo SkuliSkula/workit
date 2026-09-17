@@ -1,6 +1,6 @@
 namespace Workit.Shared.Models;
 
-public sealed class Job
+public sealed class Job : ICreatedAudit
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CompanyId { get; set; }
@@ -27,4 +27,11 @@ public sealed class Job
 
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
     public DataSource Source { get; set; } = DataSource.Workit;
+
+    /// <inheritdoc/>
+    public DateTimeOffset? CreatedAt { get; set; }
+    /// <inheritdoc/>
+    public Guid? CreatedByUserId { get; set; }
+    /// <inheritdoc/>
+    public string? CreatedByName { get; set; }
 }
