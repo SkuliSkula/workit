@@ -12,7 +12,14 @@ internal sealed record UpdateKanbanStatusRequest(KanbanStatus Status, string? Wa
 
 internal static class JobEndpoints
 {
-    private static string GetCategoryCode(JobCategory category) => category switch
+    /// <summary>
+    /// The job code: the category's short code and the company's running job
+    /// number, e.g. <c>REP007</c>. Assigned by the API on create, never edited.
+    /// </summary>
+    internal static string FormatJobCode(JobCategory category, int jobNumber) =>
+        $"{GetCategoryCode(category)}{jobNumber:D3}";
+
+    internal static string GetCategoryCode(JobCategory category) => category switch
     {
         JobCategory.NewInstallation => "NI",
         JobCategory.Repair          => "REP",
@@ -24,16 +31,6 @@ internal static class JobEndpoints
         JobCategory.Consultation    => "CON",
         _                           => "JOB"
     };
-
-    private static string GetCustomerInitials(string customerName)
-    {
-        var words = customerName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 1)
-            return customerName.Length >= 3
-                ? customerName[..3].ToUpperInvariant()
-                : customerName.ToUpperInvariant();
-        return string.Concat(words.Take(3).Select(w => char.ToUpperInvariant(w[0])));
-    }
 
     internal static void MapJobEndpoints(this WebApplication app)
     {
@@ -66,10 +63,9 @@ internal static class JobEndpoints
                     job.CompanyId = userContext.CompanyId;
                     job.Name      = job.Name.Trim();
 
-                    // Look up customer name for initials
-                    var customer = await db.Customers.FirstOrDefaultAsync(
+                    var customerExists = await db.Customers.AnyAsync(
                         c => c.Id == job.CustomerId && c.CompanyId == userContext.CompanyId, ct);
-                    if (customer is null)
+                    if (!customerExists)
                         return Results.BadRequest("Customer not found.");
 
                     var assignees = await NormalizeAssigneesAsync(db, userContext.CompanyId, job.AssignedEmployeeIds, ct);
@@ -92,7 +88,7 @@ internal static class JobEndpoints
 
                         var nextNumber = await NextJobNumberAsync(db, userContext.CompanyId, ct);
                         job.JobNumber = nextNumber;
-                        job.Code      = $"{GetCategoryCode(job.Category)}-{GetCustomerInitials(customer.Name)}-{nextNumber:D3}";
+                        job.Code      = FormatJobCode(job.Category, nextNumber);
 
                         try
                         {
