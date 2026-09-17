@@ -686,8 +686,9 @@
             var result = await WorkitExpensesApi.AutoLinkAsync(from, to);
             if (!result.IsSuccess || result.Value is null)
             {
-                // If Payday itself is down the list already says so; don't say it twice.
-                if (loadError is null)
+                // If Payday itself is unreachable or not connected the list already
+                // says so; don't say it twice.
+                if (loadError is null && expenses.Count > 0)
                     actionError = result.ErrorMessage ?? "Could not link expenses to jobs automatically.";
                 return;
             }
