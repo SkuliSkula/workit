@@ -36,7 +36,12 @@ app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
-app.UseStaticFiles();
+// MapStaticAssets (not UseStaticFiles) is what makes @Assets["…"] in
+// App.razor emit fingerprinted URLs — Workit.OwnerApp.<hash>.styles.css —
+// with immutable caching. Cloudflare sits in front of the console and caches
+// CSS for hours; with plain URLs every deploy that changed a stylesheet
+// looked broken until the cache expired.
+app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
