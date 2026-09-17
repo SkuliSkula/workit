@@ -1,0 +1,45 @@
+.busy-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 48, 75, 0.28);
+    backdrop-filter: blur(1.5px);
+    cursor: progress;
+    animation: busy-fade-in 0.15s ease-out;
+}
+
+.busy-card {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 1rem 1.35rem;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(18, 41, 63, 0.22);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #14304b;
+    max-width: min(90vw, 420px);
+}
+
+.busy-spinner {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 3px solid rgba(20, 48, 75, 0.15);
+    border-top-color: #0f6cbd;
+    animation: busy-spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes busy-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes busy-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}

@@ -1,6 +1,7 @@
 @page "/onboarding"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AuthSessionService AuthSession
+@inject BusyService Busy
 @inject ICompanyApi CompanyApi
 @inject NavigationManager Navigation
 
@@ -292,6 +293,7 @@
 
     private async Task SetupManualAsync()
     {
+        using var busy = Busy.Begin("Setting up your company…");
         saving = true;
         globalError = null;
 
@@ -319,6 +321,7 @@
 
     private async Task TestPaydayAsync()
     {
+        using var busy = Busy.Begin("Testing Payday connection…");
         testingPayday = true;
         paydayError   = null;
         paydayCompany = null;
@@ -366,6 +369,7 @@
 
     private async Task SetupFromPaydayAsync()
     {
+        using var busy = Busy.Begin("Setting up from Payday…");
         if (paydayCompany is null) return;
 
         saving = true;

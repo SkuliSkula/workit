@@ -1,6 +1,7 @@
 @page "/payday"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayCompaniesApi PaydayCompaniesApi
+@inject BusyService Busy
 @inject IPaydayUsersApi PaydayUsersApi
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayEmployeesApi PaydayEmployeesApi
@@ -249,6 +250,7 @@
     // ── Company Setup ─────────────────────────────────────────────────────────
     private async Task SetupCompanyAsync()
     {
+        using var busy = Busy.Begin("Setting up company in Payday…");
         if (paydayCompany is null) return;
 
         settingUpCompany = true;
@@ -314,6 +316,7 @@
     // ── Sync Customers ───────────────────────────────────────────────────────
     private async Task SyncCustomersAsync()
     {
+        using var busy = Busy.Begin("Syncing customers from Payday…");
         syncingCustomers = true;
         customerSyncResult = null;
 
@@ -397,6 +400,7 @@
     // ── Sync Employees ───────────────────────────────────────────────────────
     private async Task SyncEmployeesAsync()
     {
+        using var busy = Busy.Begin("Syncing employees from Payday…");
         syncingEmployees = true;
         employeeSyncResult = null;
         createdEmployees.Clear();
@@ -506,6 +510,7 @@
     // ── Timesheet Preview ────────────────────────────────────────────────────
     private async Task LoadTimesheetPreviewAsync()
     {
+        using var busy = Busy.Begin("Loading timesheet…");
         if (timesheetFrom is null || timesheetTo is null) return;
 
         loadingTimesheet = true;
@@ -561,6 +566,7 @@
     // ── Upload Timesheet ─────────────────────────────────────────────────────
     private async Task UploadTimesheetAsync()
     {
+        using var busy = Busy.Begin("Uploading timesheet to Payday…");
         uploadingTimesheet = true;
         timesheetUploadResult = null;
 
