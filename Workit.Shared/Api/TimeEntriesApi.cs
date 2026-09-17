@@ -7,6 +7,8 @@ public interface ITimeEntriesApi
     Task<ApiResult<List<TimeEntry>>> GetTimeEntriesAsync(DateOnly? from = null, DateOnly? to = null, Guid? employeeId = null, Guid? jobId = null);
     Task<ApiResult> CreateTimeEntryAsync(TimeEntry timeEntry);
     Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry);
+    /// <summary>Removes an entry. Employees may only delete their own; invoiced entries are refused (409).</summary>
+    Task<ApiResult> DeleteTimeEntryAsync(Guid id);
     Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request);
     Task<ApiResult> MarkTimeEntriesUninvoicedAsync(MarkUninvoicedRequest request);
 }
@@ -39,6 +41,9 @@ internal sealed class TimeEntriesApi(HttpClient httpClient, IAccessTokenAccessor
 
     public Task<ApiResult> UpdateTimeEntryAsync(TimeEntry timeEntry) =>
         PutAsync($"api/timeentries/{timeEntry.Id}", timeEntry, "The time entry could not be updated right now.");
+
+    public Task<ApiResult> DeleteTimeEntryAsync(Guid id) =>
+        DeleteAsync($"api/timeentries/{id}", "The time entry could not be deleted right now.");
 
     public Task<ApiResult> MarkTimeEntriesInvoicedAsync(MarkInvoicedRequest request) =>
         PostAsync("api/timeentries/mark-invoiced", request, "Time entries could not be marked as invoiced.");
