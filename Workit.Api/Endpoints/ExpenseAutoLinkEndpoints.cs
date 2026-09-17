@@ -31,7 +31,7 @@ internal static class ExpenseAutoLinkEndpoints
                 string? dateFrom, string? dateTo, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
-                    if (!httpContext.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    // Role and Payday connection are checked by PaydayCredentialsFilter.
                     var companyId = httpContext.User.ToUserContext().CompanyId;
 
                     var expenses = new List<PaydayExpense>();
@@ -53,6 +53,10 @@ internal static class ExpenseAutoLinkEndpoints
                     return Results.Ok(outcome);
                 }, logger, "auto-linking Payday expenses to jobs"))
             .RequireAuthorization()
+            // Loads and decrypts the company's Payday credentials into the scoped
+            // client, exactly as the /api/payday proxy routes do. Without it the
+            // client has no credentials and every read fails.
+            .AddEndpointFilter<PaydayCredentialsFilter>()
             .WithTags("Expenses")
             .WithName("AutoLinkPaydayExpenses");
     }
