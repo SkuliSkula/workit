@@ -1,6 +1,7 @@
 @page "/payday/settings"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ICompanyApi CompanyApi
+@inject BusyService Busy
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
 
@@ -156,6 +157,7 @@ else
 
     private async Task TestConnectionAsync()
     {
+        using var busy = Busy.Begin("Testing Payday connection…");
         isTesting = true;
         testMessage = null;
         saveMessage = null;
@@ -178,6 +180,7 @@ else
 
     private async Task SaveCredentialsAsync()
     {
+        using var busy = Busy.Begin("Saving credentials…");
         isSaving = true;
         saveMessage = null;
         saveError = null;
@@ -204,6 +207,7 @@ else
 
     private async Task ClearCredentialsAsync()
     {
+        using var busy = Busy.Begin("Removing credentials…");
         isSaving = true;
         saveMessage = null;
         saveError = null;

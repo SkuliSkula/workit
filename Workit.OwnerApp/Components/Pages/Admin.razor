@@ -1,6 +1,7 @@
 @page "/admin"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject AuthSessionService AuthSession
+@inject BusyService Busy
 @inject IAuthApi AuthApi
 @inject NavigationManager Navigation
 
@@ -509,6 +510,7 @@ else
 
     private async Task CreateOwnerAsync()
     {
+        using var busy = Busy.Begin("Creating owner…");
         isRegistering = true;
         registerError = null;
         registerSuccess = null;
@@ -537,6 +539,7 @@ else
 
     private async Task ResendOwnerInviteAsync(AdminOwnerInfo owner)
     {
+        using var busy = Busy.Begin("Sending invite…");
         if (resendingInviteTo is not null) return;
 
         resendingInviteTo = owner.Id;
@@ -584,6 +587,7 @@ else
 
     private async Task SaveOwnerAsync()
     {
+        using var busy = Busy.Begin("Saving owner…");
         if (editingOwnerId is not Guid id || isSavingOwner) return;
 
         isSavingOwner = true;
@@ -618,6 +622,7 @@ else
 
     private async Task ConfirmDeleteOwnerAsync()
     {
+        using var busy = Busy.Begin("Deleting owner…");
         if (deletingOwnerId is not Guid id || isDeletingOwner) return;
 
         var deleted = owners.FirstOrDefault(o => o.Id == id);
@@ -649,6 +654,7 @@ else
 
     private async Task SwitchToCompanyAsync(Guid companyId)
     {
+        using var busy = Busy.Begin("Entering company…");
         isSwitching = true;
         switchingTo = companyId;
 

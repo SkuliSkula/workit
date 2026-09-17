@@ -1,6 +1,7 @@
 @page "/payday/invoice-builder"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ICustomersApi CustomersApi
+@inject BusyService Busy
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
@@ -661,6 +662,7 @@
     // ── Step 2: Load job data ────────────────────────────────────────────────
     private async Task LoadJobDataAsync()
     {
+        using var busy = Busy.Begin("Loading job data…");
         jobsLoading = true;
         errorMessage = null;
         rateWarnings = [];
@@ -983,6 +985,7 @@
     // ── Step 4 → 5: Create invoice ──────────────────────────────────────────
     private async Task CreateInvoiceInPaydayAsync()
     {
+        using var busy = Busy.Begin("Creating invoice in Payday…");
         if (!Guid.TryParse(selectedPaydayCustomerIdStr, out var paydayCustomerId)) return;
         if (invoiceDate is null || dueDate is null || finalDueDate is null) return;
 

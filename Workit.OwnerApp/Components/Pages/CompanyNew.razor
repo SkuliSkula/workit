@@ -1,6 +1,7 @@
 @page "/companies/new"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ICompanyApi CompanyApi
+@inject BusyService Busy
 @inject AuthSessionService AuthSession
 @inject NavigationManager Navigation
 
@@ -220,6 +221,7 @@
 
     private async Task CreateManualAsync()
     {
+        using var busy = Busy.Begin("Creating company…");
         isSaving = true;
         errorMessage = null;
         successMessage = null;
@@ -243,6 +245,7 @@
 
     private async Task TestPaydayAsync()
     {
+        using var busy = Busy.Begin("Testing Payday connection…");
         testingPayday = true;
         paydayError   = null;
         paydayCompany = null;
@@ -289,6 +292,7 @@
 
     private async Task CreateFromPaydayAsync()
     {
+        using var busy = Busy.Begin("Creating company from Payday…");
         if (paydayCompany is null) return;
 
         isSaving = true;

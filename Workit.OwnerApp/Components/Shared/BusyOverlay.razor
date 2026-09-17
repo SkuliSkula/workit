@@ -1,0 +1,62 @@
+@* Full-page "working…" indicator, driven by BusyService. Mounted once in the
+   layout; pages never render it themselves. Blocks clicks underneath so a
+   slow action cannot be started twice. Appears only once an action has run
+   for a moment, so quick saves don't flash it. *@
+@implements IDisposable
+@inject BusyService Busy
+
+@if (visible)
+{
+    <div class="busy-overlay" role="status" aria-live="polite" aria-busy="true">
+        <div class="busy-card">
+            <div class="busy-spinner" aria-hidden="true"></div>
+            <span class="busy-message">@(Busy.Message ?? "Working…")</span>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>How long an action runs before the overlay shows — under this it never appears.</summary>
+    private static readonly TimeSpan ShowAfter = TimeSpan.FromMilliseconds(250);
+
+    private bool visible;
+    private CancellationTokenSource? pending;
+
+    protected override void OnInitialized() => Busy.Changed += OnChanged;
+
+    private void OnChanged()
+    {
+        pending?.Cancel();
+        pending = null;
+
+        if (!Busy.IsBusy)
+        {
+            visible = false;
+            _ = InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (visible)
+        {
+            _ = InvokeAsync(StateHasChanged);   // message may have changed
+            return;
+        }
+
+        var cts = pending = new CancellationTokenSource();
+        _ = ShowLaterAsync(cts.Token);
+    }
+
+    private async Task ShowLaterAsync(CancellationToken ct)
+    {
+        try { await Task.Delay(ShowAfter, ct); } catch (TaskCanceledException) { return; }
+        if (ct.IsCancellationRequested || !Busy.IsBusy) return;
+        visible = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Busy.Changed -= OnChanged;
+        pending?.Cancel();
+    }
+}

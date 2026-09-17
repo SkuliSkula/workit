@@ -1,6 +1,7 @@
 @page "/payday/invoices"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayInvoicesApi InvoicesApi
+@inject BusyService Busy
 @inject IPaydayCustomersApi CustomersApi
 @inject IJSRuntime JS
 @inject ISalesInvoicesApi WorkitInvoicesApi
@@ -610,6 +611,7 @@
 
     private async Task CreateInvoiceAsync()
     {
+        using var busy = Busy.Begin("Creating invoice…");
         if (!Guid.TryParse(formCustomerId, out var custId)) return;
         if (formInvoiceDate is null || formDueDate is null || formFinalDueDate is null) return;
 
@@ -723,6 +725,7 @@
 
     private async Task ConfirmMarkPaidAsync()
     {
+        using var busy = Busy.Begin("Marking as paid…");
         if (markPaidInvoice is null || markPaidDate is null) return;
 
         markingPaid   = true;
@@ -759,6 +762,7 @@
     // ── Cancel ────────────────────────────────────────────────────────────────
     private async Task CancelInvoiceAsync(PaydayInvoice invoice)
     {
+        using var busy = Busy.Begin("Cancelling invoice…");
         cancelling    = true;
         cancellingId  = invoice.Id;
         actionError   = null;
@@ -790,6 +794,7 @@
     // ── Delete ────────────────────────────────────────────────────────────────
     private async Task DeleteInvoiceAsync(PaydayInvoice invoice)
     {
+        using var busy = Busy.Begin("Deleting invoice…");
         actionError = null;
         var result  = await InvoicesApi.DeleteAsync(invoice.Id.ToString());
         if (result.IsSuccess)
@@ -807,6 +812,7 @@
     // ── PDF Download ──────────────────────────────────────────────────────────
     private async Task DownloadPdfAsync(PaydayInvoice invoice)
     {
+        using var busy = Busy.Begin("Preparing PDF…");
         downloadingPdfId = invoice.Id.ToString();
         actionError      = null;
 
@@ -833,6 +839,7 @@
     // ── Sync to Workit ────────────────────────────────────────────────────────
     private async Task SyncToWorkitAsync()
     {
+        using var busy = Busy.Begin("Syncing invoices to Workit…");
         syncing     = true;
         syncResult  = null;
         syncError   = null;
