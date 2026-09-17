@@ -259,6 +259,7 @@ app.UseAuthorization();
 
 // ── Map endpoints ──────────────────────────────────────────────────────────────
 app.MapAuthEndpoints();
+app.MapAdminOverviewEndpoints();
 app.MapCompanyEndpoints();
 app.MapCustomerEndpoints();
 app.MapEmployeeEndpoints();

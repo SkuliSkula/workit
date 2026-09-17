@@ -1,0 +1,17 @@
+@* One headline number with a label above and a one-line footnote below. *@
+<div class="kpi kpi--@Tone">
+    <span class="kpi-label">@Label</span>
+    <span class="kpi-value">@Value</span>
+    @if (!string.IsNullOrWhiteSpace(Foot))
+    {
+        <span class="kpi-foot">@Foot</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+    [Parameter] public string? Foot { get; set; }
+    /// <summary>"" (neutral), "good" or "warn" — colours the footnote.</summary>
+    [Parameter] public string Tone { get; set; } = "";
+}

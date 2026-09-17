@@ -1,0 +1,32 @@
+.kpi {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.85rem 1rem;
+    background: rgba(20, 48, 75, 0.04);
+    border: 1px solid rgba(20, 48, 75, 0.09);
+    border-radius: 12px;
+    min-width: 0;
+}
+
+.kpi-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #60758b;
+}
+
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #14304b;
+    line-height: 1.1;
+}
+
+.kpi-foot {
+    font-size: 0.78rem;
+    color: #60758b;
+}
+
+.kpi--good .kpi-foot { color: #047857; }
+.kpi--warn .kpi-foot { color: #b45309; }

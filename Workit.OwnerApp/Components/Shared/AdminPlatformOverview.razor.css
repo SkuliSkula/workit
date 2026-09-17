@@ -1,0 +1,128 @@
+.overview-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.overview-title {
+    margin: 0;
+    font-size: 1.35rem;
+}
+
+.overview-head-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.overview-stamp {
+    font-size: 0.8rem;
+    color: #60758b;
+}
+
+.overview-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+.usage {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.usage th,
+.usage td {
+    padding: 0.55rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(20, 48, 75, 0.08);
+    white-space: nowrap;
+}
+
+.usage th {
+    white-space: normal;
+    line-height: 1.2;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #60758b;
+    user-select: none;
+}
+
+.usage th.sortable {
+    cursor: pointer;
+}
+
+.usage th.sortable:hover {
+    color: #14304b;
+}
+
+.usage .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.usage tbody tr:hover {
+    background: rgba(20, 48, 75, 0.03);
+}
+
+.row--demo {
+    color: #60758b;
+}
+
+.co-name {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.co-sub {
+    font-size: 0.76rem;
+    color: #60758b;
+    margin-top: 0.1rem;
+}
+
+.dim {
+    color: #9ca3af;
+}
+
+.delta {
+    margin-left: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #047857;
+}
+
+.status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.status--active  { background: rgba(4, 120, 87, 0.12);  color: #047857; }
+.status--quiet   { background: rgba(180, 83, 9, 0.12);  color: #b45309; }
+.status--dormant { background: rgba(220, 38, 38, 0.10); color: #b91c1c; }
+.status--never   { background: rgba(20, 48, 75, 0.08);  color: #60758b; }
+
+.actions {
+    text-align: right;
+}
