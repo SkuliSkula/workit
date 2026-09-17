@@ -3,6 +3,7 @@
 @inject ICompanyApi CompanyApi
 @inject ICustomersApi CustomersApi
 @inject IJobsApi JobsApi
+@inject IJobTasksApi JobTasksApi
 @inject IEmployeesApi EmployeesApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
@@ -95,6 +96,23 @@
                 </FluentSelect>
             </div>
         </div>
+        @if (SelectedCustomerPlansTasks)
+        {
+            <div class="first-tasks">
+                <div class="job-section-title" style="margin-top:0.25rem;">First tasks</div>
+                <p class="job-empty-note" style="margin:0 0 0.5rem 0;">This customer's jobs are planned in tasks. Add the first ones now, or later from the job.</p>
+                @for (var i = 0; i < newTasks.Count; i++)
+                {
+                    var row = newTasks[i];
+                    <div class="first-task-row">
+                        <FluentTextField @bind-Value="row.Name" Placeholder="Task name" style="flex:1;" />
+                        <FluentNumberField TValue="decimal?" @bind-Value="row.EstimatedHours" Placeholder="h" Min="0" Step="0.5" style="width:6rem;" />
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => newTasks.Remove(row))" title="Remove">✕</FluentButton>
+                    </div>
+                }
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => newTasks.Add(new NewTaskRow()))">+ Add a task</FluentButton>
+            </div>
+        }
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
             <FluentButton Appearance="Appearance.Accent" @onclick="CreateJobAsync"
                           Disabled="@(!HasSelectedCustomer)">Save</FluentButton>
@@ -139,6 +157,15 @@ else if (jobs.Count > 0)
                     <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
                         @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
                     </span>
+                    @{ var headerTasks = TasksFor(job.Id); }
+                    @if (headerTasks.Count > 0)
+                    {
+                        var open = headerTasks.Count(t => t.Status == JobTaskStatus.Open);
+                        <span class="job-billing-badge badge--tasks" title="@open open of @headerTasks.Count tasks">
+                            @{ var noun = headerTasks.Count == 1 ? "task" : "tasks"; }
+                            @(open == 0 ? $"{headerTasks.Count} {noun} · all done" : $"{headerTasks.Count} {noun} · {open} open")
+                        </span>
+                    }
                     @if (details is not null && !string.IsNullOrEmpty(details.InvoiceStatusLabel))
                     {
                         var fullyInv = details.InvoiceStatusLabel == "Fully invoiced";
@@ -217,6 +244,107 @@ else if (jobs.Count > 0)
                                     </div>
                                 }
                             </div>
+
+                            @* Tasks — shown once the job has any, or when its customer plans jobs in tasks *@
+                            @{
+                                var jobTasks = TasksFor(job.Id);
+                                var showTasks = jobTasks.Count > 0 || CustomerPlansTasks(job.CustomerId) || addingTaskForJob == job.Id;
+                            }
+                            @if (showTasks)
+                            {
+                                <div class="job-section-title">
+                                    <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                                        <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm7.7 8.7a1 1 0 00-1.4-1.4L9 12.6l-1.3-1.3a1 1 0 00-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd" />
+                                    </svg>
+                                    Tasks
+                                    @if (jobTasks.Count > 0)
+                                    {
+                                        <span class="job-tasks-count">@jobTasks.Count(t => t.Status == JobTaskStatus.Done) of @jobTasks.Count done</span>
+                                    }
+                                </div>
+
+                                @if (jobTasks.Count == 0)
+                                {
+                                    <p class="job-empty-note">No tasks yet — add the first.</p>
+                                }
+                                else
+                                {
+                                    <div class="job-rows">
+                                        @foreach (var task in jobTasks.OrderBy(t => t.Status).ThenBy(t => t.SortOrder).ThenBy(t => t.TaskNumber))
+                                        {
+                                            var logged = details.HoursByTask.GetValueOrDefault(task.Id);
+                                            var over = task.EstimatedHours is decimal est && logged > est;
+                                            @if (editingTask?.Id == task.Id)
+                                            {
+                                                <div class="job-task-edit">
+                                                    <div class="admin-grid">
+                                                        <div><FluentTextField Label="Name" @bind-Value="editingTask.Name" style="width:100%" /></div>
+                                                        <div><FluentNumberField TValue="decimal?" Label="Estimate (h)" @bind-Value="editingTask.EstimatedHours" Min="0" Step="0.5" style="width:100%" /></div>
+                                                        <div><EmployeeMultiSelect Label="Assigned" Employees="employees" @bind-SelectedIds="editingTaskEmployeeIds" /></div>
+                                                        <div><FluentTextField Label="Description" @bind-Value="editingTask.Description" style="width:100%" /></div>
+                                                    </div>
+                                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="SaveTaskAsync" Disabled="@(savingTask || string.IsNullOrWhiteSpace(editingTask.Name))">@(savingTask ? "Saving…" : "Save")</FluentButton>
+                                                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => editingTask = null)" Disabled="@savingTask">Cancel</FluentButton>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="job-row job-task @(task.Status == JobTaskStatus.Done ? "job-task--done" : "")">
+                                                    <FluentCheckbox Value="@(task.Status == JobTaskStatus.Done)"
+                                                                    ValueChanged="@(v => ToggleTaskDoneAsync(task, v))"
+                                                                    title="@(task.Status == JobTaskStatus.Done ? "Reopen" : "Mark done")" />
+                                                    <div class="job-task-main">
+                                                        <div>
+                                                            <span class="job-task-code">@task.Code</span>
+                                                            <span class="job-task-name">@task.Name</span>
+                                                        </div>
+                                                        <div class="job-task-sub">
+                                                            @(task.AssignedEmployeeIds.Count == 0 ? "job assignees" : string.Join(", ", task.AssignedEmployeeIds.Select(id => employeeLookup.GetValueOrDefault(id, "?"))))
+                                                            @if (!string.IsNullOrWhiteSpace(task.Description)) { <text> · @task.Description</text> }
+                                                            @if (task.Status == JobTaskStatus.Done && task.DoneAt is DateTimeOffset doneAt) { <text> · done @doneAt.LocalDateTime.ToString("d MMM")</text> }
+                                                        </div>
+                                                    </div>
+                                                    <span class="job-task-hours @(over ? "job-task-hours--over" : "")" title="@(over ? "Over the estimate" : "Logged / estimate")">
+                                                        @logged.ToString("0.#") / @(task.EstimatedHours?.ToString("0.#") ?? "—") h
+                                                    </span>
+                                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginEditTask(task))">Edit</FluentButton>
+                                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => DeleteTaskAsync(task))" title="Delete task">✕</FluentButton>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+
+                                @if (addingTaskForJob == job.Id)
+                                {
+                                    <div class="job-task-edit">
+                                        <div class="admin-grid">
+                                            <div><FluentTextField Label="Task name *" @bind-Value="newTask.Name" Placeholder="e.g. Ný lýsing í móttöku" style="width:100%" /></div>
+                                            <div><FluentNumberField TValue="decimal?" Label="Estimate (h)" @bind-Value="newTask.EstimatedHours" Min="0" Step="0.5" Placeholder="A day or two" style="width:100%" /></div>
+                                            <div><EmployeeMultiSelect Label="Assigned (empty = job's)" Employees="employees" @bind-SelectedIds="newTaskEmployeeIds" /></div>
+                                            <div><FluentTextField Label="Description" @bind-Value="newTask.Description" style="width:100%" /></div>
+                                        </div>
+                                        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                            <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => AddTaskAsync(job))" Disabled="@(savingTask || string.IsNullOrWhiteSpace(newTask.Name))">@(savingTask ? "Adding…" : "Add task")</FluentButton>
+                                            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => addingTaskForJob = null)" Disabled="@savingTask">Cancel</FluentButton>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginAddTask(job))">+ Add task</FluentButton>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(taskError))
+                                {
+                                    <p class="job-empty-note" style="color:#b91c1c;">@taskError</p>
+                                }
+                            }
+                            else
+                            {
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginAddTask(job))" title="Break this job into tasks">+ Add a task</FluentButton>
+                            }
 
                             @* Workforce *@
                             <div class="job-section-title">
@@ -388,6 +516,24 @@ else if (company is not null)
     // ── Per-job detail cache ───────────────────────────────────────────────────
     private readonly Dictionary<Guid, JobDetail> jobDetails = new();
 
+    // ── Tasks ──
+    private readonly List<JobTask> tasks = [];
+    private Guid? addingTaskForJob;
+    private JobTask newTask = new();
+    private List<Guid> newTaskEmployeeIds = [];
+    private JobTask? editingTask;
+    private List<Guid> editingTaskEmployeeIds = [];
+    private bool savingTask;
+    private string? taskError;
+    /// <summary>Tasks typed into the create form when the customer plans jobs in tasks.</summary>
+    private readonly List<NewTaskRow> newTasks = [new()];
+
+    private sealed class NewTaskRow { public string Name { get; set; } = ""; public decimal? EstimatedHours { get; set; } }
+
+    private List<JobTask> TasksFor(Guid jobId) => tasks.Where(t => t.JobId == jobId).ToList();
+    private bool CustomerPlansTasks(Guid customerId) => customers.FirstOrDefault(c => c.Id == customerId)?.PlanJobsInTasks == true;
+    private bool SelectedCustomerPlansTasks => Guid.TryParse(selectedCustomerId, out var cid) && CustomerPlansTasks(cid);
+
     private Company? company;
     private Guid?    expandedJobId;
     private Job?     editingJob;
@@ -457,6 +603,8 @@ else if (company is not null)
         public List<int> InvoiceNumbers     { get; set; } = [];
         public List<EmployeeRow>   ByEmployee    { get; set; } = [];
         public List<MaterialRow>   ByMaterial    { get; set; } = [];
+        /// <summary>Regular hours logged per task; entries without a task are not in here.</summary>
+        public Dictionary<Guid, decimal> HoursByTask { get; set; } = new();
 
         public string InvoiceStatusLabel
         {
@@ -511,7 +659,11 @@ else if (company is not null)
         var jobTask  = JobsApi.GetJobsAsync();
         var empTask  = EmployeesApi.GetEmployeesAsync();
         var matTask  = MaterialsApi.GetMaterialsAsync();
-        await Task.WhenAll(custTask, jobTask, empTask, matTask);
+        var tasksTask = JobTasksApi.GetTasksAsync();
+        await Task.WhenAll(custTask, jobTask, empTask, matTask, tasksTask);
+
+        tasks.Clear();
+        tasks.AddRange((await tasksTask).Value ?? []);
 
         var custR = await custTask;
         var jobR  = await jobTask;
@@ -621,7 +773,10 @@ else if (company is not null)
             InvoicedMaterialUsageCount = invoicedUsages.Count,
             InvoiceNumbers       = invoiceNumbers,
             ByEmployee           = byEmp,
-            ByMaterial           = byMat
+            ByMaterial           = byMat,
+            HoursByTask          = entries.Where(e => e.TaskId != null)
+                                          .GroupBy(e => e.TaskId!.Value)
+                                          .ToDictionary(g => g.Key, g => g.Sum(e => e.Hours))
         };
     }
 
@@ -641,8 +796,106 @@ else if (company is not null)
             Category           = newCategory
         });
 
+        if (result.IsSuccess && result.Value is Job created)
+        {
+            // First tasks, typed while creating the job. Server assigns numbers and codes.
+            foreach (var row in newTasks.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
+            {
+                var tr = await JobTasksApi.CreateTaskAsync(created.Id, new JobTask { Name = row.Name.Trim(), EstimatedHours = row.EstimatedHours });
+                if (!tr.IsSuccess) { loadError = tr.ErrorMessage; break; }
+            }
+            newTasks.Clear(); newTasks.Add(new NewTaskRow());
+        }
         if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = []; showCreateForm = false; await LoadAsync(); }
         else { loadError = result.ErrorMessage; }
+    }
+
+    // ── Tasks ────────────────────────────────────────────────────────────────
+
+    private void BeginAddTask(Job job)
+    {
+        addingTaskForJob   = job.Id;
+        newTask            = new JobTask();
+        newTaskEmployeeIds = [];
+        editingTask        = null;
+        taskError          = null;
+    }
+
+    private async Task AddTaskAsync(Job job)
+    {
+        if (string.IsNullOrWhiteSpace(newTask.Name)) return;
+        savingTask = true; taskError = null;
+        try
+        {
+            newTask.AssignedEmployeeIds = [.. newTaskEmployeeIds];
+            var result = await JobTasksApi.CreateTaskAsync(job.Id, newTask);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                tasks.Add(result.Value);
+                newTask = new JobTask(); newTaskEmployeeIds = [];
+                addingTaskForJob = null;
+            }
+            else taskError = result.ErrorMessage;
+        }
+        finally { savingTask = false; }
+    }
+
+    private void BeginEditTask(JobTask task)
+    {
+        editingTask = new JobTask
+        {
+            Id = task.Id, CompanyId = task.CompanyId, JobId = task.JobId, TaskNumber = task.TaskNumber, Code = task.Code,
+            Name = task.Name, Description = task.Description, Status = task.Status, EstimatedHours = task.EstimatedHours,
+            AssignedEmployeeIds = [.. task.AssignedEmployeeIds], SortOrder = task.SortOrder,
+        };
+        editingTaskEmployeeIds = [.. task.AssignedEmployeeIds];
+        addingTaskForJob = null;
+        taskError = null;
+    }
+
+    private async Task SaveTaskAsync()
+    {
+        if (editingTask is null) return;
+        savingTask = true; taskError = null;
+        try
+        {
+            editingTask.AssignedEmployeeIds = [.. editingTaskEmployeeIds];
+            var result = await JobTasksApi.UpdateTaskAsync(editingTask);
+            if (result.IsSuccess && result.Value is not null)
+            {
+                ReplaceTask(result.Value);
+                editingTask = null;
+            }
+            else taskError = result.ErrorMessage;
+        }
+        finally { savingTask = false; }
+    }
+
+    private async Task ToggleTaskDoneAsync(JobTask task, bool done)
+    {
+        taskError = null;
+        var result = done ? await JobTasksApi.MarkDoneAsync(task.Id) : await JobTasksApi.ReopenAsync(task.Id);
+        if (result.IsSuccess && result.Value is not null) ReplaceTask(result.Value);
+        else taskError = result.ErrorMessage;
+    }
+
+    private async Task DeleteTaskAsync(JobTask task)
+    {
+        taskError = null;
+        var result = await JobTasksApi.DeleteTaskAsync(task.Id);
+        if (result.IsSuccess)
+        {
+            tasks.RemoveAll(t => t.Id == task.Id);
+            // Its hours stay on the job; the per-task split just no longer names it.
+            if (jobDetails.ContainsKey(task.JobId)) await LoadJobDetailAsync(task.JobId);
+        }
+        else taskError = result.ErrorMessage;
+    }
+
+    private void ReplaceTask(JobTask updated)
+    {
+        var i = tasks.FindIndex(t => t.Id == updated.Id);
+        if (i >= 0) tasks[i] = updated; else tasks.Add(updated);
     }
 
     private void BeginEditJob(Job job)

@@ -5,7 +5,8 @@ using Workit.Shared.Models;
 public interface IJobsApi
 {
     Task<ApiResult<List<Job>>> GetJobsAsync();
-    Task<ApiResult> CreateJobAsync(Job job);
+    /// <summary>Returns the job as the API stored it — with its code and number assigned.</summary>
+    Task<ApiResult<Job>> CreateJobAsync(Job job);
     Task<ApiResult> UpdateJobAsync(Job job);
     Task<ApiResult> UpdateKanbanStatusAsync(Guid jobId, KanbanStatus status, string? waitingReason);
 }
@@ -24,8 +25,8 @@ internal sealed class JobsApi(HttpClient httpClient, IAccessTokenAccessor access
             : ApiResult<List<Job>>.Failure(result.ErrorMessage ?? "Jobs could not be loaded right now.");
     }
 
-    public Task<ApiResult> CreateJobAsync(Job job) =>
-        PostAsync("api/jobs", job, "The job could not be created right now.");
+    public Task<ApiResult<Job>> CreateJobAsync(Job job) =>
+        PostForJsonAsync<Job, Job>("api/jobs", job, "The job could not be created right now.");
 
     public Task<ApiResult> UpdateJobAsync(Job job) =>
         PutAsync($"api/jobs/{job.Id}", job, "The job could not be updated right now.");
