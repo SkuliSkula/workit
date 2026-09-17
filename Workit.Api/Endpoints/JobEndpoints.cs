@@ -217,7 +217,7 @@ internal static class JobEndpoints
     internal static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
-    private static async Task<List<Guid>?> NormalizeAssigneesAsync(WorkitDbContext db, Guid companyId, List<Guid>? requested, CancellationToken ct)
+    internal static async Task<List<Guid>?> NormalizeAssigneesAsync(WorkitDbContext db, Guid companyId, List<Guid>? requested, CancellationToken ct)
     {
         var ids = (requested ?? []).Distinct().ToList();
         if (ids.Count == 0)

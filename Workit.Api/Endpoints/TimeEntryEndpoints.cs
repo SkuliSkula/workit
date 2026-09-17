@@ -102,6 +102,9 @@ internal static class TimeEntryEndpoints
                     if (job is null)
                         return Results.BadRequest("You are not assigned to that job.");
 
+                    if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
+                        return Results.BadRequest(taskError);
+
                     await entry.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.TimeEntries.Add(entry);
 
@@ -143,7 +146,11 @@ internal static class TimeEntryEndpoints
                         existing.EmployeeId != userContext.EmployeeId)
                         return Results.Forbid();
 
+                    if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
+                        return Results.BadRequest(taskError);
+
                     existing.JobId         = entry.JobId;
+                    existing.TaskId        = entry.TaskId;
                     existing.WorkDate      = entry.WorkDate;
                     existing.Hours         = entry.Hours;
                     existing.OvertimeHours = entry.OvertimeHours;
