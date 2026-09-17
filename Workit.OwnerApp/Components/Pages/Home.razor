@@ -146,6 +146,15 @@ else
                 <span class="kpi-foot">@overtimeRatioLabel of total hours</span>
             </FluentCard>
 
+            <FluentCard Class="kpi-card kpi-card--invoice" title="Hours on time entries not yet marked as invoiced this month">
+                <span class="kpi-label">To Invoice</span>
+                <strong>@uninvoicedHours.ToString("0.##")<span class="kpi-unit"> h</span></strong>
+                <span class="kpi-foot">@invoicedHours.ToString("0.##") h invoiced · @invoicedRatioLabel of the month</span>
+                <div class="invoice-progress" aria-hidden="true">
+                    <div class="invoice-progress-fill" style="@($"width:{invoicedPercent:0.##}%")"></div>
+                </div>
+            </FluentCard>
+
             <FluentCard Class="kpi-card">
                 <span class="kpi-label">Customers Active</span>
                 <strong>@customerSummaries.Count</strong>
@@ -276,10 +285,11 @@ else
                         <button type="button" class="summary-row summary-button @(IsSelectedCustomer(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => ToggleCustomerFilter(item.Id))">
                             <div class="summary-copy">
                                 <strong>@item.Name</strong>
-                                <span>@item.EntryCount entries</span>
+                                <span>@item.EntryCount entries@(item.UninvoicedHours > 0m ? $" · {item.UninvoicedHours:0.##} h to invoice" : " · all invoiced")</span>
                             </div>
                             <div class="summary-bar-wrap">
                                 <div class="summary-bar" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                                <div class="summary-bar summary-bar--open" style="@($"left:{item.InvoicedWidthPercent:0.##}%; width:{item.WidthPercent - item.InvoicedWidthPercent:0.##}%")"></div>
                             </div>
                             <div class="summary-value">@item.Hours.ToString("0.##") h</div>
                         </button>
@@ -305,10 +315,12 @@ else
                         <button type="button" class="summary-row summary-button @(IsSelectedJob(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => ToggleJobFilter(item.Id))">
                             <div class="summary-copy">
                                 <strong>@item.Name</strong>
-                                <span>@item.EntryCount entries</span>
+                                <span>@item.EntryCount entries@(item.UninvoicedHours > 0m ? $" · {item.UninvoicedHours:0.##} h to invoice" : " · all invoiced")</span>
                             </div>
                             <div class="summary-bar-wrap">
                                 <div class="summary-bar coral" style="@($"width:{item.WidthPercent:0.##}%")"></div>
+                                @* The part of the bar still waiting to be invoiced, lighter, on the right. *@
+                                <div class="summary-bar summary-bar--open" style="@($"left:{item.InvoicedWidthPercent:0.##}%; width:{item.WidthPercent - item.InvoicedWidthPercent:0.##}%")"></div>
                             </div>
                             <div class="summary-value">@item.Hours.ToString("0.##") h</div>
                         </button>
@@ -455,6 +467,10 @@ else
     private List<RecentEntryRow> recentEntries = [];
     private decimal totalHours;
     private decimal totalOvertimeHours;
+    private decimal invoicedHours;
+    private decimal uninvoicedHours;
+    private decimal invoicedPercent => totalHours == 0m ? 0m : decimal.Round(invoicedHours / totalHours * 100m, 1);
+    private string invoicedRatioLabel => totalHours == 0m ? "0%" : $"{invoicedPercent:0.#}%";
     private decimal averageHoursPerWorkedDay;
 
     private string overtimeRatioLabel => totalHours == 0m
@@ -655,6 +671,8 @@ else
 
         totalHours = filteredEntries.Sum(x => x.Hours);
         totalOvertimeHours = filteredEntries.Sum(x => x.OvertimeHours);
+        invoicedHours = filteredEntries.Where(x => x.IsInvoiced).Sum(x => x.Hours);
+        uninvoicedHours = totalHours - invoicedHours;
         var workedDays = filteredEntries.Select(x => x.WorkDate).Distinct().Count();
         averageHoursPerWorkedDay = workedDays == 0 ? 0m : totalHours / workedDays;
 
@@ -665,6 +683,7 @@ else
                 group.Key,
                 customerNames.GetValueOrDefault(group.Key, "Unknown customer"),
                 group.Sum(x => x.Hours),
+                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
                 group.Count()))
             .OrderByDescending(x => x.Hours)
             .ThenBy(x => x.Name)
@@ -678,6 +697,7 @@ else
                 group.Key,
                 jobNames.GetValueOrDefault(group.Key, "Unknown job"),
                 group.Sum(x => x.Hours),
+                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
                 group.Count()))
             .OrderByDescending(x => x.Hours)
             .ThenBy(x => x.Name)
@@ -691,6 +711,7 @@ else
                 group.Key,
                 employeeNames.GetValueOrDefault(group.Key, "Unknown employee"),
                 group.Sum(x => x.Hours),
+                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
                 group.Count()))
             .OrderByDescending(x => x.Hours)
             .ThenBy(x => x.Name)
@@ -746,6 +767,8 @@ else
         recentEntries = [];
         totalHours = 0m;
         totalOvertimeHours = 0m;
+        invoicedHours = 0m;
+        uninvoicedHours = 0m;
         averageHoursPerWorkedDay = 0m;
     }
 
@@ -811,8 +834,10 @@ else
                 seed.Id,
                 seed.Name,
                 seed.Hours,
+                seed.UninvoicedHours,
                 seed.EntryCount,
-                peak == 0m ? 0m : decimal.Round((seed.Hours / peak) * 100m, 2)))
+                peak == 0m ? 0m : decimal.Round((seed.Hours / peak) * 100m, 2),
+                peak == 0m ? 0m : decimal.Round(((seed.Hours - seed.UninvoicedHours) / peak) * 100m, 2)))
             .ToList();
     }
 
@@ -953,8 +978,9 @@ else
         Navigation.NavigateTo("/", forceLoad: true);
     }
 
-    private sealed record AggregateSeed(Guid Id, string Name, decimal Hours, int EntryCount);
-    private sealed record AggregateRow(Guid Id, string Name, decimal Hours, int EntryCount, decimal WidthPercent);
+    private sealed record AggregateSeed(Guid Id, string Name, decimal Hours, decimal UninvoicedHours, int EntryCount);
+    /// <summary>WidthPercent is the whole bar; InvoicedWidthPercent the invoiced part of it, from the left.</summary>
+    private sealed record AggregateRow(Guid Id, string Name, decimal Hours, decimal UninvoicedHours, int EntryCount, decimal WidthPercent, decimal InvoicedWidthPercent);
     private sealed record DayLoad(int Day, decimal Hours);
     private sealed record RecentEntryRow(DateOnly WorkDate, string EmployeeName, string JobName, string CustomerName, decimal Hours);
 }
