@@ -336,6 +336,25 @@
     color: #60758b;
 }
 
+/* Outline button in the danger colour; the dialog's confirm is the filled version.
+   FluentButton is a child component, so the scope attribute sits on our wrapper. */
+.job-actions ::deep .job-delete-button::part(control) {
+    color: #b91c1c;
+    border-color: rgba(185, 28, 28, 0.45);
+}
+
+.job-delete-actions ::deep .job-delete-button--confirm::part(control) {
+    background: #b91c1c;
+    border-color: #b91c1c;
+    color: #fff;
+}
+
+.job-delete-note {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #60758b;
+}
+
 /* ── Tasks ──────────────────────────────────────────────────────────────── */
 
 .badge--tasks {
