@@ -9,6 +9,8 @@ public interface IJobsApi
     Task<ApiResult<Job>> CreateJobAsync(Job job);
     Task<ApiResult> UpdateJobAsync(Job job);
     Task<ApiResult> UpdateKanbanStatusAsync(Guid jobId, KanbanStatus status, string? waitingReason);
+    /// <summary>Fails with the API's explanation (409) when the job has hours, materials or billed expenses on it.</summary>
+    Task<ApiResult> DeleteJobAsync(Guid jobId);
 }
 
 internal sealed class JobsApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -35,4 +37,7 @@ internal sealed class JobsApi(HttpClient httpClient, IAccessTokenAccessor access
         PatchAsync($"api/jobs/{jobId}/kanban-status",
             new { Status = status, WaitingReason = waitingReason },
             "The job status could not be updated right now.");
+
+    public Task<ApiResult> DeleteJobAsync(Guid jobId) =>
+        DeleteAsync($"api/jobs/{jobId}", "The job could not be deleted right now.");
 }
