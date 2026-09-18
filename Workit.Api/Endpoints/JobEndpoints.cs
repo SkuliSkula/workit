@@ -3,6 +3,7 @@ using Npgsql;
 using Workit.Api.Analytics;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Services;
 using Workit.Shared.Models;
 using static Workit.Api.Endpoints.EndpointHelpers;
 
@@ -187,6 +188,91 @@ internal static class JobEndpoints
                 logger,
                 "updating a job"))
             .WithName("UpdateJob");
+
+        securedApi.MapDelete("/jobs/{id:guid}", async (WorkitDbContext db, IFileStorageService storage, HttpContext httpContext, Guid id, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsOwnerOrAdmin())
+                    {
+                        return Results.Forbid();
+                    }
+
+                    var userContext = httpContext.User.ToUserContext();
+                    var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (existing is null)
+                    {
+                        return Results.NotFound();
+                    }
+
+                    var outcome = await DeleteJobAsync(db, existing, ct);
+                    if (outcome.Refusal is not null)
+                        return Results.Conflict(outcome.Refusal);
+
+                    // Best-effort blob cleanup; the rows are already gone.
+                    foreach (var key in outcome.StorageKeys)
+                    {
+                        try
+                        {
+                            await storage.DeleteAsync(key, ct);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to delete stored file {Key} for deleted job {JobId}.", key, id);
+                        }
+                    }
+
+                    return Results.NoContent();
+                },
+                logger,
+                "deleting a job"))
+            .WithName("DeleteJob");
+    }
+
+    /// <summary>What deleting a job left to do, or why it was refused.</summary>
+    internal sealed record DeleteJobOutcome(string? Refusal, IReadOnlyList<string> StorageKeys)
+    {
+        public static DeleteJobOutcome Refused(string why) => new(why, []);
+    }
+
+    /// <summary>
+    /// Deletes a job that was created by mistake. A job with hours, materials
+    /// or billed expenses on it is history and is refused — those rows carry
+    /// the company's money; delete or move them first. Tasks and files go with
+    /// the job (their hours are blocked above), and expenses that were linked
+    /// to it are unlinked, since the link would otherwise point at nothing.
+    /// </summary>
+    internal static async Task<DeleteJobOutcome> DeleteJobAsync(WorkitDbContext db, Job job, CancellationToken ct)
+    {
+        var entryCount = await db.TimeEntries.CountAsync(e => e.JobId == job.Id, ct);
+        if (entryCount > 0)
+            return DeleteJobOutcome.Refused(entryCount == 1
+                ? "This job has a time entry and can't be deleted. Delete or move that entry first."
+                : $"This job has {entryCount} time entries and can't be deleted. Delete or move those entries first.");
+
+        var usageCount = await db.MaterialUsages.CountAsync(u => u.JobId == job.Id, ct);
+        if (usageCount > 0)
+            return DeleteJobOutcome.Refused(usageCount == 1
+                ? "This job has a material entry and can't be deleted. Delete that entry first."
+                : $"This job has {usageCount} material entries and can't be deleted. Delete those entries first.");
+
+        if (await db.ExpenseLineBillings.AnyAsync(b => b.JobId == job.Id, ct))
+            return DeleteJobOutcome.Refused("Expenses have been billed to this job on an invoice, so it can't be deleted.");
+
+        var tasks       = await db.JobTasks.Where(t => t.JobId == job.Id).ToListAsync(ct);
+        var attachments = await db.JobAttachments.Where(a => a.JobId == job.Id).ToListAsync(ct);
+        var expenses    = await db.Expenses.Where(e => e.JobId == job.Id).ToListAsync(ct);
+
+        foreach (var expense in expenses)
+        {
+            expense.JobId         = null;
+            expense.JobLinkSource = ExpenseJobLinkSource.None;
+        }
+        db.JobTasks.RemoveRange(tasks);
+        db.JobAttachments.RemoveRange(attachments);
+        db.Jobs.Remove(job);
+        await db.SaveChangesAsync(ct);
+
+        return new DeleteJobOutcome(null, attachments.Select(a => a.StorageKey).ToList());
     }
 
     /// <summary>
