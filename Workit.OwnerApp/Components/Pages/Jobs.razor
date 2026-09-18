@@ -8,6 +8,7 @@
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IMaterialsApi MaterialsApi
 @inject NavigationManager Nav
+@inject BusyService Busy
 
 <PageTitle>Jobs</PageTitle>
 
@@ -484,6 +485,7 @@ else if (jobs.Count > 0)
                                     }
                                     <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Nav.NavigateTo($"/jobs/{job.Id}"))">Details</FluentButton>
                                     <FluentButton Appearance="Appearance.Outline" @onclick="@(() => BeginEditJob(job))">Edit job</FluentButton>
+                                    <FluentButton Appearance="Appearance.Outline" Class="job-delete-button" @onclick="@(() => BeginDeleteJob(job))">Delete job</FluentButton>
                                 </div>
                             }
                         </div>
@@ -498,6 +500,27 @@ else if (company is not null)
     <FluentCard Class="admin-card" AreaRestricted="false">
         <FluentLabel>No jobs yet. Add the first one above.</FluentLabel>
     </FluentCard>
+}
+
+@* ── Delete confirmation ── *@
+@if (deletingJob is not null)
+{
+    <AppDialog Title="Delete job?" OnClose="CancelDeleteJob" Busy="deletingJobBusy">
+        <p style="margin:0 0 0.75rem;">
+            Delete <strong>@deletingJob.Code – @deletingJob.Name</strong>? Its tasks and files go with it, and this can't be undone.
+        </p>
+        <p class="job-delete-note">
+            A job with hours, materials or billed expenses on it can't be deleted — move or delete those first.
+        </p>
+        @if (!string.IsNullOrWhiteSpace(deleteError))
+        {
+            <FluentLabel Color="Color.Error" style="display:block; margin-top:0.75rem;">@deleteError</FluentLabel>
+        }
+        <div class="job-delete-actions" style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelDeleteJob" Disabled="@deletingJobBusy">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" Class="job-delete-button job-delete-button--confirm" @onclick="ConfirmDeleteJobAsync" Disabled="@deletingJobBusy">Delete job</FluentButton>
+        </div>
+    </AppDialog>
 }
 
 
@@ -537,6 +560,9 @@ else if (company is not null)
     private Company? company;
     private Guid?    expandedJobId;
     private Job?     editingJob;
+    private Job?     deletingJob;
+    private bool     deletingJobBusy;
+    private string?  deleteError;
     private string?  editingCustomerId;
     private List<Guid> editingEmployeeIds = [];
     private string?     selectedCustomerId;
@@ -916,6 +942,34 @@ else if (company is not null)
     }
 
     private void CancelJobEdit() { editingJob = null; editingCustomerId = null; editingEmployeeIds = []; }
+
+    // ── Delete ─────────────────────────────────────────────────────────────────
+    private void BeginDeleteJob(Job job) { deletingJob = job; deleteError = null; }
+
+    private void CancelDeleteJob() { if (!deletingJobBusy) { deletingJob = null; deleteError = null; } }
+
+    /// <summary>
+    /// The API refuses (409) while the job has hours, materials or billed
+    /// expenses on it and says why; that reason is shown in the dialog so the
+    /// owner knows what to clear first.
+    /// </summary>
+    private async Task ConfirmDeleteJobAsync()
+    {
+        if (deletingJob is null) return;
+        deletingJobBusy = true; deleteError = null;
+        try
+        {
+            using var busy = Busy.Begin("Deleting job…");
+            var result = await JobsApi.DeleteJobAsync(deletingJob.Id);
+            if (result.IsSuccess)
+            {
+                deletingJob = null;
+                await LoadAsync();
+            }
+            else deleteError = result.ErrorMessage;
+        }
+        finally { deletingJobBusy = false; }
+    }
 
     // ── Company settings ──────────────────────────────────────────────────────
     private async Task SaveCompanySettingsAsync()
