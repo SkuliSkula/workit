@@ -4,8 +4,8 @@ Run 2026-09-19 against the **sandbox** (`https://api.test.payday.is`, `Api-Versi
 throwaway company. Each finding below is a real request/response pair, trimmed. The plan this feeds
 is "Workit on Payday" (see the plan artifact / memory note `workit-on-payday-plan`).
 
-Status: **7 of 8 questions answered.** The invoice → stock question needs the sandbox company's
-system setup completed (Payday refuses to create invoices until then); see "Still open".
+Status: **all 8 questions answered.** (The invoice test needed the sandbox company's system setup
+completed first — SSN and address; Payday returns 401 "complete the required system setup" until then.)
 
 ## Findings
 
@@ -107,30 +107,55 @@ company with payroll employees (`GET /payroll/employees` was `[]`).
 Other reads: `GET /general/vat` → `[0.00, 11.00, 24.00]`; `GET /payroll/pension/funds/0` → fund
 list with `number`/`name`; `GET /companies/me` includes `hasClaimCollection`.
 
-### 8. Does invoicing a product line move stock? — **still open**
+### 8. Invoicing a product line does NOT move stock
 
-Blocked on the sandbox company's setup (see below). Everything is staged: product `SPIKE-CABLE`
-(stock 10), customer "Spike kúnni ehf.", and the invoice body from finding 4 with prices added.
+```
+stock before: 10.0
+POST /invoices  lines:[{"quantity":12,"unitPriceExcludingVat":1500,"vatPercentage":0,"productId":"<cable>"},
+                       {"quantity":3,"unitPriceExcludingVat":12000,"vatPercentage":0,"sku":"SPIKE-LABOR"}]
+200 {"status":"SENT","amountExcludingVat":54000.0, "lines":[
+      {"description":"SPIKE-CABLE - Spike cable 5G16","productId":"<cable>","sku":"SPIKE-CABLE","quantity":12.0,...},
+      {"description":"SPIKE-LABOR - Spike vinna klst","productId":"<labor>","sku":"SPIKE-LABOR","quantity":3.0,...}]}
+stock after (immediately and 20 s later): 10.0 ; movements: still 5, no new entry
+```
 
-## Still open / what's needed
+Selling 12 units of a product with 10 in stock left stock at 10 and added no movement. **Design
+consequence — the big one:** Payday's inventory only moves through explicit movements, so Workit
+posting a consume movement at usage time and later billing the same material does **not** double
+count. Usage → `-qty` movement; usage delete → `+qty` movement; invoice → pricing/ledger only.
 
-1. In `app.test.payday.is` complete the company setup (company SSN, address, **VAT number**, whatever
-   the setup checklist asks) so `POST /invoices` is allowed. Then re-run the finding-8 invoice and read
-   `/products/{id}/movements`.
-2. Create one payroll employee in the sandbox to check item-name matching for the timesheet upload.
+Also observed: a line given `sku` alone comes back with `productId` filled and the description
+rewritten to `"<SKU> - <name>"` (the sent description was replaced). Company had no VAT number, so
+lines were 0 % VAT; VAT lines are refused until a VAT number is set (`vatNumber` on `companies/me`).
+
+## Still open
+
+1. Timesheet item-name matching (`Dagvinna`/`Yfirvinna` vs the company's payroll items) and whether a
+   re-upload replaces or adds — needs a sandbox company with at least one payroll employee.
+2. Whether `createClaim` / `createElectronicInvoice` work in the sandbox (`hasClaimCollection: false`
+   on this company) — only matters for Phase 3.
+
+## Lifecycle rules confirmed while cleaning up
+
+| Action | Result |
+|---|---|
+| `DELETE /invoices/{id}` on a SENT invoice | `400 Issued invoice … cannot be deleted. Consider cancelling the invoice instead.` |
+| `PUT /invoices/{id} {"status":"CANCELLED"}` right after creation | `400 Invoice with status Pending cannot be updated to status CANCELLED` (status is `SENT` on read but `Pending` internally for a while) |
+| `DELETE /products/{id}` once on an invoice | `400 … Only products that don't have invoices, estimates or recurring invoices can be deleted.` |
+| `DELETE /customers/{id}` once invoiced | `400 {"errorCode":21001,"errorMessage":"Deleting customer … not allowed…"}` — a third error shape |
 
 ## Design decisions these settle
 
-- Stock: consume-or-nothing, never reserve (1). Workit posts movements only; reversal = positive movement (2).
+- Stock: **consume at usage time** (8 + 1): invoicing never touches stock, so there is no double count and no reservation to model. Workit posts movements only; reversal = positive movement (2).
 - Product updates from Workit never carry `quantity` (2). Workit doesn't edit products at all in v1 anyway.
 - Material vs labor default from `quantity == null`, owner-overridable (3).
-- Invoice lines always carry price + VAT from the Workit cache; `productId` is for the ledger (4).
+- Invoice lines always carry price + VAT from the Workit cache; `productId` is for the ledger and Payday rewrites the description to `SKU - name` (4, 8). A company needs a VAT number in Payday before VAT lines work — surface that in onboarding.
 - Cache paging by `pages`; movements are already a ledger we can show in the console (5).
 - Error handling: string or `{message}` bodies, surfaced verbatim (6).
 - Payroll export reports `employeeSSNsNotOnRecord` back to the owner (7).
 
 ## Cleanup
 
-Sandbox items created: products `SPIKE-LABOR`, `SPIKE-CABLE` (+5 movements), customer
-"Spike kúnni ehf.". Kept until finding 8 is run; then deleted (products can be deleted while
-unreferenced; after an invoice references `SPIKE-CABLE` it can only be archived).
+Left in the sandbox company "ÓS rafverktakar ehf." (they are referenced by the test invoice and
+cannot be deleted; Payday wipes the sandbox periodically): products `SPIKE-LABOR`, `SPIKE-CABLE`
+(5 movements), customer "Spike kúnni ehf.", invoice `c784ff10…` (54 000 kr., 0 % VAT, not emailed).
