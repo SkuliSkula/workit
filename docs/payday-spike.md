@@ -4,7 +4,7 @@ Run 2026-09-19 against the **sandbox** (`https://api.test.payday.is`, `Api-Versi
 throwaway company. Each finding below is a real request/response pair, trimmed. The plan this feeds
 is "Workit on Payday" (see the plan artifact / memory note `workit-on-payday-plan`).
 
-Status: **all 8 questions answered.** (The invoice test needed the sandbox company's system setup
+Status: **all 8 questions answered, plus VAT (9).** (The invoice test needed the sandbox company's system setup
 completed first — SSN and address; Payday returns 401 "complete the required system setup" until then.)
 
 ## Findings
@@ -149,6 +149,24 @@ invoice by hand, it keeps one truth, and the "stock lags until billed" gap can b
 live Payday stock. Also: a `sku`-only line comes back with `productId` filled and the description
 rewritten to `"<SKU> - <name>"`. VAT lines are refused until the company has a VAT number.
 
+### 9. VAT lines work once the company has a VAT number; Payday does not validate the rate against the product
+
+```
+companies/me → "vatNumber":"123456"   (was "" → every VAT line refused with "Company is not VAT obligated…")
+POST /invoices  lines:[{"quantity":2,"unitPriceExcludingVat":1500,"vatPercentage":24,"productId":"<cable>"},
+                       {"quantity":1,"unitPriceExcludingVat":12000,"vatPercentage":24,"sku":"SPIKE-LABOR"}]
+200 {"amountExcludingVat":15000.0,"amountVat":3600.0,"amountIncludingVat":18600.0,
+     "lines":[{"unitPriceExcludingVat":1500.0,"unitPriceIncludingVat":1860.0,"vatPercentage":24.0}, …]}
+
+POST /invoices  lines:[{"quantity":1,"unitPriceExcludingVat":1500,"vatPercentage":11,"productId":"<cable>"}]   ← product is 24 %
+200 {"amountVat":165.0,"lines":[{"vatPercentage":11.0,"unitPriceIncludingVat":1665.0}]}
+```
+
+Payday computed VAT from the rate **we sent**, even though the product is defined at 24 %. So the
+rate on the line is ours to get right — take it from the product cache and never let the console
+type it freely. Both invoices consumed stock (`Reikningur nr. 2` −2, `nr. 3` −1 → −5), this time
+issued within a few seconds; issue latency varies (55 s earlier, ~2 s here).
+
 ## Still open
 
 1. Timesheet item-name matching (`Dagvinna`/`Yfirvinna` vs the company's payroll items) and whether a
@@ -170,7 +188,7 @@ rewritten to `"<SKU> - <name>"`. VAT lines are refused until the company has a V
 - Stock: **the invoice consumes** (8). Usages do not post movements in v1 (option a) — Workit shows "logged, not yet invoiced" from its own data instead. No reservation exists (1). If Workit ever posts movements, reversal = positive movement and never `quantity` on PUT (2).
 - Product updates from Workit never carry `quantity` (2). Workit doesn't edit products at all in v1 anyway.
 - Material vs labor default from `quantity == null`, owner-overridable (3).
-- Invoice lines always carry price + VAT from the Workit cache; `productId` is for the ledger and Payday rewrites the description to `SKU - name` (4, 8). A company needs a VAT number in Payday before VAT lines work — surface that in onboarding.
+- Invoice lines always carry price + VAT from the Workit cache; `productId` is for the ledger and Payday rewrites the description to `SKU - name` (4, 8). A company needs a VAT number in Payday before VAT lines work — surface that in onboarding. Payday applies whatever VAT rate the line carries, so the rate must come from the product cache, never a free field (9).
 - Cache paging by `pages`; movements are already a ledger we can show in the console (5).
 - Error handling: string or `{message}` bodies, surfaced verbatim (6).
 - Payroll export reports `employeeSSNsNotOnRecord` back to the owner (7).
@@ -179,4 +197,4 @@ rewritten to `"<SKU> - <name>"`. VAT lines are refused until the company has a V
 
 Left in the sandbox company "ÓS rafverktakar ehf." (they are referenced by the test invoice and
 cannot be deleted; Payday wipes the sandbox periodically): products `SPIKE-LABOR`, `SPIKE-CABLE`
-(5 movements), customer "Spike kúnni ehf.", invoice nr. 1 `c784ff10…` (54 000 kr., 0 % VAT, not emailed); stock of `SPIKE-CABLE` is now −2.
+(5 movements), customer "Spike kúnni ehf.", invoices nr. 1–3 (0 %, 24 %, and an 11 % mismatch probe; none emailed); stock of `SPIKE-CABLE` is now −5.
