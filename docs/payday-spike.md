@@ -22,6 +22,9 @@ consumes stock at log time or does nothing until invoiced. (Decided by finding 8
 
 ### 2. Stock is a ledger of movements, and `PUT /products/{id}` with `quantity` writes a correction into it
 
+(Note: reads of stock and movements can lag Payday's background jobs by about a minute — see 8.
+Never conclude "no effect" from an immediate read.)
+
 ```
 PUT /products/{id}  {"name":"…","sku":"SPIKE-CABLE","quantity":5,...}
 200 {"quantity":5.0,...}
@@ -107,26 +110,44 @@ company with payroll employees (`GET /payroll/employees` was `[]`).
 Other reads: `GET /general/vat` → `[0.00, 11.00, 24.00]`; `GET /payroll/pension/funds/0` → fund
 list with `number`/`name`; `GET /companies/me` includes `hasClaimCollection`.
 
-### 8. Invoicing a product line does NOT move stock
+### 8. Invoicing a product line DOES move stock — asynchronously, when the invoice is issued
 
 ```
 stock before: 10.0
 POST /invoices  lines:[{"quantity":12,"unitPriceExcludingVat":1500,"vatPercentage":0,"productId":"<cable>"},
                        {"quantity":3,"unitPriceExcludingVat":12000,"vatPercentage":0,"sku":"SPIKE-LABOR"}]
-200 {"status":"SENT","amountExcludingVat":54000.0, "lines":[
-      {"description":"SPIKE-CABLE - Spike cable 5G16","productId":"<cable>","sku":"SPIKE-CABLE","quantity":12.0,...},
-      {"description":"SPIKE-LABOR - Spike vinna klst","productId":"<labor>","sku":"SPIKE-LABOR","quantity":3.0,...}]}
-stock after (immediately and 20 s later): 10.0 ; movements: still 5, no new entry
+200 {"status":"SENT","number":null,"amountExcludingVat":54000.0,...}     (22:18:09)
+stock 0 s and 20 s later: 10.0, movements unchanged                        ← looked like "no effect"
+… ~55 s later the invoice is issued (number: 1) and a movement appears:
+  {"description":"Reikningur nr. 1 - Spike kúnni ehf.","changeInQuantity":-12.0,"quantityAfterChange":-2.0,
+   "salesUnitPriceExcludingVAT":1500.0,"created":"2026-09-19T22:19:03Z"}
+stock now: -2.0 ; labor product quantity: still null
 ```
 
-Selling 12 units of a product with 10 in stock left stock at 10 and added no movement. **Design
-consequence — the big one:** Payday's inventory only moves through explicit movements, so Workit
-posting a consume movement at usage time and later billing the same material does **not** double
-count. Usage → `-qty` movement; usage delete → `+qty` movement; invoice → pricing/ledger only.
+First read said "no", the corrected read an hour later says "yes": Payday books the sale into
+inventory when the invoice is **issued**, which happens on a background job roughly a minute after
+creation (until then `number` is null and the invoice is internally `Pending`). Negative stock is
+allowed. A service product (`quantity: null`) gets no movement.
 
-Also observed: a line given `sku` alone comes back with `productId` filled and the description
-rewritten to `"<SKU> - <name>"` (the sent description was replaced). Company had no VAT number, so
-lines were 0 % VAT; VAT lines are refused until a VAT number is set (`vatNumber` on `companies/me`).
+**Design consequence — the big one, reversed from the first draft:** if Workit consumed stock at
+usage time *and* billed the material by `productId`, the quantity would be taken twice. Options:
+
+- (a) **Usage does nothing to Payday stock; the invoice consumes.** Workit's usages are the plan,
+  Payday's invoice is the fact. Stock in Payday then lags reality until the job is billed — for a
+  monthly-billed service job that can be weeks. Simple, no double count, no reversal logic.
+- (b) **Usage consumes via movement; invoice lines are sent *without* `productId`/`sku`** (free-text
+  line with price + VAT + the product's ledger account is not settable per line — check). Stock is
+  live, but the invoice loses its product link and Payday's sales-per-product reporting.
+- (c) **Usage consumes via movement; at invoice time Workit posts a compensating `+qty` movement**
+  right after creating the invoice. Live stock and a product-linked invoice, at the cost of a
+  timing window (the compensation lands before Payday's own −qty, so stock briefly reads high) and
+  a noisy movement ledger.
+
+Recommendation: **(a)** for v1 — it is exactly how Payday itself behaves when someone types an
+invoice by hand, it keeps one truth, and the "stock lags until billed" gap can be shown in Workit as
+"logged, not yet invoiced" per material from Workit's own usages. Revisit (c) only if owners need
+live Payday stock. Also: a `sku`-only line comes back with `productId` filled and the description
+rewritten to `"<SKU> - <name>"`. VAT lines are refused until the company has a VAT number.
 
 ## Still open
 
@@ -146,7 +167,7 @@ lines were 0 % VAT; VAT lines are refused until a VAT number is set (`vatNumber`
 
 ## Design decisions these settle
 
-- Stock: **consume at usage time** (8 + 1): invoicing never touches stock, so there is no double count and no reservation to model. Workit posts movements only; reversal = positive movement (2).
+- Stock: **the invoice consumes** (8). Usages do not post movements in v1 (option a) — Workit shows "logged, not yet invoiced" from its own data instead. No reservation exists (1). If Workit ever posts movements, reversal = positive movement and never `quantity` on PUT (2).
 - Product updates from Workit never carry `quantity` (2). Workit doesn't edit products at all in v1 anyway.
 - Material vs labor default from `quantity == null`, owner-overridable (3).
 - Invoice lines always carry price + VAT from the Workit cache; `productId` is for the ledger and Payday rewrites the description to `SKU - name` (4, 8). A company needs a VAT number in Payday before VAT lines work — surface that in onboarding.
@@ -158,4 +179,4 @@ lines were 0 % VAT; VAT lines are refused until a VAT number is set (`vatNumber`
 
 Left in the sandbox company "ÓS rafverktakar ehf." (they are referenced by the test invoice and
 cannot be deleted; Payday wipes the sandbox periodically): products `SPIKE-LABOR`, `SPIKE-CABLE`
-(5 movements), customer "Spike kúnni ehf.", invoice `c784ff10…` (54 000 kr., 0 % VAT, not emailed).
+(5 movements), customer "Spike kúnni ehf.", invoice nr. 1 `c784ff10…` (54 000 kr., 0 % VAT, not emailed); stock of `SPIKE-CABLE` is now −2.
