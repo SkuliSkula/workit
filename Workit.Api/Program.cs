@@ -166,7 +166,8 @@ else
 // The API is the only process that talks to Payday. It registers the "PaydayApi"
 // HttpClient plus the direct Payday clients; /api/payday/* proxies them for the
 // Owner app using each company's encrypted credentials (see PaydayEndpoints).
-builder.Services.AddPaydayApiClients();
+// Payday:BaseUrl switches every Payday call (token included) to the sandbox for local runs.
+builder.Services.AddPaydayApiClients(builder.Configuration["Payday:BaseUrl"]);
 
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
@@ -278,6 +279,7 @@ app.MapExpenseEndpoints();
 app.MapExpenseAutoLinkEndpoints();
 app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
+app.MapPaydayProductEndpoints();
 app.MapDevSeedEndpoints();
 
 // ── Startup tasks ──────────────────────────────────────────────────────────────

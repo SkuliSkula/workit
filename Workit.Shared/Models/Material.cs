@@ -36,6 +36,12 @@ public sealed class Material
 
     public bool IsActive      { get; set; } = true;
 
+    /// <summary>
+    /// The Payday product this material bills as, once the owner has linked it.
+    /// Null until then; invoice lines for an unlinked material are refused.
+    /// </summary>
+    public Guid? PaydayProductId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>

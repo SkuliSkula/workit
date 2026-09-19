@@ -30,6 +30,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<ExpenseLineBilling> ExpenseLineBillings => Set<ExpenseLineBilling>();
     public DbSet<JobAttachment>      JobAttachments     => Set<JobAttachment>();
     public DbSet<JobTask>            JobTasks           => Set<JobTask>();
+    public DbSet<PaydayProductCache> PaydayProducts     => Set<PaydayProductCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -234,6 +235,16 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .IsUnique();
         modelBuilder.Entity<TimeEntry>()
             .HasIndex(x => x.TaskId);
+
+        // ── Payday product cache ──────────────────────────────────────────────
+        modelBuilder.Entity<PaydayProductCache>().ToTable("PaydayProducts");
+        modelBuilder.Entity<PaydayProductCache>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .IsUnique();
+        modelBuilder.Entity<PaydayProductCache>()
+            .HasIndex(x => new { x.CompanyId, x.Sku });
+        modelBuilder.Entity<PaydayProductCache>()
+            .Ignore(x => x.IsStockTracked);
 
         // ── Job attachments ───────────────────────────────────────────────────
         modelBuilder.Entity<JobAttachment>().ToTable("JobAttachments");
