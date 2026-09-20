@@ -5,7 +5,7 @@ namespace Workit.Shared.Payday;
 /// <summary>
 /// Flexible update request supporting 6 modes:
 /// - Mark as paid:        Status = "PAID", PaidDate, PaymentType
-/// - Resend email:        Status = "RESEND"
+/// - Resend email:        Status = "SENT", SendEmail = true  (the API rejects "RESEND"; valid statuses are DRAFT, SENT, PAID, CANCELLED, CREDIT, DELETED)
 /// - Cancel claim:        Status = "CANCEL_CLAIM"
 /// - Payment extension:   FinalDueDate
 /// - Cancel invoice:      Status = "CANCELLED"
@@ -14,7 +14,7 @@ namespace Workit.Shared.Payday;
 /// </summary>
 public sealed class UpdateInvoiceRequest
 {
-    /// <summary>PAID | CANCELLED | RESEND | CANCEL_CLAIM | DRAFT</summary>
+    /// <summary>DRAFT | SENT | PAID | CANCELLED | CREDIT | DELETED (as Payday enumerates them)</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string?  Status                   { get; set; }
 

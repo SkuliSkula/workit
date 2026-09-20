@@ -32,6 +32,8 @@ internal static class PaydayEndpoints
         payday.MapGet("/customers/{id}",    async (IPaydayCustomersApi api, string id) => ToResult(await api.GetByIdAsync(id)));
         payday.MapPost("/customers",        async (IPaydayCustomersApi api, CreateCustomerRequest body) => ToResult(await api.CreateAsync(body)));
         payday.MapPut("/customers/{id}",    async (IPaydayCustomersApi api, string id, UpdateCustomerRequest body) => ToResult(await api.UpdateAsync(id, body)));
+        payday.MapGet("/customers/{id}/invoices",  async (IPaydayCustomersApi api, string id, int page = 1, int perPage = 25) => ToResult(await api.GetInvoicesAsync(id, page, perPage)));
+        payday.MapGet("/customers/{id}/statement", async (IPaydayCustomersApi api, string id, string dateFrom, string dateTo, int page = 1, int perPage = 100) => ToResult(await api.GetAccountStatementAsync(id, dateFrom, dateTo, page, perPage)));
 
         // ── Employees ─────────────────────────────────────────────────────────
         payday.MapGet("/employees",         async (IPaydayEmployeesApi api) => ToResult(await api.GetAllAsync()));

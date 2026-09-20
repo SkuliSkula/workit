@@ -8,6 +8,10 @@ public interface IPaydayCustomersApi
     Task<ApiResult<PaydayCustomer>> GetByIdAsync(string customerId);
     Task<ApiResult<PaydayCustomer>> CreateAsync(CreateCustomerRequest request);
     Task<ApiResult<PaydayCustomer>> UpdateAsync(string customerId, UpdateCustomerRequest request);
+    /// <summary>The customer's invoices, newest first.</summary>
+    Task<ApiResult<PaydayInvoicesResponse>> GetInvoicesAsync(string customerId, int page = 1, int perPage = 25);
+    /// <summary>The customer's receivables ledger for a date range, with running balance.</summary>
+    Task<ApiResult<PaydayAccountStatement>> GetAccountStatementAsync(string customerId, string dateFrom, string dateTo, int page = 1, int perPage = 100);
 }
 
 internal sealed class PaydayCustomersApi(IHttpClientFactory httpClientFactory, IPaydayTokenService tokenService)
@@ -24,4 +28,10 @@ internal sealed class PaydayCustomersApi(IHttpClientFactory httpClientFactory, I
 
     public Task<ApiResult<PaydayCustomer>> UpdateAsync(string customerId, UpdateCustomerRequest request) =>
         PutForJsonAsync<UpdateCustomerRequest, PaydayCustomer>($"customers/{customerId}", request, "Failed to update customer.");
+
+    public Task<ApiResult<PaydayInvoicesResponse>> GetInvoicesAsync(string customerId, int page = 1, int perPage = 25) =>
+        GetAsync<PaydayInvoicesResponse>($"customers/{customerId}/invoice?perpage={perPage}&page={page}&include=lines", "The customer's invoices could not be loaded right now.");
+
+    public Task<ApiResult<PaydayAccountStatement>> GetAccountStatementAsync(string customerId, string dateFrom, string dateTo, int page = 1, int perPage = 100) =>
+        GetAsync<PaydayAccountStatement>($"customers/{customerId}/accountStatement?dateFrom={dateFrom}&dateTo={dateTo}&perpage={perPage}&page={page}", "The account statement could not be loaded right now.");
 }

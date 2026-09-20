@@ -9,6 +9,7 @@
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IAuthApi AuthApi
+@inject IPaydayInvoicesApi PaydayInvoicesApi
 
 <PageTitle>Home</PageTitle>
 
@@ -153,6 +154,14 @@ else
                 <div class="invoice-progress" aria-hidden="true">
                     <div class="invoice-progress-fill" style="@($"width:{invoicedPercent:0.##}%")"></div>
                 </div>
+                @* Money side, from Payday: what has been invoiced but not yet paid. *@
+                @if (paydayOutstanding is decimal outstanding)
+                {
+                    <span class="kpi-foot" style="margin-top:0.35rem;">
+                        <a href="/payday/invoices" style="color:inherit;">@outstanding.ToString("N0") kr. outstanding in Payday</a>
+                        @(paydayOpenCount > 0 ? $" · {paydayOpenCount} open" : "")
+                    </span>
+                }
             </FluentCard>
 
             <FluentCard Class="kpi-card">
@@ -445,6 +454,9 @@ else
 @code {
     private LoginResponse? session;
     private Company? company;
+    /// <summary>Unpaid total of the company's SENT invoices in Payday; null when not connected or unavailable.</summary>
+    private decimal? paydayOutstanding;
+    private int paydayOpenCount;
     private bool isLoading = true;
     private string? loadError;
 
@@ -502,6 +514,17 @@ else
         .Where(x => timeEntries.Any(entry => entry.EmployeeId == x.Id && EntryMatchesSelectedCustomerAndJob(entry)))
         .OrderBy(x => x.DisplayName)
         .ToList();
+
+    private async Task LoadPaydayOutstandingAsync()
+    {
+        var result = await PaydayInvoicesApi.GetAllAsync(page: 1, perPage: 1, include: null, excludeStatus: "DRAFT,CANCELLED,PAID");
+        if (result.IsSuccess && result.Value?.Summary is { } summary)
+        {
+            paydayOutstanding = summary.UnpaidAmount;
+            paydayOpenCount   = summary.TotalCount;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -573,6 +596,12 @@ else
             userCompanies = companiesResult.IsSuccess && companiesResult.Value is not null
                 ? companiesResult.Value
                 : [company];
+
+            // Fire-and-forget style: the tile fills in when Payday answers; the
+            // rest of the dashboard never waits on it.
+            paydayOutstanding = null; paydayOpenCount = 0;
+            if (company.HasPaydayCredentials)
+                _ = LoadPaydayOutstandingAsync();
 
             var customersResult = await CustomersApi.GetCustomersAsync();
             var employeesResult = await EmployeesApi.GetEmployeesAsync();

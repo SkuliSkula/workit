@@ -260,6 +260,17 @@
                                           title="Mark as paid">✓ Paid</FluentButton>
                         }
 
+                        @if (context.Status == "SENT")
+                        {
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => ResendInvoiceAsync(context))"
+                                          Disabled="@(resendingId == context.Id)"
+                                          title="Send the invoice email again">Resend</FluentButton>
+                            <FluentButton Appearance="Appearance.Stealth"
+                                          @onclick="@(() => BeginExtend(context))"
+                                          title="Give the customer more time to pay">Extend</FluentButton>
+                        }
+
                         @if (context.Status is "SENT" or "DRAFT")
                         {
                             <FluentButton Appearance="Appearance.Stealth"
@@ -310,6 +321,24 @@
 </FluentCard>
 
 @* ── Mark Paid panel ── *@
+@if (extendInvoice is not null)
+{
+    <AppDialog Title="Payment extension" OnClose="@(() => extendInvoice = null)" Busy="extending">
+        <p style="margin:0 0 0.75rem;">
+            Invoice <strong>#@(extendInvoice.Number?.ToString() ?? "–")</strong> — current final due date
+            <strong>@(extendInvoice.FinalDueDate?.ToString("d MMM yyyy") ?? "—")</strong>.
+        </p>
+        <FluentDatePicker Label="New final due date" @bind-Value="extendTo" />
+        <p style="margin:0.75rem 0 0; color:#60758b; font-size:0.9rem;">
+            Payday moves the final due date; a bank claim on the invoice is updated too.
+        </p>
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => extendInvoice = null)" Disabled="@extending">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="ConfirmExtendAsync" Disabled="@(extending || extendTo is null)">Extend</FluentButton>
+        </div>
+    </AppDialog>
+}
+
 @if (markPaidInvoice is not null)
 {
     <AppDialog Title="Mark Invoice as Paid" OnClose="CancelMarkPaid" Busy="markingPaid">
@@ -514,6 +543,12 @@
     private DateTime?      markPaidDate = DateTime.Today;
     private bool           markingPaid;
     private string?        markPaidError;
+
+    // ── Resend / extend state ─────────────────────────────────────────────────
+    private Guid resendingId;
+    private PaydayInvoice? extendInvoice;
+    private DateTime? extendTo;
+    private bool extending;
 
     // ── Cancel / delete state ─────────────────────────────────────────────────
     private bool  cancelling;
@@ -757,6 +792,48 @@
         {
             markingPaid = false;
         }
+    }
+
+    // ── Resend email ──────────────────────────────────────────────────────────
+    private async Task ResendInvoiceAsync(PaydayInvoice invoice)
+    {
+        using var busy = Busy.Begin("Resending invoice email…");
+        resendingId = invoice.Id; actionError = null;
+        try
+        {
+            // Payday rejects Status "RESEND" (valid: DRAFT, SENT, PAID, CANCELLED, CREDIT,
+            // DELETED) despite the docs; re-sending is the SENT status with sendEmail.
+            var result = await InvoicesApi.UpdateAsync(invoice.Id.ToString(), new UpdateInvoiceRequest { Status = "SENT", SendEmail = true });
+            if (result.IsSuccess) actionResult = $"✓ Invoice #{invoice.Number?.ToString() ?? "–"} sent again to {invoice.Customer?.Email ?? "the customer"}.";
+            else actionError = result.ErrorMessage ?? "Could not resend the invoice.";   // Payday: "Resend not allowed" when there is no email
+        }
+        finally { resendingId = Guid.Empty; }
+    }
+
+    // ── Payment extension ─────────────────────────────────────────────────────
+    private void BeginExtend(PaydayInvoice invoice)
+    {
+        extendInvoice = invoice;
+        extendTo = (invoice.FinalDueDate ?? DateTime.Today).AddDays(14);
+    }
+
+    private async Task ConfirmExtendAsync()
+    {
+        if (extendInvoice is null || extendTo is null) return;
+        using var busy = Busy.Begin("Extending payment…");
+        extending = true; actionError = null;
+        try
+        {
+            var result = await InvoicesApi.UpdateAsync(extendInvoice.Id.ToString(), new UpdateInvoiceRequest { FinalDueDate = extendTo.Value.ToString("yyyy-MM-dd") });
+            if (result.IsSuccess)
+            {
+                actionResult = $"✓ Invoice #{extendInvoice.Number?.ToString() ?? "–"} final due date moved to {extendTo.Value:d MMM yyyy}.";
+                extendInvoice = null;
+                await LoadInvoicesAsync();
+            }
+            else actionError = result.ErrorMessage ?? "Could not extend the payment.";
+        }
+        finally { extending = false; }
     }
 
     // ── Cancel ────────────────────────────────────────────────────────────────
