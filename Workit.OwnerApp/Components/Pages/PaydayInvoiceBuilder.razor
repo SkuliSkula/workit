@@ -11,6 +11,7 @@
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
 @inject IExpensesApi ExpensesApi
+@inject IPaydayProductsCacheApi PaydayProductsApi
 @inject NavigationManager Navigation
 
 @using System.Text.Json
@@ -270,14 +271,36 @@
             <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => { currentStep = WizardStep.SelectJobs; })">← Back</FluentButton>
         </div>
 
-        <div style="display:flex; align-items:center; gap:1rem; margin:0.75rem 0; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-                <FluentLabel Style="font-size:0.85rem;">Overtime multiplier:</FluentLabel>
-                <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1m" Style="width:80px;" />
+        @* Prices, VAT and ledger accounts come from Payday products (Payday → Products).
+           Until every labor/material line has one, the invoice can't be created — a
+           free-text line would land on the wrong ledger account and miss stock. *@
+        @if (UnmappedLines.Count > 0)
+        {
+            <div style="margin:0.75rem 0; padding:0.75rem 1rem; border-radius:8px; background:#fef3c7; border:1px solid #fcd34d; font-size:0.9rem;">
+                <strong style="color:#92400e;">@UnmappedLines.Count line@(UnmappedLines.Count == 1 ? "" : "s") without a Payday product.</strong>
+                <span style="color:#78350f;">
+                    Map @(string.Join(", ", MissingRoleLabels)) under
+                    <a href="/payday/products">Payday → Products</a>@(MissingMaterialNames.Count > 0 ? $" and link {string.Join(", ", MissingMaterialNames)} under Materials" : "").
+                    Prices shown for those lines are Workit's old rates and will not be sent.
+                </span>
             </div>
-            <FluentButton Appearance="Appearance.Accent" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
-                Recalculate overtime
-            </FluentButton>
+        }
+        else if (invoiceLines.Count > 0)
+        {
+            <FluentLabel Style="font-size:0.8rem; color:#047857; margin:0.5rem 0;">✓ Every line is priced from a Payday product.</FluentLabel>
+        }
+
+        <div style="display:flex; align-items:center; gap:1rem; margin:0.75rem 0; flex-wrap:wrap;">
+            @if (OvertimeProduct is null)
+            {
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <FluentLabel Style="font-size:0.85rem;">Overtime multiplier:</FluentLabel>
+                    <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1m" Style="width:80px;" />
+                </div>
+                <FluentButton Appearance="Appearance.Accent" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
+                    Recalculate overtime
+                </FluentButton>
+            }
             <FluentButton Appearance="Appearance.Accent" @onclick="@(() => invoiceLines.Add(new InvoiceLineForm()))" Size="ButtonSize.Small">
                 + Add line
             </FluentButton>
@@ -291,6 +314,14 @@
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Description</FluentLabel>
                     <FluentTextField @bind-Value="line.Description" Style="width:100%" />
+                    @if (line.ProductId is not null)
+                    {
+                        <span title="Payday product" style="font-family:monospace; font-size:0.72rem; color:#1d6fb8;">@line.Sku</span>
+                    }
+                    else if (line.NeedsProduct)
+                    {
+                        <span style="font-size:0.72rem; color:#b45309;">no Payday product</span>
+                    }
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Qty</FluentLabel>
@@ -309,7 +340,7 @@
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">VAT %</FluentLabel>
                     <FluentSelect TValue="string" TOption="string"
-                                  Value="@line.VatPercentage.ToString()"
+                                  Value="@line.VatPercentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)"
                                   ValueChanged="@(v => line.VatPercentage = decimal.TryParse(v, out var d) ? d : 24m)"
                                   Style="width:100%">
                         <FluentOption TOption="string" Value="0">0%</FluentOption>
@@ -416,6 +447,12 @@
                 <FluentLabel Color="Color.Error" Style="margin-top:0.75rem;">@createError</FluentLabel>
             }
 
+            @if (UnmappedLines.Count > 0)
+            {
+                <FluentLabel Color="Color.Warning" Style="margin-top:0.75rem;">
+                    @UnmappedLines.Count line@(UnmappedLines.Count == 1 ? " has" : "s have") no Payday product — go back to the lines and map them under Payday → Products first.
+                </FluentLabel>
+            }
             <div style="display:flex; gap:0.75rem; margin-top:1.25rem;">
                 <FluentButton Appearance="Appearance.Accent"
                               @onclick="CreateInvoiceInPaydayAsync"
@@ -518,6 +555,30 @@
     private List<InvoiceLineForm> invoiceLines = [];
     private decimal overtimeMultiplier = 1.8m;
 
+    // Payday product cache: the three labor roles plus every product by Payday id (for material links).
+    private List<PaydayProductCache> paydayProducts = [];
+    private PaydayProductCache? RoleProduct(PaydayProductRole role) => paydayProducts.FirstOrDefault(p => !p.Archived && p.Role == role);
+    private PaydayProductCache? RegularProduct  => RoleProduct(PaydayProductRole.RegularHour);
+    private PaydayProductCache? OvertimeProduct => RoleProduct(PaydayProductRole.OvertimeHour);
+    private PaydayProductCache? DrivingProduct  => RoleProduct(PaydayProductRole.DrivingUnit);
+    private PaydayProductCache? ProductFor(Material? m) =>
+        m?.PaydayProductId is Guid id ? paydayProducts.FirstOrDefault(p => p.PaydayId == id && !p.Archived) : null;
+
+    private List<InvoiceLineForm> UnmappedLines => invoiceLines.Where(l => l.NeedsProduct && l.ProductId is null).ToList();
+    private List<string> MissingRoleLabels
+    {
+        get
+        {
+            var labels = new List<string>();
+            if (UnmappedLines.Any(l => l.LineType == "labor"))    labels.Add("Regular hour");
+            if (UnmappedLines.Any(l => l.LineType == "overtime")) labels.Add("Overtime hour");
+            if (UnmappedLines.Any(l => l.LineType == "driving"))  labels.Add("Driving unit");
+            return labels;
+        }
+    }
+    private List<string> MissingMaterialNames =>
+        UnmappedLines.Where(l => l.LineType == "material").Select(l => l.MaterialName ?? l.Description).Distinct().ToList();
+
     // ── Step 4 state ─────────────────────────────────────────────────────────
     private List<PaydayCustomer> paydayCustomers = [];
     private bool paydayLoading;
@@ -535,7 +596,8 @@
         invoiceDate is not null &&
         dueDate is not null &&
         finalDueDate is not null &&
-        invoiceLines.Count > 0;
+        invoiceLines.Count > 0 &&
+        UnmappedLines.Count == 0;   // every labor/material line prices from a Payday product
 
     // ── Step 5 state ─────────────────────────────────────────────────────────
     private PaydayInvoice? createdInvoice;
@@ -576,6 +638,12 @@
         public decimal VatPercentage { get; set; } = 24m;
         public decimal DiscountPercentage { get; set; }
         public string LineType { get; set; } = string.Empty; // "labor", "overtime", "driving", "material", "expense", "manual"
+
+        // The Payday product the line bills as; price/VAT above were taken from it.
+        public Guid?   ProductId { get; set; }
+        public string? Sku       { get; set; }
+        /// <summary>Labor, driving and material lines must carry a product; expenses and manual lines need not.</summary>
+        public bool NeedsProduct => LineType is "labor" or "overtime" or "driving" or "material";
         public string JobCode { get; set; } = string.Empty;  // for regeneration
         public Guid EmployeeId { get; set; }                 // for overtime regeneration
 
@@ -583,6 +651,7 @@
         public Guid?   ExpenseLineId { get; set; }
         public Guid?   JobId         { get; set; }
         public decimal MaxQuantity   { get; set; }           // remaining billable qty on the source expense line
+        public string? MaterialName  { get; set; }           // for the "link X under Materials" hint
     }
 
     private sealed class EmployeeHours
@@ -611,8 +680,11 @@
         var employeesTask = EmployeesApi.GetEmployeesAsync();
         var materialsTask = MaterialsApi.GetMaterialsAsync();
         var companyTask = CompanyApi.GetCompanyAsync();
+        var productsTask = PaydayProductsApi.GetProductsAsync(includeArchived: true);
 
-        await Task.WhenAll(customersTask, jobsTask, employeesTask, materialsTask, companyTask);
+        await Task.WhenAll(customersTask, jobsTask, employeesTask, materialsTask, companyTask, productsTask);
+        var pr = await productsTask;
+        if (pr.IsSuccess) paydayProducts = pr.Value ?? [];
 
         var cr = await customersTask;
         if (cr.IsSuccess) allCustomers = cr.Value ?? [];
@@ -859,14 +931,19 @@
                         ? $" · {task.Code} {task.Name}"
                         : string.Empty;
 
+                    // Price and VAT come from the role product; the per-employee rate
+                    // is only a stand-in while the owner has not mapped one yet.
                     if (hours > 0)
                     {
+                        var product = RegularProduct;
                         invoiceLines.Add(new InvoiceLineForm
                         {
                             Description = (string.IsNullOrWhiteSpace(trade) ? "Vinna" : $"Vinna {trade}") + taskSuffix,
                             Quantity = hours,
-                            UnitPriceExcludingVat = Math.Round(rate, 0, MidpointRounding.AwayFromZero),
-                            VatPercentage = 24m,
+                            UnitPriceExcludingVat = product?.SalePriceExVat ?? Math.Round(rate, 0, MidpointRounding.AwayFromZero),
+                            VatPercentage = product?.VatPercentage ?? 24m,
+                            ProductId = product?.PaydayId,
+                            Sku = product?.Sku,
                             LineType = "labor",
                             JobCode = code,
                             EmployeeId = group.Key.EmployeeId
@@ -875,12 +952,15 @@
 
                     if (ot > 0)
                     {
+                        var product = OvertimeProduct;
                         invoiceLines.Add(new InvoiceLineForm
                         {
                             Description = (string.IsNullOrWhiteSpace(trade) ? "Yfirvinna" : $"Yfirvinna {trade}") + taskSuffix,
                             Quantity = ot,
-                            UnitPriceExcludingVat = Math.Round(rate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
-                            VatPercentage = 24m,
+                            UnitPriceExcludingVat = product?.SalePriceExVat ?? Math.Round(rate * overtimeMultiplier, 0, MidpointRounding.AwayFromZero),
+                            VatPercentage = product?.VatPercentage ?? 24m,
+                            ProductId = product?.PaydayId,
+                            Sku = product?.Sku,
                             LineType = "overtime",
                             JobCode = code,
                             EmployeeId = group.Key.EmployeeId
@@ -892,26 +972,35 @@
             // Driving (one line per job — driving units are already an int)
             if (js.TotalDrivingUnits > 0)
             {
+                var product = DrivingProduct;
                 invoiceLines.Add(new InvoiceLineForm
                 {
                     Description = "Akstur",
                     Quantity = js.TotalDrivingUnits,
-                    UnitPriceExcludingVat = Math.Round(drivingUnitPrice, 0, MidpointRounding.AwayFromZero),
-                    VatPercentage = 24m,
+                    UnitPriceExcludingVat = product?.SalePriceExVat ?? Math.Round(drivingUnitPrice, 0, MidpointRounding.AwayFromZero),
+                    VatPercentage = product?.VatPercentage ?? 24m,
+                    ProductId = product?.PaydayId,
+                    Sku = product?.Sku,
                     LineType = "driving",
                     JobCode = code
                 });
             }
 
             // Materials — one line per material
+            // Quantity is the real quantity (not 1 × total): Payday takes the line's
+            // quantity out of the product's stock when the invoice is issued.
             foreach (var mat in js.Materials)
             {
+                var product = ProductFor(allMaterials.FirstOrDefault(m => m.Id == mat.MaterialId));
                 invoiceLines.Add(new InvoiceLineForm
                 {
-                    Description = $"Efni — {mat.Name} ({mat.Quantity:0.##} {mat.Unit})",
-                    Quantity = 1,
-                    UnitPriceExcludingVat = Math.Round(mat.Quantity * mat.UnitPrice, 0, MidpointRounding.AwayFromZero),
-                    VatPercentage = mat.VatRate,
+                    Description = product is not null ? $"{mat.Name} ({mat.Unit})" : $"Efni — {mat.Name} ({mat.Quantity:0.##} {mat.Unit})",
+                    Quantity = product is not null ? mat.Quantity : 1,
+                    UnitPriceExcludingVat = product?.SalePriceExVat ?? Math.Round(mat.Quantity * mat.UnitPrice, 0, MidpointRounding.AwayFromZero),
+                    VatPercentage = product?.VatPercentage ?? mat.VatRate,
+                    ProductId = product?.PaydayId,
+                    Sku = product?.Sku,
+                    MaterialName = mat.Name,
                     LineType = "material",
                     JobCode = code
                 });
@@ -1023,6 +1112,12 @@
         if (!Guid.TryParse(selectedPaydayCustomerIdStr, out var paydayCustomerId)) return;
         if (invoiceDate is null || dueDate is null || finalDueDate is null) return;
 
+        if (UnmappedLines.Count > 0)
+        {
+            createError = "Some lines have no Payday product yet. Map them under Payday → Products (and Materials), then generate the lines again.";
+            return;
+        }
+
         creating = true;
         createError = null;
 
@@ -1043,7 +1138,9 @@
                     Quantity = l.Quantity,
                     UnitPriceExcludingVat = l.UnitPriceExcludingVat,
                     VatPercentage = l.VatPercentage,
-                    DiscountPercentage = l.DiscountPercentage
+                    DiscountPercentage = l.DiscountPercentage,
+                    ProductId = l.ProductId,
+                    Sku = l.Sku
                 }).ToList()
             };
 
