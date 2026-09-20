@@ -3,8 +3,8 @@ using Workit.Shared.Api;
 namespace Workit.Shared.Payday;
 
 /// <summary>
-/// Read side of Payday's product list. Workit never creates, edits or deletes
-/// products in v1 — the owner does that in Payday — so this client only reads.
+/// Payday's product list. Workit never edits or deletes products — the owner
+/// does that in Payday — and creates them only during the materials migration.
 /// </summary>
 public interface IPaydayProductsApi
 {
@@ -14,6 +14,8 @@ public interface IPaydayProductsApi
     Task<ApiResult<PaydayProduct>> GetBySkuAsync(string sku);
     Task<ApiResult<PaydayProductMovementsResponse>> GetMovementsAsync(Guid id, int page = 1, int perPage = 100);
     Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync();
+    /// <summary>Creates a product; only the materials migration calls this.</summary>
+    Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request);
 }
 
 internal sealed class PaydayProductsApi(IHttpClientFactory httpClientFactory, IPaydayTokenService tokenService)
@@ -37,4 +39,7 @@ internal sealed class PaydayProductsApi(IHttpClientFactory httpClientFactory, IP
 
     public Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync() =>
         GetAsync<List<PaydayLedgerAccount>>("products/salesLedgerAccounts", "Ledger accounts could not be loaded right now.");
+
+    public Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request) =>
+        PostForJsonAsync<CreateProductRequest, PaydayProduct>("products", request, "The product could not be created in Payday right now.");
 }

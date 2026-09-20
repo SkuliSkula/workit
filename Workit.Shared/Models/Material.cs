@@ -42,6 +42,13 @@ public sealed class Material
     /// </summary>
     public Guid? PaydayProductId { get; set; }
 
+    /// <summary>
+    /// Quantity logged on jobs but not yet invoiced — the part of the stock
+    /// Payday still shows as on hand although it is already used. Computed
+    /// on read, not stored.
+    /// </summary>
+    public decimal UninvoicedQuantity { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>

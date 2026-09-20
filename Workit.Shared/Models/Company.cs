@@ -21,6 +21,14 @@ public sealed class Company
     public string PayrollOvertimeItemName { get; set; } = "Yfirvinna";
     public string PayrollDrivingItemName  { get; set; } = string.Empty;
 
+    /// <summary>
+    /// When true, Payday's product list is the materials list: Workit mirrors
+    /// the Material-role products into <c>Materials</c>, refuses material
+    /// create/edit/delete, and leaves stock to Payday (the invoice consumes it).
+    /// Switched on per company by the migration, never by default.
+    /// </summary>
+    public bool MaterialsManagedInPayday { get; set; }
+
     public string ZipCode { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;

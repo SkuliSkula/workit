@@ -1,7 +1,8 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Data;
-using Workit.Api.Endpoints;
+using Microsoft.Extensions.Logging.Abstractions;
+using Workit.Api.Payday;
 using Workit.Shared.Api;
 using Workit.Shared.Models;
 using Workit.Shared.Payday;
@@ -37,10 +38,19 @@ public class PaydayProductSyncTests
         public Task<ApiResult<PaydayProduct>> GetBySkuAsync(string sku) => throw new NotSupportedException();
         public Task<ApiResult<PaydayProductMovementsResponse>> GetMovementsAsync(Guid id, int page = 1, int perPage = 100) => throw new NotSupportedException();
         public Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync() => throw new NotSupportedException();
+        public Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request) => throw new NotSupportedException();
     }
 
-    private static WorkitDbContext NewDb() =>
-        new(new DbContextOptionsBuilder<WorkitDbContext>().UseInMemoryDatabase($"pdsync-{Guid.NewGuid()}").Options);
+    private static PaydayProductSyncService Service(WorkitDbContext db, IPaydayProductsApi payday) =>
+        new(db, payday, NullLogger<PaydayProductSyncService>.Instance);
+
+    private static WorkitDbContext NewDb()
+    {
+        var db = new WorkitDbContext(new DbContextOptionsBuilder<WorkitDbContext>().UseInMemoryDatabase($"pdsync-{Guid.NewGuid()}").Options);
+        db.Companies.Add(new Company { Id = CompanyId, Name = "Test" });
+        db.SaveChanges();
+        return db;
+    }
 
     private static PaydayProduct Cable(Guid id, decimal? qty = 100) => new()
     {
@@ -62,7 +72,7 @@ public class PaydayProductSyncTests
         var cable = Guid.NewGuid(); var labor = Guid.NewGuid();
         var payday = new FakeProducts([Cable(cable)], [Labor(labor)]);
 
-        var outcome = await PaydayProductEndpoints.SyncAsync(db, payday, CompanyId, CancellationToken.None);
+        var outcome = await Service(db, payday).SyncAsync(CompanyId, CancellationToken.None);
 
         outcome.Error.Should().BeNull();
         outcome.Result!.Fetched.Should().Be(2);
@@ -85,7 +95,7 @@ public class PaydayProductSyncTests
     {
         await using var db = NewDb();
         var cable = Guid.NewGuid(); var labor = Guid.NewGuid();
-        await PaydayProductEndpoints.SyncAsync(db, new FakeProducts([Cable(cable), Labor(labor)]), CompanyId, CancellationToken.None);
+        await Service(db, new FakeProducts([Cable(cable), Labor(labor)])).SyncAsync(CompanyId, CancellationToken.None);
 
         // The owner assigns roles and a unit, then Payday changes the price and drops the labor product.
         var laborRow = await db.PaydayProducts.SingleAsync(p => p.PaydayId == labor);
@@ -95,7 +105,7 @@ public class PaydayProductSyncTests
         await db.SaveChangesAsync();
 
         var repriced = Cable(cable, qty: 83); repriced.SalesUnitPriceExcludingVAT = 1600;
-        var outcome = await PaydayProductEndpoints.SyncAsync(db, new FakeProducts([repriced]), CompanyId, CancellationToken.None);
+        var outcome = await Service(db, new FakeProducts([repriced])).SyncAsync(CompanyId, CancellationToken.None);
 
         outcome.Result!.Should().BeEquivalentTo(new { Fetched = 1, Added = 0, Updated = 1, Archived = 1 });
         cableRow = await db.PaydayProducts.SingleAsync(p => p.PaydayId == cable);
@@ -116,7 +126,7 @@ public class PaydayProductSyncTests
         db.PaydayProducts.Add(new PaydayProductCache { CompanyId = other, PaydayId = Guid.NewGuid(), Sku = "OTHER", Name = "Other company's" });
         await db.SaveChangesAsync();
 
-        await PaydayProductEndpoints.SyncAsync(db, new FakeProducts([Cable(Guid.NewGuid())]), CompanyId, CancellationToken.None);
+        await Service(db, new FakeProducts([Cable(Guid.NewGuid())])).SyncAsync(CompanyId, CancellationToken.None);
 
         var otherRow = await db.PaydayProducts.SingleAsync(p => p.CompanyId == other);
         otherRow.Archived.Should().BeFalse();                   // never touched by another company's sync
@@ -126,9 +136,9 @@ public class PaydayProductSyncTests
     public async Task Sync_WhenPaydayFails_ChangesNothing_AndReturnsPaydaysMessage()
     {
         await using var db = NewDb();
-        await PaydayProductEndpoints.SyncAsync(db, new FakeProducts([Cable(Guid.NewGuid())]), CompanyId, CancellationToken.None);
+        await Service(db, new FakeProducts([Cable(Guid.NewGuid())])).SyncAsync(CompanyId, CancellationToken.None);
 
-        var outcome = await PaydayProductEndpoints.SyncAsync(db, new FakeProducts([]) { FailWith = "Client authentication failed" }, CompanyId, CancellationToken.None);
+        var outcome = await Service(db, new FakeProducts([]) { FailWith = "Client authentication failed" }).SyncAsync(CompanyId, CancellationToken.None);
 
         outcome.Result.Should().BeNull();
         outcome.Error.Should().Be("Client authentication failed");

@@ -10,6 +10,15 @@ namespace Workit.Api.Endpoints;
 
 internal static class MaterialEndpoints
 {
+    internal const string ManagedMessage = "Materials are managed in Payday for this company. Add, change or archive products in Payday; they sync here.";
+
+    /// <summary>True once the company has switched its materials over to Payday products.</summary>
+    internal static async Task<bool> ManagedInPaydayAsync(WorkitDbContext db, HttpContext http, CancellationToken ct)
+    {
+        var companyId = http.User.ToUserContext().CompanyId;
+        return await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.MaterialsManagedInPayday).FirstOrDefaultAsync(ct);
+    }
+
     internal static void MapMaterialEndpoints(this WebApplication app)
     {
         var securedApi = app.MapGroup("/api").RequireAuthorization().WithTags("Materials");
@@ -28,6 +37,16 @@ internal static class MaterialEndpoints
                         query = query.Where(x => x.IsActive);
 
                     var materials = await query.OrderBy(x => x.Category).ThenBy(x => x.Name).ToListAsync(ct);
+
+                    // Logged but not yet invoiced: the gap between Payday's stock and reality.
+                    var uninvoiced = await db.MaterialUsages
+                        .Where(u => u.CompanyId == userContext.CompanyId && !u.IsInvoiced)
+                        .GroupBy(u => u.MaterialId)
+                        .Select(g => new { MaterialId = g.Key, Quantity = g.Sum(u => u.Quantity) })
+                        .ToDictionaryAsync(g => g.MaterialId, g => g.Quantity, ct);
+                    foreach (var m in materials)
+                        m.UninvoicedQuantity = uninvoiced.GetValueOrDefault(m.Id);
+
                     return Results.Ok(materials);
                 },
                 logger,
@@ -39,6 +58,9 @@ internal static class MaterialEndpoints
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
                         return Results.Forbid();
+
+                    if (await ManagedInPaydayAsync(db, httpContext, ct))
+                        return Results.Conflict(ManagedMessage);
 
                     if (string.IsNullOrWhiteSpace(material.Name))
                         return Results.BadRequest("Material name is required.");
@@ -64,6 +86,9 @@ internal static class MaterialEndpoints
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
                         return Results.Forbid();
+
+                    if (await ManagedInPaydayAsync(db, httpContext, ct))
+                        return Results.Conflict(ManagedMessage);
 
                     if (id != material.Id)
                         return Results.BadRequest("Material id mismatch.");
@@ -102,6 +127,9 @@ internal static class MaterialEndpoints
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
                         return Results.Forbid();
+
+                    if (await ManagedInPaydayAsync(db, httpContext, ct))
+                        return Results.Conflict(ManagedMessage);
 
                     var userContext = httpContext.User.ToUserContext();
                     var existing = await db.Materials.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
@@ -179,8 +207,10 @@ internal static class MaterialEndpoints
                     if (req.JobId is Guid jobId && await FindUsableJobAsync(db, userContext, jobId, ct) is null)
                         return Results.BadRequest("You are not assigned to that job.");
 
-                    // Deduct from stock
-                    material.Quantity = Math.Max(0, material.Quantity - req.Quantity);
+                    // Deduct from stock — unless Payday owns it, in which case the invoice
+                    // consumes it later and Workit only reports "logged, not invoiced".
+                    if (!await ManagedInPaydayAsync(db, httpContext, ct))
+                        material.Quantity = Math.Max(0, material.Quantity - req.Quantity);
 
                     var usage = new MaterialUsage
                     {
@@ -221,7 +251,7 @@ internal static class MaterialEndpoints
 
                     // Logging took the quantity out of stock; deleting puts it back.
                     var material = await db.Materials.FirstOrDefaultAsync(x => x.Id == usage.MaterialId && x.CompanyId == userContext.CompanyId, ct);
-                    if (material is not null)
+                    if (material is not null && !await ManagedInPaydayAsync(db, httpContext, ct))
                         material.Quantity += usage.Quantity;
 
                     db.MaterialUsages.Remove(usage);

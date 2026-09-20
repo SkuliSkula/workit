@@ -246,6 +246,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Sku });
         modelBuilder.Entity<PaydayProductCache>()
             .Ignore(x => x.IsStockTracked);
+        modelBuilder.Entity<Material>()
+            .Ignore(x => x.UninvoicedQuantity);
 
         // ── Payroll exports ───────────────────────────────────────────────────
         modelBuilder.Entity<PayrollExport>().ToTable("PayrollExports");

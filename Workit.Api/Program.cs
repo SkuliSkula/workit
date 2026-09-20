@@ -168,6 +168,9 @@ else
 // Owner app using each company's encrypted credentials (see PaydayEndpoints).
 // Payday:BaseUrl switches every Payday call (token included) to the sandbox for local runs.
 builder.Services.AddPaydayApiClients(builder.Configuration["Payday:BaseUrl"]);
+builder.Services.AddScoped<Workit.Api.Payday.PaydayProductSyncService>();
+builder.Services.AddScoped<Workit.Api.Payday.MaterialsMigrationService>();
+builder.Services.AddHostedService<Workit.Api.Payday.PaydayProductSyncBackgroundService>();
 
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
