@@ -2,6 +2,8 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IMaterialsApi MaterialsApi
 @inject IPaydayProductsCacheApi PaydayProducts
+@inject ICompanyApi CompanyApi
+@inject BusyService Busy
 @inject NavigationManager Nav
 
 <PageTitle>Materials</PageTitle>
@@ -9,10 +11,26 @@
 @* ── Header ── *@
 <FluentCard Class="admin-card" AreaRestricted="false">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-        <FluentLabel Typo="Typography.PaneHeader">Materials</FluentLabel>
-        <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
-            @(showCreateForm ? "✕ Cancel" : "+ New")
-        </FluentButton>
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Materials</FluentLabel>
+            @if (Managed)
+            {
+                <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                    Managed in Payday — this list mirrors your Payday products with the Material role and refreshes every half hour.
+                    Add, change or archive products in Payday; stock moves when invoices are issued.
+                </FluentLabel>
+            }
+        </div>
+        @if (Managed)
+        {
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Nav.NavigateTo("/payday/products"))">Payday → Products</FluentButton>
+        }
+        else
+        {
+            <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
+                @(showCreateForm ? "✕ Cancel" : "+ New")
+            </FluentButton>
+        }
     </div>
 
     @if (!string.IsNullOrWhiteSpace(loadError))
@@ -20,6 +38,66 @@
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
 </FluentCard>
+
+@* ── Switch-over to Payday products ── *@
+@if (!loading && !Managed && company?.HasPaydayCredentials == true)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false" Style="border-left:4px solid #1d6fb8;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap;">
+            <div style="max-width:60ch;">
+                <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Move materials to Payday</FluentLabel>
+                <FluentLabel Style="color:#60758b; font-size:0.9rem; margin-top:0.25rem;">
+                    One list instead of two: each material becomes (or is linked to) a Payday product by its product code, with today's
+                    stock as the opening balance. From then on Payday holds the prices and the stock, and this page only shows them.
+                    Preview first — nothing changes until you switch over.
+                </FluentLabel>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+                <FluentButton Appearance="Appearance.Outline" @onclick="@(() => RunMigrationAsync(dryRun: true))">Preview</FluentButton>
+                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => confirmSwitch = true)" Disabled="@(migration is null || migration.Conflicts > 0)">Switch over</FluentButton>
+            </div>
+        </div>
+        @if (migration is not null)
+        {
+            <FluentLabel Style="margin-top:0.75rem; font-size:0.9rem;">
+                <strong>@migration.Linked</strong> will be linked to existing Payday products ·
+                <strong>@migration.Created</strong> will be created in Payday ·
+                <strong>@migration.AlreadyLinked</strong> already linked ·
+                <strong style="@(migration.Conflicts > 0 ? "color:#b91c1c;" : "")">@migration.Conflicts</strong> @(migration.Conflicts == 1 ? "conflict" : "conflicts")
+            </FluentLabel>
+            @if (migration.Conflicts > 0)
+            {
+                <FluentLabel Style="color:#b91c1c; font-size:0.85rem;">Fix the conflicts below and preview again; the switch is only offered when there are none.</FluentLabel>
+            }
+            <div style="overflow-x:auto; margin-top:0.5rem;">
+                <FluentDataGrid TGridItem="MaterialsMigrationRow" Items="@migration.Rows.AsQueryable()" DisplayMode="DataGridDisplayMode.Table">
+                    <TemplateColumn Title="Material"><span>@context.Name</span></TemplateColumn>
+                    <TemplateColumn Title="Code"><span style="font-family:monospace;">@context.ProductCode</span></TemplateColumn>
+                    <TemplateColumn Title="Action">
+                        <span style="@ActionStyle(context.Action)">@ActionLabel(context.Action)</span>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Payday SKU"><span style="font-family:monospace;">@context.Sku</span></TemplateColumn>
+                    <PropertyColumn Property="@(r => r.Message)" Title="" />
+                </FluentDataGrid>
+            </div>
+        }
+    </FluentCard>
+}
+
+@if (confirmSwitch)
+{
+    <AppDialog Title="Switch materials to Payday?" OnClose="@(() => confirmSwitch = false)" Busy="migrating">
+        <p style="margin:0 0 0.75rem;">
+            <strong>@migration?.Created</strong> product@(migration?.Created == 1 ? "" : "s") will be created in Payday and
+            <strong>@migration?.Linked</strong> linked. After this, materials are added and changed in Payday, and stock moves when invoices are issued.
+        </p>
+        <p style="margin:0; color:#60758b; font-size:0.9rem;">This is a one-time switch for the company.</p>
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => confirmSwitch = false)" Disabled="@migrating">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => RunMigrationAsync(dryRun: false))" Disabled="@migrating">Switch over</FluentButton>
+        </div>
+    </AppDialog>
+}
 
 @* ── Add / Edit form ── *@
 @if (showCreateForm || editingMaterial is not null)
@@ -183,6 +261,10 @@
                                 : "color:#059669; font-weight:600;";
                     }
                     <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
+                    @if (context.UninvoicedQuantity > 0)
+                    {
+                        <div style="font-size:0.75rem; color:#b45309;" title="Logged on jobs but not yet invoiced — Payday's stock still includes it">@context.UninvoicedQuantity.ToString("0.##") not invoiced</div>
+                    }
                 </TemplateColumn>
                 <TemplateColumn Title="Payday">
                     @{
@@ -206,10 +288,17 @@
                     <span style="@statusStyle">@(context.IsActive ? "Active" : "Inactive")</span>
                 </TemplateColumn>
                 <TemplateColumn Title="Actions">
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context))">Edit</FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth"
-                                  style="color: var(--error);"
-                                  @onclick="@(() => DeleteMaterialAsync(context))">Delete</FluentButton>
+                    @if (Managed)
+                    {
+                        <span style="color:#9ca3af; font-size:0.85rem;">in Payday</span>
+                    }
+                    else
+                    {
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEdit(context))">Edit</FluentButton>
+                        <FluentButton Appearance="Appearance.Stealth"
+                                      style="color: var(--error);"
+                                      @onclick="@(() => DeleteMaterialAsync(context))">Delete</FluentButton>
+                    }
                 </TemplateColumn>
             </FluentDataGrid>
         </div>
@@ -261,6 +350,42 @@
     private string  formName          = string.Empty;
     private string  formCode          = string.Empty;
     private string  formPaydayProductId = string.Empty;
+    private Company? company;
+    private bool Managed => company?.MaterialsManagedInPayday == true;
+    private MaterialsMigrationResult? migration;
+    private bool confirmSwitch;
+    private bool migrating;
+
+    private static string ActionLabel(MaterialsMigrationAction a) => a switch
+    {
+        MaterialsMigrationAction.Link => "Link", MaterialsMigrationAction.Create => "Create in Payday",
+        MaterialsMigrationAction.AlreadyLinked => "Already linked", MaterialsMigrationAction.Conflict => "Conflict", _ => a.ToString(),
+    };
+    private static string ActionStyle(MaterialsMigrationAction a) => a switch
+    {
+        MaterialsMigrationAction.Conflict => "background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+        MaterialsMigrationAction.Create   => "background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+        _                                 => "background:#d1fae5; color:#065f46; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+    };
+
+    private async Task RunMigrationAsync(bool dryRun)
+    {
+        migrating = true; loadError = string.Empty;
+        try
+        {
+            using var busy = Busy.Begin(dryRun ? "Comparing materials with Payday…" : "Moving materials to Payday…");
+            var result = await PaydayProducts.MigrateMaterialsAsync(dryRun);
+            if (!result.IsSuccess || result.Value is null) { loadError = result.ErrorMessage ?? "The migration could not be run."; return; }
+            migration = result.Value;
+            if (!dryRun)
+            {
+                confirmSwitch = false;
+                if (migration.SwitchedOver) { migration = null; await LoadAsync(); }   // page re-renders as managed
+                else loadError = "Some materials could not be moved; see the conflicts. The company was not switched over.";
+            }
+        }
+        finally { migrating = false; }
+    }
     private readonly List<PaydayProductCache> paydayMaterials = [];
     private readonly Dictionary<Guid, PaydayProductCache> paydayBySku = [];
     private string  formCategory      = Categories[0];
@@ -287,7 +412,10 @@
         loading = true;
         loadError = string.Empty;
         var productsTask = PaydayProducts.GetProductsAsync(includeArchived: true);
+        var companyTask  = CompanyApi.GetCompanyAsync();
         var result = await MaterialsApi.GetMaterialsAsync();
+        var cr = await companyTask;
+        if (cr.IsSuccess) company = cr.Value;
         if (result.IsSuccess)
         {
             allMaterials = result.Value!;

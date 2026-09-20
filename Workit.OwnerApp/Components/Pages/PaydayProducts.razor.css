@@ -1,0 +1,17 @@
+/* The role dropdown lives inside a grid cell. FluentDataGrid gives every td overflow:hidden and
+   a scrolling wrapper clips on both axes, so the open listbox was invisible. Keep both visible
+   and lift the row with the open select above the rows that follow it. */
+.products-grid {
+    overflow: visible;
+}
+
+.products-grid ::deep td,
+.products-grid ::deep fluent-data-grid-cell {
+    overflow: visible;
+}
+
+.products-grid ::deep tr:has(fluent-select[open]),
+.products-grid ::deep fluent-data-grid-row:has(fluent-select[open]) {
+    position: relative;
+    z-index: 5;
+}

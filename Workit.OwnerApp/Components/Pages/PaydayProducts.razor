@@ -73,7 +73,7 @@
     }
     else
     {
-        <div style="overflow-x:auto;">
+        <div class="products-grid">
             <FluentDataGrid TGridItem="PaydayProductCache" Items="@Filtered.AsQueryable()" DisplayMode="DataGridDisplayMode.Table" style="min-width:880px;">
                 <PropertyColumn Property="@(x => x.Sku)"  Title="SKU" Sortable="true" />
                 <TemplateColumn Title="Name" Sortable="true" SortBy="@(GridSort<PaydayProductCache>.ByAscending(x => x.Name))">
