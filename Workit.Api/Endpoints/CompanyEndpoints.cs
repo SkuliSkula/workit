@@ -127,6 +127,26 @@ internal static class CompanyEndpoints
             return Results.Ok();
         }).RequireAuthorization().WithTags("Companies");
 
+        app.MapPut("/api/company/payroll-items", async (
+            UpdatePayrollItemNamesRequest req,
+            WorkitDbContext db,
+            HttpContext httpContext) =>
+        {
+            if (!httpContext.User.IsOwnerOrAdmin())
+                return Results.Forbid();
+            if (string.IsNullOrWhiteSpace(req.RegularItemName) || string.IsNullOrWhiteSpace(req.OvertimeItemName))
+                return Results.BadRequest("Regular and overtime payroll item names are required.");
+
+            var userContext = httpContext.User.ToUserContext();
+            var company = await db.Companies.FindAsync(userContext.CompanyId);
+            if (company is null) return Results.NotFound();
+            company.PayrollRegularItemName  = req.RegularItemName.Trim();
+            company.PayrollOvertimeItemName = req.OvertimeItemName.Trim();
+            company.PayrollDrivingItemName  = req.DrivingItemName?.Trim() ?? string.Empty;
+            await db.SaveChangesAsync();
+            return Results.Ok();
+        }).RequireAuthorization().WithTags("Companies");
+
         // ── Payday credential management ──
 
         app.MapPut("/api/company/payday-credentials", async (

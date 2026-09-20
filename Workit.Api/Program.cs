@@ -280,6 +280,7 @@ app.MapExpenseAutoLinkEndpoints();
 app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapPaydayProductEndpoints();
+app.MapPayrollEndpoints();
 app.MapDevSeedEndpoints();
 
 // ── Startup tasks ──────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@
 @inject IEmployeesApi EmployeesApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject IJobsApi JobsApi
+@inject NavigationManager Navigation
 
 <PageTitle>Payday</PageTitle>
 
@@ -139,41 +140,13 @@
         </div>
     </FluentCard>
 
-    @* ── Timesheet Upload ── *@
+    @* ── Payroll ── *@
     <FluentCard Class="admin-card" AreaRestricted="false">
-        <FluentLabel Typo="Typography.Body"><strong>Upload Timesheet to Payday</strong></FluentLabel>
-        <div class="admin-grid" style="margin-top:0.75rem;">
-            <FluentDatePicker @bind-Value="timesheetFrom" Label="From" />
-            <FluentDatePicker @bind-Value="timesheetTo" Label="To" />
-            <FluentButton Appearance="Appearance.Outline" @onclick="LoadTimesheetPreviewAsync" Disabled="@loadingTimesheet">
-                @(loadingTimesheet ? "Loading…" : "Load Preview")
-            </FluentButton>
-        </div>
-
-        @if (!string.IsNullOrWhiteSpace(timesheetError))
-        {
-            <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@timesheetError</FluentLabel>
-        }
-
-        @if (timesheetRows.Count > 0)
-        {
-            <FluentDataGrid TGridItem="TimesheetPreviewRow" Items="@timesheetRows.AsQueryable()" AutoFit="true" DisplayMode="DataGridDisplayMode.Table" style="margin-top:0.75rem;">
-                <PropertyColumn Property="@(x => x.EmployeeName)" Title="Employee" />
-                <PropertyColumn Property="@(x => x.EmployeeSsn)" Title="SSN" />
-                <PropertyColumn Property="@(x => x.JobName)" Title="Job" />
-                <PropertyColumn Property="@(x => x.Hours)" Title="Hours" Format="0.##" />
-            </FluentDataGrid>
-
-            <div style="margin-top:0.75rem; display:flex; align-items:center; gap:1rem;">
-                <FluentButton Appearance="Appearance.Accent" @onclick="UploadTimesheetAsync" Disabled="@uploadingTimesheet">
-                    @(uploadingTimesheet ? "Uploading…" : $"Upload to Payday ({timesheetRows.Count} lines)")
-                </FluentButton>
-                @if (!string.IsNullOrWhiteSpace(timesheetUploadResult))
-                {
-                    <FluentLabel>@timesheetUploadResult</FluentLabel>
-                }
-            </div>
-        }
+        <FluentLabel Typo="Typography.Body"><strong>Payroll</strong></FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.9rem; margin-top:0.25rem;">
+            A month's hours go to Payday payroll as a timesheet — by payroll item (Dagvinna, Yfirvinna…), one row per employee.
+        </FluentLabel>
+        <FluentButton Appearance="Appearance.Accent" style="margin-top:0.75rem;" @onclick="@(() => Navigation.NavigateTo("/payday/payroll"))">Open Payroll →</FluentButton>
     </FluentCard>
 
     } @* end else (isLoading) *@
@@ -206,22 +179,6 @@
         public string Email { get; set; } = string.Empty;
     }
 
-    // ── Timesheet state ─────────────────────────────────────────────────────
-    private DateTime? timesheetFrom = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-    private DateTime? timesheetTo = DateTime.Today;
-    private bool loadingTimesheet;
-    private bool uploadingTimesheet;
-    private string? timesheetError;
-    private string? timesheetUploadResult;
-    private readonly List<TimesheetPreviewRow> timesheetRows = [];
-
-    private sealed class TimesheetPreviewRow
-    {
-        public string EmployeeName { get; set; } = string.Empty;
-        public string EmployeeSsn  { get; set; } = string.Empty;
-        public string JobName      { get; set; } = string.Empty;
-        public double Hours        { get; set; }
-    }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -507,93 +464,4 @@
         }
     }
 
-    // ── Timesheet Preview ────────────────────────────────────────────────────
-    private async Task LoadTimesheetPreviewAsync()
-    {
-        using var busy = Busy.Begin("Loading timesheet…");
-        if (timesheetFrom is null || timesheetTo is null) return;
-
-        loadingTimesheet = true;
-        timesheetError = null;
-        timesheetUploadResult = null;
-        timesheetRows.Clear();
-
-        try
-        {
-            var from = DateOnly.FromDateTime(timesheetFrom.Value);
-            var to   = DateOnly.FromDateTime(timesheetTo.Value);
-
-            var entriesResult   = await TimeEntriesApi.GetTimeEntriesAsync(from, to);
-            var employeesResult = await EmployeesApi.GetEmployeesAsync();
-            var jobsResult      = await JobsApi.GetJobsAsync();
-
-            if (!entriesResult.IsSuccess)   { timesheetError = entriesResult.ErrorMessage;   return; }
-            if (!employeesResult.IsSuccess) { timesheetError = employeesResult.ErrorMessage; return; }
-            if (!jobsResult.IsSuccess)      { timesheetError = jobsResult.ErrorMessage;      return; }
-
-            var employeeMap = (employeesResult.Value ?? []).ToDictionary(e => e.Id);
-            var jobMap      = (jobsResult.Value      ?? []).ToDictionary(j => j.Id);
-
-            var rows = (entriesResult.Value ?? [])
-                .GroupBy(e => e.EmployeeId)
-                .SelectMany(empGroup =>
-                {
-                    var emp = employeeMap.GetValueOrDefault(empGroup.Key);
-                    return empGroup.GroupBy(e => e.JobId).Select(jobGroup =>
-                    {
-                        var job = jobMap.GetValueOrDefault(jobGroup.Key);
-                        return new TimesheetPreviewRow
-                        {
-                            EmployeeName = emp?.DisplayName ?? empGroup.Key.ToString(),
-                            EmployeeSsn  = emp?.Ssn         ?? string.Empty,
-                            JobName      = job?.Name        ?? jobGroup.Key.ToString(),
-                            Hours        = (double)jobGroup.Sum(e => e.Hours)
-                        };
-                    });
-                });
-
-            timesheetRows.AddRange(rows);
-
-            if (timesheetRows.Count == 0)
-                timesheetError = "No time entries found for the selected period.";
-        }
-        finally
-        {
-            loadingTimesheet = false;
-        }
-    }
-
-    // ── Upload Timesheet ─────────────────────────────────────────────────────
-    private async Task UploadTimesheetAsync()
-    {
-        using var busy = Busy.Begin("Uploading timesheet to Payday…");
-        uploadingTimesheet = true;
-        timesheetUploadResult = null;
-
-        try
-        {
-            var payload = timesheetRows
-                .GroupBy(r => r.EmployeeSsn)
-                .Select(g => new TimesheetEntry
-                {
-                    Ssn   = g.Key,
-                    Name  = g.First().EmployeeName,
-                    Items = g.Select(r => new TimesheetItem
-                    {
-                        Name     = r.JobName,
-                        Quantity = r.Hours
-                    }).ToList()
-                }).ToList();
-
-            var result = await PaydayPayrollApi.UploadTimesheetAsync(payload);
-
-            timesheetUploadResult = result.IsSuccess
-                ? $"✓ Uploaded successfully ({payload.Count} employees)"
-                : $"Upload failed: {result.ErrorMessage}";
-        }
-        finally
-        {
-            uploadingTimesheet = false;
-        }
-    }
 }

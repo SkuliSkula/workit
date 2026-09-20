@@ -105,8 +105,8 @@ internal sealed class PaydayPensionProxy(HttpClient httpClient, IAccessTokenAcce
 internal sealed class PaydayPayrollProxy(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
     : ApiClientBase(httpClient, accessTokenAccessor), IPaydayPayrollApi
 {
-    public Task<ApiResult<bool>> UploadTimesheetAsync(List<TimesheetEntry> entries) =>
-        PostForJsonAsync<List<TimesheetEntry>, bool>("api/payday/payroll/timesheet", entries, "Failed to upload timesheet.");
+    public Task<ApiResult<TimesheetUploadResult>> UploadTimesheetAsync(List<TimesheetEntry> entries) =>
+        PostForJsonAsync<List<TimesheetEntry>, TimesheetUploadResult>("api/payday/payroll/timesheet", entries, "Failed to upload timesheet.");
 }
 
 internal sealed class PaydayInvoicesProxy(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)

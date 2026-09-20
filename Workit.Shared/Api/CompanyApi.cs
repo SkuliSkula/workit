@@ -8,6 +8,7 @@ public interface ICompanyApi
     Task<ApiResult> CreateCompanyAsync(Company company);
     Task<ApiResult> UpdateDrivingRateAsync(decimal unitPrice);
     Task<ApiResult> UpdateStandardHoursAsync(decimal standardHoursPerDay);
+    Task<ApiResult> UpdatePayrollItemNamesAsync(string regular, string overtime, string driving);
     Task<ApiResult> UpdatePaydayCredentialsAsync(string? clientId, string? clientSecret);
     Task<ApiResult<PaydayTestResult?>> TestPaydayCredentialsAsync(string clientId, string clientSecret);
 }
@@ -26,6 +27,9 @@ internal sealed class CompanyApi(HttpClient httpClient, IAccessTokenAccessor acc
 
     public Task<ApiResult> UpdateStandardHoursAsync(decimal standardHoursPerDay) =>
         PutAsync("api/company/standard-hours", new { standardHoursPerDay }, "The standard hours setting could not be updated right now.");
+
+    public Task<ApiResult> UpdatePayrollItemNamesAsync(string regular, string overtime, string driving) =>
+        PutAsync("api/company/payroll-items", new UpdatePayrollItemNamesRequest(regular, overtime, driving), "The payroll item names could not be saved right now.");
 
     public Task<ApiResult> UpdatePaydayCredentialsAsync(string? clientId, string? clientSecret) =>
         PutAsync("api/company/payday-credentials", new { clientId, clientSecret }, "Could not update Payday credentials.");
