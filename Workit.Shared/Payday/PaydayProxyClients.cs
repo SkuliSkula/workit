@@ -74,6 +74,12 @@ internal sealed class PaydayCustomersProxy(HttpClient httpClient, IAccessTokenAc
 
     public Task<ApiResult<PaydayCustomer>> UpdateAsync(string customerId, UpdateCustomerRequest request) =>
         PutForJsonAsync<UpdateCustomerRequest, PaydayCustomer>($"api/payday/customers/{Uri.EscapeDataString(customerId)}", request, "Failed to update customer.");
+
+    public Task<ApiResult<PaydayInvoicesResponse>> GetInvoicesAsync(string customerId, int page = 1, int perPage = 25) =>
+        GetAsync<PaydayInvoicesResponse>($"api/payday/customers/{Uri.EscapeDataString(customerId)}/invoices?page={page}&perPage={perPage}", "The customer's invoices could not be loaded right now.");
+
+    public Task<ApiResult<PaydayAccountStatement>> GetAccountStatementAsync(string customerId, string dateFrom, string dateTo, int page = 1, int perPage = 100) =>
+        GetAsync<PaydayAccountStatement>($"api/payday/customers/{Uri.EscapeDataString(customerId)}/statement?dateFrom={dateFrom}&dateTo={dateTo}&page={page}&perPage={perPage}", "The account statement could not be loaded right now.");
 }
 
 internal sealed class PaydayEmployeesProxy(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)

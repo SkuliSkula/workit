@@ -2,6 +2,9 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject ICompanyApi CompanyApi
 @inject ICustomersApi CustomersApi
+@inject IPaydayCustomersApi PaydayCustomersApi
+@inject IPaydayInvoicesApi PaydayInvoicesApi
+@inject IJSRuntime JS
 
 <PageTitle>Customers</PageTitle>
 
@@ -118,6 +121,10 @@
             <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
             <TemplateColumn Title="Actions">
                 <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditCustomer(context))">Edit</FluentButton>
+                @if (company?.HasPaydayCredentials == true)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenPaydayAsync(context))" title="Invoices and balance in Payday">Payday</FluentButton>
+                }
             </TemplateColumn>
         </FluentDataGrid>
     }
@@ -127,6 +134,98 @@
     }
 </div>
 
+@* ── Payday: invoices and account statement for one customer ── *@
+@if (paydayCustomer is not null)
+{
+    <AppDialog Title="@($"{paydayCustomer.Name} in Payday")" Wide="true" OnClose="@(() => paydayCustomer = null)" Busy="paydayLoading">
+        @if (paydayLoading)
+        {
+            <div class="dialog-loading" role="status"><FluentProgressRing /> Loading from Payday…</div>
+        }
+        else if (paydayError is not null)
+        {
+            <FluentLabel Color="Color.Error">@paydayError</FluentLabel>
+        }
+        else if (paydayMatch is null)
+        {
+            <FluentLabel>
+                No Payday customer matches <strong>@paydayCustomer.Name</strong>
+                @(string.IsNullOrWhiteSpace(paydayCustomer.Ssn) ? "— add an SSN in Workit so it can be matched" : $"(SSN {paydayCustomer.Ssn})").
+                Invoices built for this customer will create one.
+            </FluentLabel>
+        }
+        else
+        {
+            var open = paydayInvoices.Where(i => i.Status == "SENT").ToList();
+            var overdue = open.Where(i => i.FinalDueDate is { } fd && fd.Date < DateTime.Today).ToList();
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:0.75rem; margin-bottom:1rem;">
+                <div style="padding:0.75rem 1rem; border-radius:10px; background:#eff6ff;">
+                    <div style="font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:#1e3a8a;">Outstanding</div>
+                    <strong style="font-size:1.3rem;">@((paydayStatement?.EndBalance ?? paydayInvoiceSummary?.UnpaidAmount ?? 0).ToString("N0")) kr.</strong>
+                    <div style="font-size:0.8rem; color:#60758b;">@open.Count open invoice@(open.Count == 1 ? "" : "s")@(overdue.Count > 0 ? $" · {overdue.Count} overdue" : "")</div>
+                </div>
+                <div style="padding:0.75rem 1rem; border-radius:10px; background:#ecfdf5;">
+                    <div style="font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:#065f46;">Paid</div>
+                    <strong style="font-size:1.3rem;">@((paydayInvoiceSummary?.PaidAmount ?? 0).ToString("N0")) kr.</strong>
+                    <div style="font-size:0.8rem; color:#60758b;">@paydayInvoices.Count(i => i.Status == "PAID") paid</div>
+                </div>
+                <div style="padding:0.75rem 1rem; border-radius:10px; background:#f8fafc;">
+                    <div style="font-size:0.72rem; letter-spacing:0.06em; text-transform:uppercase; color:#425468;">Invoices</div>
+                    <strong style="font-size:1.3rem;">@(paydayInvoiceSummary?.TotalCount ?? paydayInvoices.Count)</strong>
+                    <div style="font-size:0.8rem; color:#60758b;">in Payday · @paydayMatch.Email</div>
+                </div>
+            </div>
+
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.25rem;">Invoices</FluentLabel>
+            @if (paydayInvoices.Count == 0)
+            {
+                <FluentLabel Style="color:#60758b; margin-bottom:1rem;">No invoices yet.</FluentLabel>
+            }
+            else
+            {
+                <div style="overflow-x:auto; margin-bottom:1rem;">
+                    <FluentDataGrid TGridItem="PaydayInvoice" Items="@paydayInvoices.AsQueryable()" DisplayMode="DataGridDisplayMode.Table">
+                        <TemplateColumn Title="#"><span>@(context.Number?.ToString() ?? "draft")</span></TemplateColumn>
+                        <TemplateColumn Title="Date"><span>@context.InvoiceDate?.ToString("d MMM yyyy")</span></TemplateColumn>
+                        <TemplateColumn Title="Final due">
+                            <span style="@(context.Status == "SENT" && context.FinalDueDate is { } fd && fd.Date < DateTime.Today ? "color:#dc2626; font-weight:600;" : "")">@context.FinalDueDate?.ToString("d MMM yyyy")</span>
+                        </TemplateColumn>
+                        <PropertyColumn Property="@(i => i.Description)" Title="Description" />
+                        <TemplateColumn Title="Amount" Align="Align.End"><span>@context.AmountIncludingVat.ToString("N0") kr.</span></TemplateColumn>
+                        <TemplateColumn Title="Status"><span style="@StatusStyle(context.Status)">@context.Status</span></TemplateColumn>
+                        <TemplateColumn Title="">
+                            <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => OpenPdfAsync(context))" Disabled="@(pdfBusyId == context.Id)">PDF</FluentButton>
+                        </TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+            }
+
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.25rem;">Account statement (last 12 months)</FluentLabel>
+            @if (paydayStatement is null || paydayStatement.Lines.Count == 0)
+            {
+                <FluentLabel Style="color:#60758b;">No movements.</FluentLabel>
+            }
+            else
+            {
+                <div style="overflow-x:auto;">
+                    <FluentDataGrid TGridItem="PaydayAccountStatementLine" Items="@paydayStatement.Lines.AsQueryable()" DisplayMode="DataGridDisplayMode.Table">
+                        <TemplateColumn Title="Date"><span>@context.Date.ToString("d MMM yyyy")</span></TemplateColumn>
+                        <PropertyColumn Property="@(l => l.Voucher)" Title="Voucher" />
+                        <PropertyColumn Property="@(l => l.Description)" Title="Description" />
+                        <TemplateColumn Title="Amount" Align="Align.End">
+                            <span style="@(context.Amount < 0 ? "color:#047857;" : "")">@context.Amount.ToString("N0")</span>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Balance" Align="Align.End"><strong>@context.Balance.ToString("N0")</strong></TemplateColumn>
+                    </FluentDataGrid>
+                </div>
+                <FluentLabel Style="font-size:0.85rem; color:#60758b; margin-top:0.5rem;">
+                    Opening @paydayStatement.StartBalance.ToString("N0") kr. → closing <strong>@paydayStatement.EndBalance.ToString("N0") kr.</strong>
+                </FluentLabel>
+            }
+        }
+    </AppDialog>
+}
+
 @code {
     private readonly List<Customer> customers = [];
     private Company? company;
@@ -134,6 +233,80 @@
     private Customer? editingCustomer;
     private bool loading = true;
     private bool showCreateForm;
+
+    // ── Payday dialog state ──
+    private Customer? paydayCustomer;
+    private PaydayCustomer? paydayMatch;
+    private PaydayInvoicesSummary? paydayInvoiceSummary;
+    private List<PaydayInvoice> paydayInvoices = [];
+    private PaydayAccountStatement? paydayStatement;
+    private bool paydayLoading;
+    private string? paydayError;
+    private Guid pdfBusyId;
+
+    private static string StatusStyle(string status) => status switch
+    {
+        "PAID"      => "background:#d1fae5; color:#065f46; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+        "SENT"      => "background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+        "CANCELLED" => "background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+        _           => "background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-size:0.78rem; font-weight:600;",
+    };
+
+    /// <summary>
+    /// Finds the customer in Payday — by the stored PaydayId, else by SSN — and
+    /// loads invoices and the last 12 months' statement. All three calls go to
+    /// Payday, so this runs only when the owner opens the dialog.
+    /// </summary>
+    private async Task OpenPaydayAsync(Customer customer)
+    {
+        paydayCustomer = customer; paydayMatch = null; paydayInvoices = []; paydayStatement = null; paydayInvoiceSummary = null; paydayError = null;
+        paydayLoading = true;
+        try
+        {
+            if (customer.PaydayId is Guid pid)
+            {
+                var one = await PaydayCustomersApi.GetByIdAsync(pid.ToString());
+                if (one.IsSuccess) paydayMatch = one.Value;
+            }
+            if (paydayMatch is null && !string.IsNullOrWhiteSpace(customer.Ssn))
+            {
+                var digits = new string(customer.Ssn.Where(char.IsDigit).ToArray());
+                var all = await PaydayCustomersApi.GetAllAsync(1, 200);
+                if (!all.IsSuccess) { paydayError = all.ErrorMessage; return; }
+                paydayMatch = (all.Value?.Customers ?? []).FirstOrDefault(c => new string((c.Ssn ?? "").Where(char.IsDigit).ToArray()) == digits);
+            }
+            if (paydayMatch is null) return;
+
+            var id = paydayMatch.Id.ToString();
+            var invTask  = PaydayCustomersApi.GetInvoicesAsync(id, 1, 50);
+            var stmtTask = PaydayCustomersApi.GetAccountStatementAsync(id, DateTime.Today.AddMonths(-12).ToString("yyyy-MM-dd"), DateTime.Today.AddDays(1).ToString("yyyy-MM-dd"));
+            // The list endpoint's summary carries paid/unpaid totals; the customer route has none.
+            var sumTask  = PaydayInvoicesApi.GetAllAsync(page: 1, perPage: 1, include: null, customerId: paydayMatch.Id);
+            await Task.WhenAll(invTask, stmtTask, sumTask);
+
+            var inv = await invTask;
+            if (!inv.IsSuccess) { paydayError = inv.ErrorMessage; return; }
+            paydayInvoices = (inv.Value?.Invoices ?? []).OrderByDescending(i => i.Number ?? int.MaxValue).ToList();
+            var stmt = await stmtTask;
+            if (stmt.IsSuccess) paydayStatement = stmt.Value;
+            var sum = await sumTask;
+            if (sum.IsSuccess) paydayInvoiceSummary = sum.Value?.Summary;
+        }
+        finally { paydayLoading = false; }
+    }
+
+    private async Task OpenPdfAsync(PaydayInvoice invoice)
+    {
+        pdfBusyId = invoice.Id;
+        try
+        {
+            var pdf = await PaydayInvoicesApi.GetPdfAsync(invoice.Id.ToString());
+            if (pdf.IsSuccess && pdf.Value is { Length: > 0 } bytes)
+                await JS.InvokeVoidAsync("triggerFileDownload", $"invoice-{invoice.Number?.ToString() ?? "draft"}.pdf", Convert.ToBase64String(bytes), "application/pdf");
+            else paydayError = pdf.ErrorMessage ?? "The PDF could not be downloaded.";
+        }
+        finally { pdfBusyId = Guid.Empty; }
+    }
     private string newCustomerName = string.Empty;
     private string newCustomerSsn = string.Empty;
     private string newCustomerEmail = string.Empty;
