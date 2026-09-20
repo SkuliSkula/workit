@@ -63,5 +63,7 @@ public sealed class PaydayLedgerAccount
     public string? Code     { get; set; }
     public string? Name     { get; set; }
     public string? Type     { get; set; }
+    /// <summary>"StandardVAT" (24 %), "ReducedVAT" (11 %) or "" for VAT-free sales accounts.</summary>
+    public string? DefaultVatPercentType { get; set; }
     public bool    Archived { get; set; }
 }
