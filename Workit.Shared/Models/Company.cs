@@ -12,6 +12,15 @@ public sealed class Company
     public decimal DrivingUnitPrice { get; set; }
     public decimal StandardHoursPerDay { get; set; } = 8m;
 
+    /// <summary>
+    /// Names of the company's Payday payroll items that Workit's hour kinds are
+    /// uploaded as. Must match the item names in Payday exactly; an empty
+    /// driving name means driving units are not sent to payroll.
+    /// </summary>
+    public string PayrollRegularItemName  { get; set; } = "Dagvinna";
+    public string PayrollOvertimeItemName { get; set; } = "Yfirvinna";
+    public string PayrollDrivingItemName  { get; set; } = string.Empty;
+
     public string ZipCode { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;

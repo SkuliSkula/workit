@@ -1,0 +1,251 @@
+@page "/payday/payroll"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPayrollApi PayrollApi
+@inject ICompanyApi CompanyApi
+@inject BusyService Busy
+@inject NavigationManager Navigation
+
+<PageTitle>Payroll</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Payroll</FluentLabel>
+            <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                A month of Workit hours, sent to Payday payroll as a timesheet — one row per employee, by payroll item.
+            </FluentLabel>
+        </div>
+        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/payday"))">← Back to Payday</FluentButton>
+    </div>
+</FluentCard>
+
+@* ── Period + item names ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; gap:1.5rem; align-items:flex-end; flex-wrap:wrap;">
+        <div>
+            <FluentLabel Style="font-size:0.8rem; color:#60758b;">Period</FluentLabel>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ShiftMonthAsync(-1))" title="Previous month">‹</FluentButton>
+                <strong style="min-width:9rem; text-align:center;">@PeriodLabel</strong>
+                <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => ShiftMonthAsync(1))" Disabled="@IsCurrentOrFuture" title="Next month">›</FluentButton>
+            </div>
+        </div>
+        <div style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+            <FluentTextField Label="Regular hours item" @bind-Value="regularItem" style="width:150px;" />
+            <FluentTextField Label="Overtime item" @bind-Value="overtimeItem" style="width:150px;" />
+            <FluentTextField Label="Driving item (optional)" @bind-Value="drivingItem" Placeholder="not sent" style="width:160px;" />
+            <FluentButton Appearance="Appearance.Outline" @onclick="SaveItemNamesAsync" Disabled="@(!ItemNamesDirty)">Save names</FluentButton>
+        </div>
+    </div>
+    <FluentLabel Style="color:#60758b; font-size:0.8rem; margin-top:0.5rem;">
+        Item names must match the payroll items in Payday exactly (e.g. Dagvinna, Yfirvinna). Payday matches employees by SSN.
+    </FluentLabel>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <FluentLabel Color="@(messageIsError ? Color.Error : Color.Success)" style="margin-top:0.5rem; display:block;">@message</FluentLabel>
+    }
+</FluentCard>
+
+@* ── Preview ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (preview is null)
+    {
+        <FluentLabel Color="Color.Error">@(message ?? "The preview could not be loaded.")</FluentLabel>
+    }
+    else if (preview.Rows.Count == 0)
+    {
+        <FluentLabel Style="color:#60758b;">No hours logged in @PeriodLabel.</FluentLabel>
+    }
+    else
+    {
+        var sendable = preview.Rows.Where(r => r.HasSsn).ToList();
+        var missingSsn = preview.Rows.Where(r => !r.HasSsn).ToList();
+
+        @if (preview.LastExport is { } last)
+        {
+            <div style="margin-bottom:0.75rem; padding:0.6rem 0.9rem; border-radius:8px; background:#eff6ff; border:1px solid #bfdbfe; font-size:0.88rem; color:#1e3a8a;">
+                Last sent @last.SentAt.LocalDateTime.ToString("d MMM yyyy HH:mm") by @last.SentByName —
+                @last.EmployeesRead of @last.EmployeesSent employees recognised by Payday@(string.IsNullOrEmpty(last.SsnsNotOnRecord) ? "" : $" (not on record: {last.SsnsNotOnRecord})").
+                Sending again uploads the current totals as a new timesheet.
+            </div>
+        }
+        @if (missingSsn.Count > 0)
+        {
+            <div style="margin-bottom:0.75rem; padding:0.6rem 0.9rem; border-radius:8px; background:#fef3c7; border:1px solid #fcd34d; font-size:0.88rem; color:#78350f;">
+                <strong>@missingSsn.Count employee@(missingSsn.Count == 1 ? "" : "s") without an SSN will be skipped:</strong>
+                @string.Join(", ", missingSsn.Select(r => r.EmployeeName)). Add their SSN under Employees to include them.
+            </div>
+        }
+
+        <div style="overflow-x:auto;">
+            <FluentDataGrid TGridItem="PayrollPreviewRow" Items="@preview.Rows.AsQueryable()" DisplayMode="DataGridDisplayMode.Table" style="min-width:760px;">
+                <TemplateColumn Title="Employee" Sortable="true" SortBy="@(GridSort<PayrollPreviewRow>.ByAscending(r => r.EmployeeName))">
+                    <span style="font-weight:600; @(context.HasSsn ? "" : "color:#9ca3af;")">@context.EmployeeName</span>
+                </TemplateColumn>
+                <TemplateColumn Title="SSN">
+                    @if (context.HasSsn) { <span style="font-family:monospace;">@FormatSsn(context.Ssn)</span> }
+                    else { <span style="color:#b45309;">missing</span> }
+                </TemplateColumn>
+                <TemplateColumn Title="@preview.RegularItemName" Align="Align.End"><span>@context.RegularHours.ToString("0.##")</span></TemplateColumn>
+                <TemplateColumn Title="@preview.OvertimeItemName" Align="Align.End"><span>@(context.OvertimeHours > 0 ? context.OvertimeHours.ToString("0.##") : "—")</span></TemplateColumn>
+                <TemplateColumn Title="@(string.IsNullOrWhiteSpace(preview.DrivingItemName) ? "Driving (not sent)" : preview.DrivingItemName)" Align="Align.End">
+                    <span style="@(string.IsNullOrWhiteSpace(preview.DrivingItemName) ? "color:#9ca3af;" : "")">@(context.DrivingUnits > 0 ? context.DrivingUnits.ToString() : "—")</span>
+                </TemplateColumn>
+                <PropertyColumn Property="@(r => r.EntryCount)" Title="Entries" Align="Align.End" />
+            </FluentDataGrid>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem; flex-wrap:wrap; gap:0.75rem;">
+            <FluentLabel Style="font-size:0.9rem; color:#425468;">
+                <strong>@sendable.Sum(r => r.RegularHours).ToString("0.##")</strong> h regular ·
+                <strong>@sendable.Sum(r => r.OvertimeHours).ToString("0.##")</strong> h overtime ·
+                <strong>@sendable.Sum(r => r.DrivingUnits)</strong> driving ·
+                <strong>@sendable.Count</strong> employee@(sendable.Count == 1 ? "" : "s") to send
+            </FluentLabel>
+            <FluentButton Appearance="Appearance.Accent" @onclick="@(() => confirmSend = true)" Disabled="@(sendable.Count == 0 || ItemNamesDirty)">
+                Send @PeriodLabel to Payday payroll
+            </FluentButton>
+        </div>
+        @if (ItemNamesDirty)
+        {
+            <FluentLabel Style="font-size:0.8rem; color:#b45309; margin-top:0.25rem;">Save the item names before sending.</FluentLabel>
+        }
+    }
+</FluentCard>
+
+@* ── History ── *@
+@if (exports.Count > 0)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false">
+        <FluentLabel Typo="Typography.Body" Style="font-weight:700; margin-bottom:0.5rem;">Sent to payroll</FluentLabel>
+        <FluentDataGrid TGridItem="PayrollExport" Items="@exports.AsQueryable()" DisplayMode="DataGridDisplayMode.Table">
+            <TemplateColumn Title="Period"><span>@(new DateTime(context.Year, context.Month, 1).ToString("MMMM yyyy"))</span></TemplateColumn>
+            <TemplateColumn Title="Sent"><span>@context.SentAt.LocalDateTime.ToString("d MMM yyyy HH:mm")</span></TemplateColumn>
+            <PropertyColumn Property="@(e => e.SentByName)" Title="By" />
+            <TemplateColumn Title="Employees" Align="Align.End">
+                <span style="@(context.EmployeesRead < context.EmployeesSent ? "color:#b45309; font-weight:600;" : "")">@context.EmployeesRead / @context.EmployeesSent</span>
+            </TemplateColumn>
+            <TemplateColumn Title="Not on record in Payday">
+                <span style="font-family:monospace; font-size:0.85rem;">@(string.IsNullOrEmpty(context.SsnsNotOnRecord) ? "—" : context.SsnsNotOnRecord)</span>
+            </TemplateColumn>
+        </FluentDataGrid>
+    </FluentCard>
+}
+
+@if (confirmSend && preview is not null)
+{
+    var count = preview.Rows.Count(r => r.HasSsn);
+    <AppDialog Title="Send to Payday payroll?" OnClose="@(() => confirmSend = false)" Busy="sending">
+        <p style="margin:0 0 0.75rem;">
+            Upload <strong>@PeriodLabel</strong> for <strong>@count employee@(count == 1 ? "" : "s")</strong> as a timesheet to Payday payroll?
+        </p>
+        <p style="margin:0; color:#60758b; font-size:0.9rem;">
+            Payday adds the hours to its payroll for the period. If this month was sent before, check in Payday that the earlier timesheet is not counted twice.
+        </p>
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.25rem;">
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => confirmSend = false)" Disabled="@sending">Cancel</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="SendAsync" Disabled="@sending">Send</FluentButton>
+        </div>
+    </AppDialog>
+}
+
+@code {
+    private int year = DateTime.Today.AddMonths(-1).Year;
+    private int month = DateTime.Today.AddMonths(-1).Month;
+    private PayrollPreview? preview;
+    private readonly List<PayrollExport> exports = [];
+    private bool loading = true;
+    private bool sending;
+    private bool confirmSend;
+    private string? message;
+    private bool messageIsError;
+
+    private string regularItem = "", overtimeItem = "", drivingItem = "";
+    private string savedRegular = "", savedOvertime = "", savedDriving = "";
+    private bool ItemNamesDirty => regularItem != savedRegular || overtimeItem != savedOvertime || drivingItem != savedDriving;
+
+    private string PeriodLabel => new DateTime(year, month, 1).ToString("MMMM yyyy");
+    private bool IsCurrentOrFuture => new DateTime(year, month, 1) >= new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    private static string FormatSsn(string ssn) => ssn.Length == 10 ? $"{ssn[..6]}-{ssn[6..]}" : ssn;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadAsync();
+    }
+
+    private async Task ShiftMonthAsync(int delta)
+    {
+        var d = new DateTime(year, month, 1).AddMonths(delta);
+        year = d.Year; month = d.Month;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true; message = null; StateHasChanged();
+        var previewTask = PayrollApi.GetPreviewAsync(year, month);
+        var exportsTask = PayrollApi.GetExportsAsync();
+        await Task.WhenAll(previewTask, exportsTask);
+
+        var pr = await previewTask;
+        if (pr.IsSuccess && pr.Value is not null)
+        {
+            preview = pr.Value;
+            savedRegular = regularItem = preview.RegularItemName;
+            savedOvertime = overtimeItem = preview.OvertimeItemName;
+            savedDriving = drivingItem = preview.DrivingItemName;
+        }
+        else
+        {
+            preview = null; message = pr.ErrorMessage; messageIsError = true;
+        }
+
+        var er = await exportsTask;
+        exports.Clear();
+        if (er.IsSuccess) exports.AddRange(er.Value ?? []);
+
+        loading = false; StateHasChanged();
+    }
+
+    private async Task SaveItemNamesAsync()
+    {
+        message = null;
+        var result = await CompanyApi.UpdatePayrollItemNamesAsync(regularItem.Trim(), overtimeItem.Trim(), drivingItem.Trim());
+        if (result.IsSuccess)
+        {
+            message = "✓ Payroll item names saved."; messageIsError = false;
+            await LoadAsync();
+        }
+        else { message = result.ErrorMessage; messageIsError = true; }
+    }
+
+    private async Task SendAsync()
+    {
+        sending = true; message = null;
+        try
+        {
+            using var busy = Busy.Begin("Sending timesheet to Payday…");
+            var result = await PayrollApi.SendAsync(year, month);
+            if (result.IsSuccess && result.Value is { } export)
+            {
+                confirmSend = false;
+                message = export.EmployeesRead == export.EmployeesSent
+                    ? $"✓ {PeriodLabel} sent — Payday recognised all {export.EmployeesRead} employees."
+                    : $"✓ {PeriodLabel} sent — Payday recognised {export.EmployeesRead} of {export.EmployeesSent} employees. Not on record in Payday: {export.SsnsNotOnRecord}.";
+                messageIsError = export.EmployeesRead != export.EmployeesSent;
+                await LoadAsync();
+            }
+            else
+            {
+                // Payday's own reason, verbatim.
+                message = result.ErrorMessage ?? "The timesheet could not be sent right now."; messageIsError = true;
+            }
+        }
+        finally { sending = false; }
+    }
+}
