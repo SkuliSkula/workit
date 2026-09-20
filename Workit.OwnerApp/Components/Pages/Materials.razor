@@ -1,6 +1,8 @@
 @page "/materials"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IMaterialsApi MaterialsApi
+@inject IPaydayProductsCacheApi PaydayProducts
+@inject NavigationManager Nav
 
 <PageTitle>Materials</PageTitle>
 
@@ -81,6 +83,24 @@
 
             <div style="grid-column: span 2">
                 <FluentTextField Label="Description" @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
+            </div>
+
+            @* The Payday product this material bills as. Payday's price/VAT win on
+               the invoice; the fields above stay for reference and stock display. *@
+            <div style="grid-column: span 2">
+                <FluentSelect Label="Payday product" TValue="string" TOption="string" @bind-Value="formPaydayProductId" style="width:100%">
+                    <FluentOption TOption="string" Value="">— Not linked —</FluentOption>
+                    @foreach (var p in paydayMaterials)
+                    {
+                        <FluentOption TOption="string" Value="@p.PaydayId.ToString()">@p.Sku — @p.Name (@p.SalePriceExVat.ToString("N0") kr.)</FluentOption>
+                    }
+                </FluentSelect>
+                @if (paydayMaterials.Count == 0)
+                {
+                    <FluentLabel Style="color:#60758b; font-size:0.8rem; margin-top:0.25rem;">
+                        No Payday products with the Material role yet — <a href="/payday/products">sync and assign roles</a> first.
+                    </FluentLabel>
+                }
             </div>
         </div>
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
@@ -164,6 +184,19 @@
                     }
                     <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
                 </TemplateColumn>
+                <TemplateColumn Title="Payday">
+                    @{
+                        var linked = LinkedProduct(context);
+                    }
+                    @if (linked is not null)
+                    {
+                        <span title="@linked.Name" style="font-family:monospace; font-size:0.85rem; color:#1d6fb8;">@linked.Sku</span>
+                    }
+                    else
+                    {
+                        <span style="color:#b45309; font-size:0.85rem;">@(context.PaydayProductId is null ? "not linked" : "unknown product")</span>
+                    }
+                </TemplateColumn>
                 <TemplateColumn Title="Status">
                     @{
                         var statusStyle = context.IsActive
@@ -227,6 +260,9 @@
     // ── Form fields ────────────────────────────────────────────────────────────
     private string  formName          = string.Empty;
     private string  formCode          = string.Empty;
+    private string  formPaydayProductId = string.Empty;
+    private readonly List<PaydayProductCache> paydayMaterials = [];
+    private readonly Dictionary<Guid, PaydayProductCache> paydayBySku = [];
     private string  formCategory      = Categories[0];
     private string  formUnit          = "stk.";
     private decimal formPurchasePrice;
@@ -250,6 +286,7 @@
     {
         loading = true;
         loadError = string.Empty;
+        var productsTask = PaydayProducts.GetProductsAsync(includeArchived: true);
         var result = await MaterialsApi.GetMaterialsAsync();
         if (result.IsSuccess)
         {
@@ -259,6 +296,15 @@
         else
         {
             loadError = result.ErrorMessage ?? "Could not load materials.";
+        }
+        // The cache is what the picker offers; only Material-role products, and
+        // never archived ones, but the lookup keeps everything so an old link still shows.
+        var products = await productsTask;
+        paydayMaterials.Clear(); paydayBySku.Clear();
+        foreach (var p in products.Value ?? [])
+        {
+            paydayBySku[p.PaydayId] = p;
+            if (!p.Archived && p.Role == PaydayProductRole.Material) paydayMaterials.Add(p);
         }
         loading = false;
     }
@@ -290,7 +336,8 @@
             VatRate       = formVatRate,
             Quantity      = formQuantity,
             Description   = formDescription,
-            IsActive      = true
+            IsActive      = true,
+            PaydayProductId = Guid.TryParse(formPaydayProductId, out var newLinkedId) ? newLinkedId : null
         };
 
         var result = await MaterialsApi.CreateMaterialAsync(material);
@@ -314,6 +361,7 @@
         editingMaterial   = m;
         formName          = m.Name;
         formCode          = m.ProductCode;
+        formPaydayProductId = m.PaydayProductId?.ToString() ?? string.Empty;
         formCategory      = m.Category;
         formUnit          = m.Unit;
         formPurchasePrice = m.PurchasePrice;
@@ -347,7 +395,8 @@
             VatRate       = formVatRate,
             Quantity      = formQuantity,
             Description   = formDescription,
-            IsActive      = formIsActive
+            IsActive      = formIsActive,
+            PaydayProductId = Guid.TryParse(formPaydayProductId, out var linkedId) ? linkedId : null
         };
 
         var result = await MaterialsApi.UpdateMaterialAsync(updated.Id, updated);
@@ -388,10 +437,14 @@
         ResetForm();
     }
 
+    private PaydayProductCache? LinkedProduct(Material m) =>
+        m.PaydayProductId is Guid id && paydayBySku.TryGetValue(id, out var p) ? p : null;
+
     private void ResetForm()
     {
         formName          = string.Empty;
         formCode          = string.Empty;
+        formPaydayProductId = string.Empty;
         formCategory      = Categories[0];
         formUnit          = "stk.";
         formPurchasePrice = 0m;

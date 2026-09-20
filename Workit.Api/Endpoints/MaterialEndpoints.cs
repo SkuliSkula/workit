@@ -87,6 +87,8 @@ internal static class MaterialEndpoints
                     existing.Quantity      = material.Quantity;
                     existing.Description   = material.Description.Trim();
                     existing.IsActive      = material.IsActive;
+                    // The Payday product this material bills as; owner-set in the console.
+                    existing.PaydayProductId = material.PaydayProductId;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);

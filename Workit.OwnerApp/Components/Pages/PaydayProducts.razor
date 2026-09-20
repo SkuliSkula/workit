@@ -1,0 +1,232 @@
+@page "/payday/products"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPaydayProductsCacheApi ProductsApi
+@inject BusyService Busy
+@inject NavigationManager Navigation
+
+<PageTitle>Payday Products</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Payday Products</FluentLabel>
+            <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                Your Payday product list is Workit's price list. Prices, VAT and ledger accounts come from Payday;
+                here you say what each product is <em>for</em>.
+            </FluentLabel>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+            @if (lastSynced is not null)
+            {
+                <FluentLabel Style="color:#60758b; font-size:0.85rem;">Synced @lastSynced.Value.LocalDateTime.ToString("d MMM HH:mm")</FluentLabel>
+            }
+            <FluentButton Appearance="Appearance.Accent" @onclick="SyncAsync" Disabled="@loading">Sync now</FluentButton>
+            <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/payday"))">← Back to Payday</FluentButton>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <FluentLabel Color="@(messageIsError ? Color.Error : Color.Success)" style="margin-top:0.75rem; display:block;">@message</FluentLabel>
+    }
+</FluentCard>
+
+@if (!loading && products.Count > 0 && MissingLaborRoles.Count > 0)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false" Style="border-left:4px solid #b45309;">
+        <FluentLabel Style="font-weight:600; color:#b45309;">Invoices can't be built by product yet</FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.9rem; margin-top:0.25rem;">
+            Pick which Payday product is your
+            @for (var i = 0; i < MissingLaborRoles.Count; i++)
+            {
+                if (i > 0) { <text>, </text> }
+                <strong>@RoleLabel(MissingLaborRoles[i])</strong>
+            }.
+            If Payday has no such product yet, create it there and press Sync now.
+        </FluentLabel>
+    </FluentCard>
+}
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-bottom:0.5rem;">
+        <FluentTextField Placeholder="Search SKU or name…" @bind-Value="search" @bind-Value:after="StateHasChanged" style="width:260px;" />
+        <FluentSelect TValue="string" TOption="string" @bind-Value="roleFilter" style="width:180px;">
+            <FluentOption TOption="string" Value="">All roles</FluentOption>
+            @foreach (var r in Enum.GetValues<PaydayProductRole>())
+            {
+                <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
+            }
+        </FluentSelect>
+        <FluentCheckbox @bind-Value="showArchived" Label="Show archived" @bind-Value:after="LoadAsync" />
+        <span style="margin-left:auto; color:#60758b; font-size:0.85rem;">@Filtered.Count of @products.Count</span>
+    </div>
+
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (products.Count == 0)
+    {
+        <FluentLabel Style="color:#60758b;">
+            No products yet. Press <strong>Sync now</strong> to pull the list from Payday.
+            @if (!string.IsNullOrWhiteSpace(message)) { <text> </text> }
+        </FluentLabel>
+    }
+    else
+    {
+        <div style="overflow-x:auto;">
+            <FluentDataGrid TGridItem="PaydayProductCache" Items="@Filtered.AsQueryable()" DisplayMode="DataGridDisplayMode.Table" style="min-width:880px;">
+                <PropertyColumn Property="@(x => x.Sku)"  Title="SKU" Sortable="true" />
+                <TemplateColumn Title="Name" Sortable="true" SortBy="@(GridSort<PaydayProductCache>.ByAscending(x => x.Name))">
+                    <span style="font-weight:600;">@context.Name</span>
+                    @if (!string.IsNullOrWhiteSpace(context.Description))
+                    {
+                        <div style="color:#60758b; font-size:0.8rem;">@context.Description</div>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Sale (ex. VAT)" Align="Align.End"><span>@context.SalePriceExVat.ToString("N0") kr.</span></TemplateColumn>
+                <PropertyColumn Property="@(x => x.VatPercentage)" Title="VAT %" Format="0.#" />
+                <TemplateColumn Title="Stock in Payday" Align="Align.End">
+                    @if (context.Quantity is decimal q)
+                    {
+                        <span style="@(q <= 0 ? "color:#dc2626; font-weight:600;" : "")">@q.ToString("0.##") @context.Unit</span>
+                    }
+                    else
+                    {
+                        <span style="color:#9ca3af;">not tracked</span>
+                    }
+                </TemplateColumn>
+                <TemplateColumn Title="Used in Workit as">
+                    <FluentSelect TValue="string" TOption="string"
+                                  Value="@context.Role.ToString()"
+                                  ValueChanged="@(v => SetRoleAsync(context, v))"
+                                  Disabled="@(busyId == context.Id)"
+                                  style="width:170px;">
+                        @foreach (var r in Enum.GetValues<PaydayProductRole>())
+                        {
+                            <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
+                        }
+                    </FluentSelect>
+                </TemplateColumn>
+                <TemplateColumn Title="Unit">
+                    <FluentTextField Value="@context.Unit" ValueChanged="@(v => SetUnitAsync(context, v))" Placeholder="stk." style="width:80px;" Disabled="@(busyId == context.Id)" />
+                </TemplateColumn>
+                <TemplateColumn Title="Category">
+                    <FluentTextField Value="@context.Category" ValueChanged="@(v => SetCategoryAsync(context, v))" Placeholder="—" style="width:140px;" Disabled="@(busyId == context.Id)" />
+                </TemplateColumn>
+                <TemplateColumn Title="">
+                    @if (context.Archived)
+                    {
+                        <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;">Archived</span>
+                    }
+                </TemplateColumn>
+            </FluentDataGrid>
+        </div>
+    }
+</FluentCard>
+
+@code {
+    private readonly List<PaydayProductCache> products = [];
+    private bool loading = true;
+    private bool showArchived;
+    private string search = string.Empty;
+    private string roleFilter = string.Empty;
+    private string? message;
+    private bool messageIsError;
+    private DateTimeOffset? lastSynced;
+    private Guid? busyId;
+
+    private static readonly PaydayProductRole[] LaborRoles = [PaydayProductRole.RegularHour, PaydayProductRole.OvertimeHour, PaydayProductRole.DrivingUnit];
+
+    /// <summary>Labor roles no active product carries yet — invoices need all three.</summary>
+    private List<PaydayProductRole> MissingLaborRoles =>
+        LaborRoles.Where(r => !products.Any(p => !p.Archived && p.Role == r)).ToList();
+
+    private List<PaydayProductCache> Filtered
+    {
+        get
+        {
+            IEnumerable<PaydayProductCache> q = products;
+            if (!string.IsNullOrWhiteSpace(search))
+                q = q.Where(p => p.Sku.Contains(search, StringComparison.OrdinalIgnoreCase) || p.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+            if (Enum.TryParse<PaydayProductRole>(roleFilter, out var role))
+                q = q.Where(p => p.Role == role);
+            return q.ToList();
+        }
+    }
+
+    internal static string RoleLabel(PaydayProductRole role) => role switch
+    {
+        PaydayProductRole.Unassigned   => "— Not set —",
+        PaydayProductRole.Material     => "Material",
+        PaydayProductRole.RegularHour  => "Regular hour",
+        PaydayProductRole.OvertimeHour => "Overtime hour",
+        PaydayProductRole.DrivingUnit  => "Driving unit",
+        PaydayProductRole.Ignore       => "Not used in Workit",
+        _ => role.ToString(),
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true; StateHasChanged();
+        var result = await ProductsApi.GetProductsAsync(includeArchived: showArchived);
+        products.Clear();
+        if (result.IsSuccess)
+        {
+            products.AddRange(result.Value ?? []);
+            lastSynced = products.Count > 0 ? products.Max(p => p.SyncedAt) : null;
+        }
+        else
+        {
+            message = result.ErrorMessage; messageIsError = true;
+        }
+        loading = false; StateHasChanged();
+    }
+
+    private async Task SyncAsync()
+    {
+        message = null;
+        using var busy = Busy.Begin("Syncing products from Payday…");
+        var result = await ProductsApi.SyncAsync();
+        if (result.IsSuccess && result.Value is { } r)
+        {
+            message = $"✓ {r.Fetched} products from Payday — {r.Added} new, {r.Updated} updated, {r.Archived} archived.";
+            messageIsError = false;
+            await LoadAsync();
+        }
+        else
+        {
+            // Payday's own reason, verbatim — "Client authentication failed…" tells the owner what to fix.
+            message = result.ErrorMessage ?? "Payday products could not be synced right now.";
+            messageIsError = true;
+        }
+    }
+
+    private async Task SetRoleAsync(PaydayProductCache p, string? value)
+    {
+        if (!Enum.TryParse<PaydayProductRole>(value, out var role) || role == p.Role) return;
+        await SaveAsync(p, role, p.Unit, p.Category);
+    }
+
+    private Task SetUnitAsync(PaydayProductCache p, string? value) => SaveAsync(p, p.Role, value ?? "", p.Category);
+    private Task SetCategoryAsync(PaydayProductCache p, string? value) => SaveAsync(p, p.Role, p.Unit, value ?? "");
+
+    private async Task SaveAsync(PaydayProductCache p, PaydayProductRole role, string unit, string category)
+    {
+        busyId = p.Id; message = null;
+        var result = await ProductsApi.SetRoleAsync(p.Id, role, unit, category);
+        if (result.IsSuccess && result.Value is { } saved)
+        {
+            p.Role = saved.Role; p.Unit = saved.Unit; p.Category = saved.Category;
+        }
+        else
+        {
+            message = result.ErrorMessage; messageIsError = true;
+        }
+        busyId = null;
+    }
+}
