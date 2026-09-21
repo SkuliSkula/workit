@@ -4,6 +4,7 @@
 @inject ICustomersApi CustomersApi
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
+@inject IPaydayCustomerSyncApi PaydayCustomerSync
 @inject IJSRuntime JS
 
 <PageTitle>Customers</PageTitle>
@@ -52,6 +53,12 @@
             <div>
                 <FluentTextField Label="Contact person" @bind-Value="newCustomerContactPerson" Placeholder="Contact person" style="width:100%" />
             </div>
+            <div>
+                <FluentTextField Label="Address" @bind-Value="newCustomerAddress" Placeholder="Street" style="width:100%" />
+            </div>
+            <div>
+                <FluentTextField Label="Zip / City" @bind-Value="newCustomerZipCity" Placeholder="105 Reykjavík" style="width:100%" />
+            </div>
             <div class="plan-tasks">
                 <FluentSwitch @bind-Value="newCustomerPlanJobsInTasks" Label="Plan jobs in tasks" />
                 <span class="plan-tasks-hint">New jobs for this customer open with a Tasks section. Any job can still get tasks.</span>
@@ -84,11 +91,28 @@
             <div>
                 <FluentTextField Label="Contact person" @bind-Value="editingCustomer.ContactPerson" Placeholder="Contact person" style="width:100%" />
             </div>
+            <div>
+                <FluentTextField Label="Address" @bind-Value="editingCustomer.Address" Placeholder="Street" style="width:100%" />
+            </div>
+            <div>
+                <FluentTextField Label="Zip code" @bind-Value="editingCustomer.ZipCode" Placeholder="105" style="width:100%" />
+            </div>
+            <div>
+                <FluentTextField Label="City" @bind-Value="editingCustomer.City" Placeholder="Reykjavík" style="width:100%" />
+            </div>
             <div class="plan-tasks">
                 <FluentSwitch @bind-Value="editingCustomer.PlanJobsInTasks" Label="Plan jobs in tasks" />
                 <span class="plan-tasks-hint">New jobs for this customer open with a Tasks section. Any job can still get tasks.</span>
             </div>
         </div>
+        @if (company?.HasPaydayCredentials == true)
+        {
+            <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.5rem;">
+                @(editingCustomer.PaydayId is null
+                    ? "Saving also creates this customer in Payday."
+                    : "Saving also updates this customer in Payday. Payday fills the name and address from Registers Iceland for Icelandic SSNs.")
+            </FluentLabel>
+        }
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
             <FluentButton Appearance="Appearance.Accent" @onclick="SaveCustomerAsync" Disabled="@savingEdit">Save Changes</FluentButton>
             <FluentButton Appearance="Appearance.Outline" @onclick="CancelCustomerEdit" Disabled="@savingEdit">Cancel</FluentButton>
@@ -107,6 +131,18 @@
         <span class="cust-count">@customers.Count</span>
     </div>
 
+    @if (!loading && customers.Any(c => !string.IsNullOrWhiteSpace(c.PaydayPushError)))
+    {
+        <div class="pd-refused" role="alert">
+            <strong>@customers.Count(c => !string.IsNullOrWhiteSpace(c.PaydayPushError)) customer(s) need a look in Payday.</strong>
+            @foreach (var c in customers.Where(c => !string.IsNullOrWhiteSpace(c.PaydayPushError)))
+            {
+                <div>@c.Name — @c.PaydayPushError</div>
+            }
+            <span class="pd-refused-hint">A refused customer is retried when you press Retry Payday and by the sync every 30 minutes; a dropped SSN is fixed in Payday.</span>
+        </div>
+    }
+
     @if (loading)
     {
         <PageLoader />
@@ -119,11 +155,41 @@
             <PropertyColumn Property="@(x => x.Email)" Title="Email" />
             <PropertyColumn Property="@(x => x.Phone)" Title="Phone" />
             <PropertyColumn Property="@(x => x.ContactPerson)" Title="Contact Person" />
+            @if (company?.HasPaydayCredentials == true)
+            {
+                <TemplateColumn Title="Payday">
+                    @if (context.PaydayPushPending)
+                    {
+                        <span class="pd-pill pd-pill--pending" title="@(context.PaydayPushError ?? "Waiting for Payday")">Not accepted</span>
+                    }
+                    else if (context.PaydayId is not null && !string.IsNullOrWhiteSpace(context.PaydayPushError))
+                    {
+                        <span class="pd-pill pd-pill--pending" title="@context.PaydayPushError">In Payday, check SSN</span>
+                    }
+                    else if (context.PaydayId is not null)
+                    {
+                        <span class="pd-pill pd-pill--linked" title="@(context.PaydaySyncedAt is DateTimeOffset t ? $"In step since {t.ToLocalTime():d MMM HH:mm}" : "Linked")">In Payday</span>
+                    }
+                    else
+                    {
+                        <span class="pd-pill pd-pill--none">Not in Payday</span>
+                    }
+                </TemplateColumn>
+            }
             <TemplateColumn Title="Actions">
                 <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => BeginEditCustomer(context))">Edit</FluentButton>
                 @if (company?.HasPaydayCredentials == true)
                 {
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenPaydayAsync(context))" title="Invoices and balance in Payday">Payday</FluentButton>
+                    @if (context.PaydayId is null || context.PaydayPushPending)
+                    {
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => PushToPaydayAsync(context))" Disabled="@(pushBusyId == context.Id)" title="@(context.PaydayPushError ?? "Create this customer in Payday")">
+                            @(context.PaydayPushPending ? "Retry Payday" : "Send to Payday")
+                        </FluentButton>
+                    }
+                    @if (context.PaydayId is not null)
+                    {
+                        <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => OpenPaydayAsync(context))" title="Invoices and balance in Payday">Payday</FluentButton>
+                    }
                 }
             </TemplateColumn>
         </FluentDataGrid>
@@ -312,7 +378,10 @@
     private string newCustomerEmail = string.Empty;
     private string newCustomerPhone = string.Empty;
     private string newCustomerContactPerson = string.Empty;
+    private string newCustomerAddress = string.Empty;
+    private string newCustomerZipCity = string.Empty;
     private bool newCustomerPlanJobsInTasks;
+    private Guid pushBusyId;
     private string? loadError;
 
     protected override async Task OnInitializedAsync()
@@ -367,6 +436,8 @@
         newCustomerEmail = string.Empty;
         newCustomerPhone = string.Empty;
         newCustomerContactPerson = string.Empty;
+        newCustomerAddress = string.Empty;
+        newCustomerZipCity = string.Empty;
     }
 
     private async Task CreateCustomerAsync()
@@ -384,6 +455,9 @@
             Email = newCustomerEmail.Trim(),
             Phone = newCustomerPhone.Trim(),
             ContactPerson = newCustomerContactPerson.Trim(),
+            Address = newCustomerAddress.Trim(),
+            ZipCode = ZipOf(newCustomerZipCity),
+            City = CityOf(newCustomerZipCity),
             PlanJobsInTasks = newCustomerPlanJobsInTasks
         });
 
@@ -402,6 +476,8 @@
     {
         loadError = null;
         showCreateForm = false;
+        // Every field, not just the ones on the form: the API replaces the whole
+        // record, so anything left out here would be wiped (and pushed to Payday wiped).
         editingCustomer = new Customer
         {
             Id = customer.Id,
@@ -410,8 +486,54 @@
             Ssn = customer.Ssn,
             Email = customer.Email,
             Phone = customer.Phone,
-            ContactPerson = customer.ContactPerson
+            ContactPerson = customer.ContactPerson,
+            Address = customer.Address,
+            ZipCode = customer.ZipCode,
+            City = customer.City,
+            Country = customer.Country,
+            Language = customer.Language,
+            Comment = customer.Comment,
+            PlanJobsInTasks = customer.PlanJobsInTasks,
+            Source = customer.Source,
+            PaydayId = customer.PaydayId,
+            PaydayPushPending = customer.PaydayPushPending,
+            PaydayPushError = customer.PaydayPushError,
+            PaydaySyncedAt = customer.PaydaySyncedAt,
         };
+    }
+
+    /// <summary>"105 Reykjavík" → "105"; a value with no leading number is all city.</summary>
+    private static string ZipOf(string zipCity)
+    {
+        var t = zipCity.Trim();
+        var i = t.IndexOf(' ');
+        var head = i < 0 ? t : t[..i];
+        return head.All(char.IsDigit) ? head : string.Empty;
+    }
+
+    private static string CityOf(string zipCity)
+    {
+        var t = zipCity.Trim();
+        var zip = ZipOf(t);
+        return zip.Length == 0 ? t : t[zip.Length..].Trim();
+    }
+
+    private async Task PushToPaydayAsync(Customer customer)
+    {
+        if (pushBusyId != Guid.Empty) return;
+        pushBusyId = customer.Id;
+        loadError = null;
+        try
+        {
+            var result = await PaydayCustomerSync.PushAsync(customer.Id);
+            if (!result.IsSuccess)
+                loadError = $"Payday did not accept {customer.Name}: {result.ErrorMessage}";
+            await LoadAsync();
+        }
+        finally
+        {
+            pushBusyId = Guid.Empty;
+        }
     }
 
     private async Task SaveCustomerAsync()
