@@ -25,6 +25,9 @@
     <div class="cat-add">
         <FluentTextField Placeholder="New category, e.g. Lýsing" @bind-Value="newName" Immediate="true" style="width:280px;" @onkeydown="@(e => { if (e.Key == "Enter") _ = CreateAsync(); })" />
         <FluentButton Appearance="Appearance.Accent" @onclick="CreateAsync" Disabled="@(string.IsNullOrWhiteSpace(newName) || busy)">Add</FluentButton>
+        <FluentButton Appearance="Appearance.Outline" Style="margin-left:auto;" @onclick="SeedStandardAsync" Disabled="@busy" title="Johan Rönning's Vörulisti, second level — adds only what is missing">
+            Add supplier's categories
+        </FluentButton>
     </div>
 
     @if (loading)
@@ -139,6 +142,19 @@
         {
             var result = await CategoriesApi.CreateAsync(newName.Trim());
             if (result.IsSuccess) { message = $"✓ {result.Value!.Name} added."; messageIsError = false; newName = string.Empty; await LoadAsync(); }
+            else { message = result.ErrorMessage; messageIsError = true; }
+        }
+        finally { busy = false; }
+    }
+
+    private async Task SeedStandardAsync()
+    {
+        if (busy) return;
+        busy = true; message = null;
+        try
+        {
+            var result = await CategoriesApi.SeedStandardAsync();
+            if (result.IsSuccess) { message = result.Value == 0 ? "✓ All of the supplier's categories are already here." : $"✓ {result.Value} categor{(result.Value == 1 ? "y" : "ies")} added from the supplier's list."; messageIsError = false; await LoadAsync(); }
             else { message = result.ErrorMessage; messageIsError = true; }
         }
         finally { busy = false; }

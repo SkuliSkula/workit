@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Payday;
 using Workit.Shared.Models;
 using static Workit.Api.Endpoints.EndpointHelpers;
 
@@ -44,6 +45,26 @@ internal static class ProductCategoryEndpoints
                     return Results.Created($"/api/categories/{category.Id}", new ProductCategoryRow(category.Id, category.Name, category.SortOrder, 0, 0));
                 }, logger, "creating a category"))
             .WithName("CreateCategory");
+
+        // The supplier's taxonomy as a starting list; adds only what the company lacks.
+        group.MapPost("/seed-standard", async (WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!http.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    var user = http.User.ToUserContext();
+                    var known = (await db.ProductCategories.Where(c => c.CompanyId == user.CompanyId).Select(c => c.Name).ToListAsync(ct)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var order = await db.ProductCategories.Where(c => c.CompanyId == user.CompanyId).Select(c => (int?)c.SortOrder).MaxAsync(ct) ?? 0;
+                    var added = 0;
+                    foreach (var (_, name) in ProductCategorizer.StandardCategories)
+                    {
+                        if (known.Contains(name)) continue;
+                        db.ProductCategories.Add(new ProductCategory { CompanyId = user.CompanyId, Name = name, SortOrder = ++order });
+                        known.Add(name); added++;
+                    }
+                    await db.SaveChangesAsync(ct);
+                    return Results.Ok(new { added, total = known.Count });
+                }, logger, "adding the standard categories"))
+            .WithName("SeedStandardCategories");
 
         group.MapPut("/{id:guid}", async (WorkitDbContext db, HttpContext http, Guid id, ProductCategoryRequest body, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>

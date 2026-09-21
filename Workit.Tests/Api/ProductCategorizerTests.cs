@@ -11,22 +11,22 @@ public class ProductCategorizerTests
         new() { Id = Guid.NewGuid(), Sku = name[..Math.Min(6, name.Length)], Name = name, Description = description, Category = category };
 
     [Theory]
-    [InlineData("Einþættur vír 1,5mm ² blár H07V-U 200m", "Vír og strengir")]
-    [InlineData("TENGIDÓS AP10 HVÍT IP65 ABB, 104x104x48mm HALOGENFRÍ", "Dósir og kassar")]
-    [InlineData("JUNG INNFELLDUR ÞRÝSTIROFI : 531 EU", "Rofar")]
-    [InlineData("Super Retro GU10 550lm 830 DIM. 25.000klst CRI80 36°", "Lýsing")]
-    [InlineData("DRAGBINDI JS+200X4,6 100STK HVÍT PA66", "Festingar og bindi")]
-    [InlineData("EATON JARÐLEKAR. TYPE-A: PFGM-63/4/003-A", "Varbúnaður og töflur")]
-    [InlineData("SHELLY PRO 2PM - 2RÁSA WIFI-RELAY MEÐ ORKUMÆLINGU", "Snjallbúnaður")]
-    [InlineData("PRUFUTÆKI FYRIR RJ-45 PRÓFAR HVERT PAR, Grátt CAT5E CAT6", "Netbúnaður")]
-    [InlineData("Rafhlöður AAA 8 stk í pk.", "Rafhlöður")]
+    [InlineData("Einþættur vír 1,5mm ² blár H07V-U 200m", "Töfluvír")]
+    [InlineData("TENGIDÓS AP10 HVÍT IP65 ABB, 104x104x48mm HALOGENFRÍ", "Lagnaefni")]
+    [InlineData("JUNG INNFELLDUR ÞRÝSTIROFI : 531 EU", "Rofar og tenglar")]
+    [InlineData("Super Retro GU10 550lm 830 DIM. 25.000klst CRI80 36°", "Perur og íhlutir")]
+    [InlineData("DRAGBINDI JS+200X4,6 100STK HVÍT PA66", "Festingar")]
+    [InlineData("EATON JARÐLEKAR. TYPE-A: PFGM-63/4/003-A", "Töflubúnaður")]
+    [InlineData("SHELLY PRO 2PM - 2RÁSA WIFI-RELAY MEÐ ORKUMÆLINGU", "Snjalllausnir og hússtjórnarkerfi")]
+    [InlineData("PRUFUTÆKI FYRIR RJ-45 PRÓFAR HVERT PAR, Grátt CAT5E CAT6", "Netefni")]
+    [InlineData("Rafhlöður AAA 8 stk í pk.", "Rafhlöður almennar")]
     [InlineData("HETTUJAKKI DÖKKGR/SVARTUR M", "Vinnufatnaður")]
-    [InlineData("Einangrunarband PVC Svart 20m", "Efni og lím")]
-    [InlineData("KLÓ 32A 5P 6h P432-6S IP44 RAUÐ", "Tenglar og klær")]
+    [InlineData("Einangrunarband PVC Svart 20m", "Einangrunarefni")]
+    [InlineData("KLÓ 32A 5P 6h P432-6S IP44 RAUÐ", "Klær, fjöltengi, framlengingar")]
     [InlineData("Vírklippur Heavy duty", "Verkfæri")]
-    [InlineData("KAPALSPENNA C8-12W HVÍT 100/PAKK NAGLI 2,0x30mm TILLEX", "Festingar og bindi")]
+    [InlineData("KAPALSPENNA C8-12W HVÍT 100/PAKK NAGLI 2,0x30mm TILLEX", "Festingar")]
     [InlineData("ÍDRÁTTARFEITI DYNABLUE D-35, 0,95L. POLYWATER", "Efni og lím")]
-    [InlineData("Messingnippill MS-M12 IP68", "Rör og rennur")]
+    [InlineData("Messingnippill MS-M12 IP68", "Lagnaleiðir")]
     public void Seeds_PlaceTypicalWholesalerNames(string name, string expected)
     {
         var s = ProductCategorizer.Suggest([P(name)], []).Single();
@@ -58,7 +58,7 @@ public class ProductCategorizerTests
     [Fact]
     public void Confidence_IsHighWhenOneCategoryDominates_LowWhenSplit()
     {
-        var clear = ProductCategorizer.Suggest([P("Fínþættur vír 10mm ² Gulgrænn")], []).Single();
+        var clear = ProductCategorizer.Suggest([P("DRAGBINDI JS+200X4,6 100STK HVÍT PA66")], []).Single();
         clear.Confidence.Should().Be(ProductCategorizer.Confidence.High);
 
         // "rofi" and "ljós" pull equally hard in different directions.
