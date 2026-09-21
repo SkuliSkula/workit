@@ -3,6 +3,7 @@
 @inject IPaydayProductsCacheApi ProductsApi
 @inject BusyService Busy
 @inject NavigationManager Navigation
+@using Workit.Shared.Payday
 
 <PageTitle>Payday Products</PageTitle>
 
@@ -20,7 +21,8 @@
             {
                 <FluentLabel Style="color:#60758b; font-size:0.85rem;">Synced @lastSynced.Value.LocalDateTime.ToString("d MMM HH:mm")</FluentLabel>
             }
-            <FluentButton Appearance="Appearance.Accent" @onclick="SyncAsync" Disabled="@loading">Sync now</FluentButton>
+            <FluentButton Appearance="Appearance.Accent" @onclick="OpenCreateAsync" Disabled="@loading">+ New product</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="SyncAsync" Disabled="@loading">Sync now</FluentButton>
             <FluentButton Appearance="Appearance.Stealth" @onclick="@(() => Navigation.NavigateTo("/payday"))">← Back to Payday</FluentButton>
         </div>
     </div>
@@ -29,6 +31,66 @@
         <FluentLabel Color="@(messageIsError ? Color.Error : Color.Success)" style="margin-top:0.75rem; display:block;">@message</FluentLabel>
     }
 </FluentCard>
+
+@* ── New product ── *@
+@if (showCreate)
+{
+    <AppDialog Title="New product" OnClose="CloseCreate" Busy="creating">
+        <FluentLabel Style="color:#60758b; font-size:0.9rem;">
+            Created in Payday — your price list lives there — and ready to use in Workit straight away.
+        </FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div><FluentTextField Label="Name *" @bind-Value="newName" Placeholder="e.g. Vinna rafvirkja" style="width:100%" /></div>
+            <div><FluentTextField Label="SKU *" @bind-Value="newSku" Placeholder="e.g. VINNA" style="width:100%" /></div>
+            <div>
+                <FluentNumberField Label="Sale price (ex. VAT) *" TValue="decimal" @bind-Value="newPrice" Min="0" Step="1" style="width:100%" />
+            </div>
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="VAT %" Value="@newVat.ToString("0.##")" ValueChanged="OnVatChanged" style="width:100%">
+                    <FluentOption TOption="string" Value="24">24 %</FluentOption>
+                    <FluentOption TOption="string" Value="11">11 %</FluentOption>
+                    <FluentOption TOption="string" Value="0">0 % (VAT-free)</FluentOption>
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="Sales account in Payday *" @bind-Value="newLedgerId" style="width:100%">
+                    @foreach (var a in ledgerAccounts)
+                    {
+                        <FluentOption TOption="string" Value="@a.Id.ToString()">@a.Code @a.Name</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="Used in Workit as" @bind-Value="newRole" style="width:100%">
+                    @foreach (var r in Enum.GetValues<PaydayProductRole>())
+                    {
+                        <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div><FluentTextField Label="Unit" @bind-Value="newUnit" Placeholder="klst. / stk. / m" style="width:100%" /></div>
+            <div><FluentTextField Label="Category" @bind-Value="newCategory" Placeholder="Optional" style="width:100%" /></div>
+            <div style="grid-column:1 / -1;"><FluentTextField Label="Description" @bind-Value="newDescription" Placeholder="Optional" style="width:100%" /></div>
+            <div style="grid-column:1 / -1;">
+                <FluentSwitch @bind-Value="newTrackStock" Label="Track stock in Payday" />
+                <div style="color:#60758b; font-size:0.85rem; margin-top:0.2rem;">On for goods you keep in stock; off for labor, driving and other service lines.</div>
+            </div>
+            @if (newTrackStock)
+            {
+                <div><FluentNumberField Label="Opening stock" TValue="decimal" @bind-Value="newOpeningQty" Min="0" Step="1" style="width:100%" /></div>
+                <div><FluentNumberField Label="Purchase price (ex. VAT)" TValue="decimal" @bind-Value="newPurchasePrice" Min="0" Step="1" style="width:100%" /></div>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(createError))
+        {
+            <FluentLabel Color="Color.Error" role="alert" style="margin-top:0.5rem; display:block;">@createError</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="CreateAsync" Disabled="@(creating || !CanCreate)">Create in Payday</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CloseCreate" Disabled="@creating">Cancel</FluentButton>
+        </div>
+    </AppDialog>
+}
 
 @if (!loading && products.Count > 0 && MissingLaborRoles.Count > 0)
 {
@@ -41,7 +103,7 @@
                 if (i > 0) { <text>, </text> }
                 <strong>@RoleLabel(MissingLaborRoles[i])</strong>
             }.
-            If Payday has no such product yet, create it there and press Sync now.
+            If Payday has no such product yet, press <strong>+ New product</strong> — it is created in Payday and given the role in one step.
         </FluentLabel>
     </FluentCard>
 }
@@ -228,5 +290,80 @@
             message = result.ErrorMessage; messageIsError = true;
         }
         busyId = null;
+    }
+
+    // ── New product ──
+    private bool showCreate, creating;
+    private string? createError;
+    private List<PaydayLedgerAccount> ledgerAccounts = [];
+    private string newName = "", newSku = "", newDescription = "", newUnit = "", newCategory = "";
+    private decimal newPrice, newVat = 24, newOpeningQty, newPurchasePrice;
+    private string newLedgerId = "";
+    private string newRole = PaydayProductRole.Unassigned.ToString();
+    private bool newTrackStock;
+
+    private bool CanCreate =>
+        !string.IsNullOrWhiteSpace(newName) && !string.IsNullOrWhiteSpace(newSku) && Guid.TryParse(newLedgerId, out _);
+
+    private async Task OpenCreateAsync()
+    {
+        createError = null;
+        newName = newSku = newDescription = newCategory = ""; newUnit = "klst.";
+        newPrice = 0; newVat = 24; newOpeningQty = 0; newPurchasePrice = 0; newTrackStock = false;
+        newRole = PaydayProductRole.Unassigned.ToString();
+        showCreate = true;
+
+        if (ledgerAccounts.Count == 0)
+        {
+            var result = await ProductsApi.GetSalesLedgerAccountsAsync();
+            if (result.IsSuccess) ledgerAccounts = result.Value ?? [];
+            else createError = result.ErrorMessage;
+        }
+        PickLedgerForVat();
+    }
+
+    private void CloseCreate() { if (!creating) showCreate = false; }
+
+    private void OnVatChanged(string? value)
+    {
+        if (decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v)) newVat = v;
+        PickLedgerForVat();
+    }
+
+    /// <summary>Payday does not check a line's VAT against its account, so we steer the owner to the matching one.</summary>
+    private void PickLedgerForVat()
+    {
+        var wanted = newVat switch { 24 => "StandardVAT", 11 => "ReducedVAT", _ => "" };
+        var match = ledgerAccounts.FirstOrDefault(a => (a.DefaultVatPercentType ?? "") == wanted) ?? ledgerAccounts.FirstOrDefault();
+        newLedgerId = match?.Id.ToString() ?? "";
+    }
+
+    private async Task CreateAsync()
+    {
+        if (!CanCreate || creating) return;
+        creating = true; createError = null;
+        try
+        {
+            using var busy = Busy.Begin("Creating the product in Payday…");
+            var result = await ProductsApi.CreateAsync(new PaydayProductCreate(
+                newName.Trim(), newSku.Trim(), string.IsNullOrWhiteSpace(newDescription) ? null : newDescription.Trim(),
+                newPrice, newVat, Guid.Parse(newLedgerId),
+                newTrackStock, newTrackStock ? newOpeningQty : null, newTrackStock && newPurchasePrice > 0 ? newPurchasePrice : null,
+                Enum.TryParse<PaydayProductRole>(newRole, out var role) ? role : PaydayProductRole.Unassigned,
+                newUnit.Trim(), newCategory.Trim()));
+            if (!result.IsSuccess || result.Value is null)
+            {
+                createError = result.ErrorMessage ?? "The product could not be created in Payday right now.";
+                return;
+            }
+            showCreate = false;
+            message = $"✓ {result.Value.Sku} — {result.Value.Name} created in Payday" + (role != PaydayProductRole.Unassigned ? $" as {RoleLabel(role)}." : ".");
+            messageIsError = false;
+            await LoadAsync();
+        }
+        finally
+        {
+            creating = false;
+        }
     }
 }
