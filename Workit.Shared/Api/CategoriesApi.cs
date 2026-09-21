@@ -11,6 +11,8 @@ public interface ICategoriesApi
     Task<ApiResult<ProductCategoryRow>> RenameAsync(Guid id, string name);
     /// <summary>Deletes; when in use, <paramref name="moveTo"/> says where its products and materials go (409 without it).</summary>
     Task<ApiResult> DeleteAsync(Guid id, Guid? moveTo = null);
+    /// <summary>Adds the supplier's standard categories the company does not have yet. Returns how many were added.</summary>
+    Task<ApiResult<int>> SeedStandardAsync();
 }
 
 internal sealed class CategoriesApi(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
@@ -29,6 +31,14 @@ internal sealed class CategoriesApi(HttpClient httpClient, IAccessTokenAccessor 
 
     public Task<ApiResult<ProductCategoryRow>> RenameAsync(Guid id, string name) =>
         PutForJsonAsync<ProductCategoryRequest, ProductCategoryRow>($"api/categories/{id}", new ProductCategoryRequest(name), "The category could not be renamed right now.");
+
+    private sealed record SeedResponse(int Added, int Total);
+
+    public async Task<ApiResult<int>> SeedStandardAsync()
+    {
+        var result = await PostForJsonAsync<object, SeedResponse>("api/categories/seed-standard", new { }, "The standard categories could not be added right now.");
+        return result.IsSuccess ? ApiResult<int>.Success(result.Value?.Added ?? 0) : ApiResult<int>.Failure(result.ErrorMessage ?? "The standard categories could not be added right now.");
+    }
 
     public Task<ApiResult> DeleteAsync(Guid id, Guid? moveTo = null) =>
         DeleteAsync($"api/categories/{id}{(moveTo is null ? "" : $"?moveTo={moveTo}")}", "The category could not be deleted right now.");
