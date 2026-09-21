@@ -78,3 +78,13 @@ public sealed record PaydayProductCreate(
     PaydayProductRole Role,
     string? Unit,
     string? Category);
+
+/// <summary>One page of the product cache, searched and sorted in SQL.</summary>
+/// <param name="RoleCounts">Live (unarchived) products per role, ignoring the search — for the filter chips.</param>
+public sealed record PaydayProductPage(
+    List<PaydayProductCache> Items,
+    int Total,
+    int Page,
+    int PageSize,
+    Dictionary<PaydayProductRole, int> RoleCounts,
+    DateTimeOffset? LastSyncedAt);

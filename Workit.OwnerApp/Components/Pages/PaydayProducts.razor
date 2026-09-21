@@ -92,7 +92,7 @@
     </AppDialog>
 }
 
-@if (!loading && products.Count > 0 && MissingLaborRoles.Count > 0)
+@if (!loading && TotalLive > 0 && MissingLaborRoles.Count > 0)
 {
     <FluentCard Class="admin-card" AreaRestricted="false" Style="border-left:4px solid #b45309;">
         <FluentLabel Style="font-weight:600; color:#b45309;">Invoices can't be built by product yet</FluentLabel>
@@ -109,112 +109,177 @@
 }
 
 <FluentCard Class="admin-card" AreaRestricted="false">
-    <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-bottom:0.5rem;">
-        <FluentTextField Placeholder="Search SKU or name…" @bind-Value="search" @bind-Value:after="StateHasChanged" style="width:260px;" />
-        <FluentSelect TValue="string" TOption="string" @bind-Value="roleFilter" style="width:180px;">
-            <FluentOption TOption="string" Value="">All roles</FluentOption>
-            @foreach (var r in Enum.GetValues<PaydayProductRole>())
+    <div class="filters">
+        <FluentTextField Placeholder="Search SKU, name or category…" Value="@search" ValueChanged="OnSearchChanged" Immediate="true" ImmediateDelay="300" style="width:280px;" />
+        <div class="chips">
+            <button class="chip @(roleFilter is null ? "chip--on" : "")" @onclick="@(() => SetRoleFilterAsync(null))">All <span class="chip-n">@TotalLive</span></button>
+            @foreach (var r in ChipRoles)
             {
-                <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
+                var n = listPage?.RoleCounts.GetValueOrDefault(r) ?? 0;
+                <button class="chip @(roleFilter == r ? "chip--on" : "") @(r == PaydayProductRole.Unassigned && n > 0 ? "chip--attention" : "")"
+                        @onclick="@(() => SetRoleFilterAsync(r))">
+                    @(r == PaydayProductRole.Unassigned ? "Needs a role" : RoleLabel(r)) <span class="chip-n">@n</span>
+                </button>
             }
-        </FluentSelect>
-        <FluentCheckbox @bind-Value="showArchived" Label="Show archived" @bind-Value:after="LoadAsync" />
-        <span style="margin-left:auto; color:#60758b; font-size:0.85rem;">@Filtered.Count of @products.Count</span>
+        </div>
+        <FluentCheckbox Value="@showArchived" ValueChanged="OnShowArchivedChanged" Label="Show archived" />
     </div>
 
-    @if (loading)
+    @if (loading && listPage is null)
     {
         <PageLoader />
     }
-    else if (products.Count == 0)
+    else if (listPage is { Total: 0 } && string.IsNullOrWhiteSpace(search) && roleFilter is null)
     {
         <FluentLabel Style="color:#60758b;">
             No products yet. Press <strong>Sync now</strong> to pull the list from Payday.
-            @if (!string.IsNullOrWhiteSpace(message)) { <text> </text> }
         </FluentLabel>
     }
-    else
+    else if (listPage is not null)
     {
-        <div class="products-grid">
-            <FluentDataGrid TGridItem="PaydayProductCache" Items="@Filtered.AsQueryable()" DisplayMode="DataGridDisplayMode.Table" style="min-width:880px;">
-                <PropertyColumn Property="@(x => x.Sku)"  Title="SKU" Sortable="true" />
-                <TemplateColumn Title="Name" Sortable="true" SortBy="@(GridSort<PaydayProductCache>.ByAscending(x => x.Name))">
-                    <span style="font-weight:600;">@context.Name</span>
-                    @if (!string.IsNullOrWhiteSpace(context.Description))
+        <div class="table-wrap @(loading ? "table-wrap--loading" : "")">
+            <table class="products">
+                <thead>
+                    <tr>
+                        <th><button class="sort" @onclick="@(() => SortByAsync("sku"))">SKU @SortMark("sku")</button></th>
+                        <th><button class="sort" @onclick="@(() => SortByAsync("name"))">Name @SortMark("name")</button></th>
+                        <th class="num"><button class="sort" @onclick="@(() => SortByAsync("price"))">Sale (ex. VAT) @SortMark("price")</button></th>
+                        <th class="num">VAT %</th>
+                        <th class="num"><button class="sort" @onclick="@(() => SortByAsync("stock"))">Stock in Payday @SortMark("stock")</button></th>
+                        <th>Used in Workit as</th>
+                        <th>Unit</th>
+                        <th>Category</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (listPage.Items.Count == 0)
                     {
-                        <div style="color:#60758b; font-size:0.8rem;">@context.Description</div>
+                        <tr><td colspan="9" class="empty">Nothing matches@(string.IsNullOrWhiteSpace(search) ? "" : $" “{search}”")@(roleFilter is null ? "" : $" under {RoleLabel(roleFilter.Value)}").</td></tr>
                     }
-                </TemplateColumn>
-                <TemplateColumn Title="Sale (ex. VAT)" Align="Align.End"><span>@context.SalePriceExVat.ToString("N0") kr.</span></TemplateColumn>
-                <PropertyColumn Property="@(x => x.VatPercentage)" Title="VAT %" Format="0.#" />
-                <TemplateColumn Title="Stock in Payday" Align="Align.End">
-                    @if (context.Quantity is decimal q)
+                    @foreach (var p in listPage.Items)
                     {
-                        <span style="@(q <= 0 ? "color:#dc2626; font-weight:600;" : "")">@q.ToString("0.##") @context.Unit</span>
+                        <tr class="@(p.Archived ? "row--archived" : "")" @onclick="@(() => BeginEdit(p))">
+                            <td class="sku">@p.Sku</td>
+                            <td>
+                                <span class="name">@p.Name</span>
+                                @if (!string.IsNullOrWhiteSpace(p.Description))
+                                {
+                                    <div class="desc">@p.Description</div>
+                                }
+                            </td>
+                            <td class="num">@p.SalePriceExVat.ToString("N0") kr.</td>
+                            <td class="num">@p.VatPercentage.ToString("0.#")</td>
+                            <td class="num">
+                                @if (p.Quantity is decimal q)
+                                {
+                                    <span class="@(q <= 0 ? "stock--out" : "")">@q.ToString("0.##") @p.Unit</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">not tracked</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="role role--@p.Role.ToString().ToLowerInvariant()">@RoleLabel(p.Role)</span>
+                            </td>
+                            <td>@(string.IsNullOrWhiteSpace(p.Unit) ? "—" : p.Unit)</td>
+                            <td>@(string.IsNullOrWhiteSpace(p.Category) ? "—" : p.Category)</td>
+                            <td class="actions">
+                                @if (p.Archived)
+                                {
+                                    <span class="archived">Archived</span>
+                                }
+                                <span @onclick:stopPropagation="true"><FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginEdit(p))">Edit</FluentButton></span>
+                            </td>
+                        </tr>
                     }
-                    else
-                    {
-                        <span style="color:#9ca3af;">not tracked</span>
-                    }
-                </TemplateColumn>
-                <TemplateColumn Title="Used in Workit as">
-                    <FluentSelect TValue="string" TOption="string"
-                                  Value="@context.Role.ToString()"
-                                  ValueChanged="@(v => SetRoleAsync(context, v))"
-                                  Disabled="@(busyId == context.Id)"
-                                  style="width:170px;">
-                        @foreach (var r in Enum.GetValues<PaydayProductRole>())
-                        {
-                            <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
-                        }
-                    </FluentSelect>
-                </TemplateColumn>
-                <TemplateColumn Title="Unit">
-                    <FluentTextField Value="@context.Unit" ValueChanged="@(v => SetUnitAsync(context, v))" Placeholder="stk." style="width:80px;" Disabled="@(busyId == context.Id)" />
-                </TemplateColumn>
-                <TemplateColumn Title="Category">
-                    <FluentTextField Value="@context.Category" ValueChanged="@(v => SetCategoryAsync(context, v))" Placeholder="—" style="width:140px;" Disabled="@(busyId == context.Id)" />
-                </TemplateColumn>
-                <TemplateColumn Title="">
-                    @if (context.Archived)
-                    {
-                        <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:4px; font-size:0.8rem; font-weight:600;">Archived</span>
-                    }
-                </TemplateColumn>
-            </FluentDataGrid>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pager">
+            <span class="pager-info">
+                @if (listPage.Total == 0) { <text>0 products</text> }
+                else { <text>@(((listPage.Page - 1) * listPage.PageSize) + 1)–@Math.Min(listPage.Page * listPage.PageSize, listPage.Total) of @listPage.Total</text> }
+            </span>
+            <div class="pager-buttons">
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Disabled="@(listPage.Page <= 1 || loading)" @onclick="@(() => GoToPageAsync(listPage.Page - 1))">‹ Previous</FluentButton>
+                <span class="pager-listPage">Page @listPage.Page of @Math.Max(1, PageCount)</span>
+                <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Disabled="@(listPage.Page >= PageCount || loading)" @onclick="@(() => GoToPageAsync(listPage.Page + 1))">Next ›</FluentButton>
+            </div>
+            <FluentSelect TValue="string" TOption="string" Value="@pageSize.ToString()" ValueChanged="OnPageSizeChanged" style="width:110px;">
+                <FluentOption TOption="string" Value="25">25 / listPage</FluentOption>
+                <FluentOption TOption="string" Value="50">50 / listPage</FluentOption>
+                <FluentOption TOption="string" Value="100">100 / listPage</FluentOption>
+            </FluentSelect>
         </div>
     }
 </FluentCard>
 
+@* ── Edit one product's Workit fields ── *@
+@if (editing is not null)
+{
+    <AppDialog Title="@($"{editing.Sku} — {editing.Name}")" OnClose="CancelEdit" Busy="saving">
+        <FluentLabel Style="color:#60758b; font-size:0.9rem;">
+            @editing.SalePriceExVat.ToString("N0") kr. ex. VAT · @editing.VatPercentage.ToString("0.#") % ·
+            @(editing.Quantity is decimal eq ? $"{eq:0.##} in stock" : "not stock-tracked") — prices and stock are Payday's; these three fields are Workit's.
+        </FluentLabel>
+        <div class="admin-grid" style="margin-top:0.75rem;">
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="Used in Workit as" @bind-Value="editRole" style="width:100%">
+                    @foreach (var r in Enum.GetValues<PaydayProductRole>())
+                    {
+                        <FluentOption TOption="string" Value="@r.ToString()">@RoleLabel(r)</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
+            <div><FluentTextField Label="Unit" @bind-Value="editUnit" Placeholder="stk. / klst. / m" style="width:100%" /></div>
+            <div><FluentTextField Label="Category" @bind-Value="editCategory" Placeholder="Optional — groups the app's material picker" style="width:100%" /></div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(editError))
+        {
+            <FluentLabel Color="Color.Error" role="alert" style="margin-top:0.5rem; display:block;">@editError</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="SaveEditAsync" Disabled="@saving">Save</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CancelEdit" Disabled="@saving">Cancel</FluentButton>
+        </div>
+    </AppDialog>
+}
+
 @code {
-    private readonly List<PaydayProductCache> products = [];
+    /// <summary>List state lives in the URL so back/forward and "browse away and back" land on the same listPage.</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "q")]    public string? QueryQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "role")] public string? QueryRole { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "page")] public int? QueryPage { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "size")] public int? QuerySize { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sort")] public string? QuerySort { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "archived")] public bool? QueryArchived { get; set; }
+
+    private PaydayProductPage? listPage;
     private bool loading = true;
     private bool showArchived;
     private string search = string.Empty;
-    private string roleFilter = string.Empty;
+    private PaydayProductRole? roleFilter;
+    private string sort = "sku";
+    private bool sortDesc;
+    private int pageNumber = 1;
+    private int pageSize = 50;
     private string? message;
     private bool messageIsError;
     private DateTimeOffset? lastSynced;
-    private Guid? busyId;
+    private int loadVersion;
 
     private static readonly PaydayProductRole[] LaborRoles = [PaydayProductRole.RegularHour, PaydayProductRole.OvertimeHour, PaydayProductRole.DrivingUnit];
+    private static readonly PaydayProductRole[] ChipRoles = [PaydayProductRole.Unassigned, PaydayProductRole.Material, PaydayProductRole.RegularHour, PaydayProductRole.OvertimeHour, PaydayProductRole.DrivingUnit, PaydayProductRole.Ignore];
 
-    /// <summary>Labor roles no active product carries yet — invoices need all three.</summary>
+    private int TotalLive => listPage?.RoleCounts.Values.Sum() ?? 0;
+    private int PageCount => listPage is null ? 1 : (int)Math.Ceiling(listPage.Total / (double)listPage.PageSize);
+
+    /// <summary>Labor roles no live product carries yet — invoices need all three.</summary>
     private List<PaydayProductRole> MissingLaborRoles =>
-        LaborRoles.Where(r => !products.Any(p => !p.Archived && p.Role == r)).ToList();
-
-    private List<PaydayProductCache> Filtered
-    {
-        get
-        {
-            IEnumerable<PaydayProductCache> q = products;
-            if (!string.IsNullOrWhiteSpace(search))
-                q = q.Where(p => p.Sku.Contains(search, StringComparison.OrdinalIgnoreCase) || p.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
-            if (Enum.TryParse<PaydayProductRole>(roleFilter, out var role))
-                q = q.Where(p => p.Role == role);
-            return q.ToList();
-        }
-    }
+        listPage is null ? [] : LaborRoles.Where(r => listPage.RoleCounts.GetValueOrDefault(r) == 0).ToList();
 
     internal static string RoleLabel(PaydayProductRole role) => role switch
     {
@@ -227,6 +292,20 @@
         _ => role.ToString(),
     };
 
+    private string SortMark(string column) => sort == column ? (sortDesc ? "↓" : "↑") : "";
+
+    protected override void OnParametersSet()
+    {
+        search = QueryQ ?? string.Empty;
+        roleFilter = Enum.TryParse<PaydayProductRole>(QueryRole, out var r) ? r : null;
+        pageNumber = Math.Max(1, QueryPage ?? 1);
+        pageSize = QuerySize is 25 or 50 or 100 ? QuerySize.Value : 50;
+        showArchived = QueryArchived ?? false;
+        var s = QuerySort ?? "sku";
+        sortDesc = s.EndsWith("-desc", StringComparison.Ordinal);
+        sort = sortDesc ? s[..^5] : s;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender) await LoadAsync();
@@ -234,19 +313,89 @@
 
     private async Task LoadAsync()
     {
+        var version = ++loadVersion;
         loading = true; StateHasChanged();
-        var result = await ProductsApi.GetProductsAsync(includeArchived: showArchived);
-        products.Clear();
-        if (result.IsSuccess)
+        var result = await ProductsApi.GetPageAsync(search, roleFilter, showArchived, sort, sortDesc, pageNumber, pageSize);
+        if (version != loadVersion) return; // a newer request superseded this one
+        if (result.IsSuccess && result.Value is { } p)
         {
-            products.AddRange(result.Value ?? []);
-            lastSynced = products.Count > 0 ? products.Max(p => p.SyncedAt) : null;
+            listPage = p;
+            lastSynced = p.LastSyncedAt;
+            // Past the last listPage (a filter shrank the list): snap back.
+            if (p.Total > 0 && p.Items.Count == 0 && pageNumber > 1)
+            {
+                pageNumber = Math.Max(1, (int)Math.Ceiling(p.Total / (double)p.PageSize));
+                PushUrl();
+                await LoadAsync();
+                return;
+            }
         }
         else
         {
             message = result.ErrorMessage; messageIsError = true;
         }
         loading = false; StateHasChanged();
+    }
+
+    /// <summary>Writes the list state to the URL without a navigation round-trip.</summary>
+    private void PushUrl()
+    {
+        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["q"]        = string.IsNullOrWhiteSpace(search) ? null : search,
+            ["role"]     = roleFilter?.ToString(),
+            ["page"]     = pageNumber > 1 ? pageNumber : null,
+            ["size"]     = pageSize != 50 ? pageSize : null,
+            ["sort"]     = sort == "sku" && !sortDesc ? null : sort + (sortDesc ? "-desc" : ""),
+            ["archived"] = showArchived ? true : null,
+        });
+        Navigation.NavigateTo(url, replace: true);
+    }
+
+    private async Task OnSearchChanged(string? value)
+    {
+        search = value ?? string.Empty;
+        pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private async Task SetRoleFilterAsync(PaydayProductRole? role)
+    {
+        roleFilter = roleFilter == role ? null : role;
+        pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private async Task OnShowArchivedChanged(bool value)
+    {
+        showArchived = value; pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private async Task SortByAsync(string column)
+    {
+        if (sort == column) sortDesc = !sortDesc; else { sort = column; sortDesc = false; }
+        pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private async Task GoToPageAsync(int number)
+    {
+        pageNumber = Math.Clamp(number, 1, Math.Max(1, PageCount));
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private async Task OnPageSizeChanged(string? value)
+    {
+        if (!int.TryParse(value, out var size) || size == pageSize) return;
+        pageSize = size; pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
     }
 
     private async Task SyncAsync()
@@ -268,28 +417,45 @@
         }
     }
 
-    private async Task SetRoleAsync(PaydayProductCache p, string? value)
+    // ── Edit one row ──
+    private PaydayProductCache? editing;
+    private string editRole = "", editUnit = "", editCategory = "";
+    private string? editError;
+    private bool saving;
+
+    private void BeginEdit(PaydayProductCache p)
     {
-        if (!Enum.TryParse<PaydayProductRole>(value, out var role) || role == p.Role) return;
-        await SaveAsync(p, role, p.Unit, p.Category);
+        editing = p;
+        editRole = p.Role.ToString(); editUnit = p.Unit; editCategory = p.Category;
+        editError = null;
     }
 
-    private Task SetUnitAsync(PaydayProductCache p, string? value) => SaveAsync(p, p.Role, value ?? "", p.Category);
-    private Task SetCategoryAsync(PaydayProductCache p, string? value) => SaveAsync(p, p.Role, p.Unit, value ?? "");
+    private void CancelEdit() { if (!saving) editing = null; }
 
-    private async Task SaveAsync(PaydayProductCache p, PaydayProductRole role, string unit, string category)
+    private async Task SaveEditAsync()
     {
-        busyId = p.Id; message = null;
-        var result = await ProductsApi.SetRoleAsync(p.Id, role, unit, category);
-        if (result.IsSuccess && result.Value is { } saved)
+        if (editing is null || saving) return;
+        saving = true; editError = null;
+        try
         {
-            p.Role = saved.Role; p.Unit = saved.Unit; p.Category = saved.Category;
+            var role = Enum.TryParse<PaydayProductRole>(editRole, out var r) ? r : editing.Role;
+            var result = await ProductsApi.SetRoleAsync(editing.Id, role, editUnit.Trim(), editCategory.Trim());
+            if (result.IsSuccess && result.Value is { } saved)
+            {
+                editing.Role = saved.Role; editing.Unit = saved.Unit; editing.Category = saved.Category;
+                editing = null;
+                // Chip counts and the labor warning depend on roles; refresh quietly.
+                await LoadAsync();
+            }
+            else
+            {
+                editError = result.ErrorMessage ?? "The product could not be saved right now.";
+            }
         }
-        else
+        finally
         {
-            message = result.ErrorMessage; messageIsError = true;
+            saving = false;
         }
-        busyId = null;
     }
 
     // ── New product ──
