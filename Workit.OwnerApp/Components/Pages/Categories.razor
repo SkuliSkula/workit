@@ -1,0 +1,184 @@
+@page "/categories"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject ICategoriesApi CategoriesApi
+@inject BusyService Busy
+
+<PageTitle>Categories</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:0.5rem;">
+        <div>
+            <FluentLabel Typo="Typography.PaneHeader">Categories</FluentLabel>
+            <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+                How products and materials are grouped in the apps' pickers. Products and materials pick from this list;
+                renaming a category renames it on every product and material.
+            </FluentLabel>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(message))
+    {
+        <FluentLabel Color="@(messageIsError ? Color.Error : Color.Success)" style="margin-top:0.75rem; display:block;">@message</FluentLabel>
+    }
+</FluentCard>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div class="cat-add">
+        <FluentTextField Placeholder="New category, e.g. Lýsing" @bind-Value="newName" Immediate="true" style="width:280px;" @onkeydown="@(e => { if (e.Key == "Enter") _ = CreateAsync(); })" />
+        <FluentButton Appearance="Appearance.Accent" @onclick="CreateAsync" Disabled="@(string.IsNullOrWhiteSpace(newName) || busy)">Add</FluentButton>
+    </div>
+
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (categories.Count == 0)
+    {
+        <FluentLabel Style="color:#60758b; margin-top:0.75rem;">
+            No categories yet. Add the first one above, or run <strong>Suggest categories</strong> on Payday → Products — accepted suggestions create their categories here.
+        </FluentLabel>
+    }
+    else
+    {
+        <table class="cats">
+            <thead>
+                <tr><th>Name</th><th class="num">Products</th><th class="num">Materials</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var c in categories)
+                {
+                    <tr>
+                        <td>
+                            @if (renamingId == c.Id)
+                            {
+                                <FluentTextField @bind-Value="renameValue" Immediate="true" style="width:280px;" @onkeydown="@(e => { if (e.Key == "Enter") _ = RenameAsync(c); if (e.Key == "Escape") renamingId = null; })" />
+                            }
+                            else
+                            {
+                                <span class="cat-name">@c.Name</span>
+                            }
+                        </td>
+                        <td class="num">@c.Products</td>
+                        <td class="num">@c.Materials</td>
+                        <td class="actions">
+                            @if (renamingId == c.Id)
+                            {
+                                <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => RenameAsync(c))" Disabled="@busy">Save</FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => renamingId = null)" Disabled="@busy">Cancel</FluentButton>
+                            }
+                            else
+                            {
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => { renamingId = c.Id; renameValue = c.Name; })">Rename</FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginDelete(c))">Delete</FluentButton>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</FluentCard>
+
+@if (deleting is not null)
+{
+    <AppDialog Title="@($"Delete {deleting.Name}?")" OnClose="@(() => deleting = null)" Busy="busy">
+        @if (deleting.Products + deleting.Materials == 0)
+        {
+            <p style="margin:0 0 0.75rem;">Nothing uses it. It goes away for good.</p>
+        }
+        else
+        {
+            <p style="margin:0 0 0.75rem;">
+                <strong>@deleting.Products</strong> product@(deleting.Products == 1 ? "" : "s") and <strong>@deleting.Materials</strong> material@(deleting.Materials == 1 ? "" : "s")
+                are in this category. Pick where they go:
+            </p>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="moveToId" style="width:100%">
+                <FluentOption TOption="string" Value="">— Choose a category —</FluentOption>
+                @foreach (var c in categories.Where(c => c.Id != deleting.Id))
+                {
+                    <FluentOption TOption="string" Value="@c.Id.ToString()">@c.Name</FluentOption>
+                }
+            </FluentSelect>
+        }
+        @if (!string.IsNullOrWhiteSpace(deleteError))
+        {
+            <FluentLabel Color="Color.Error" role="alert" style="margin-top:0.5rem; display:block;">@deleteError</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="DeleteAsync" Disabled="@(busy || (deleting.Products + deleting.Materials > 0 && !Guid.TryParse(moveToId, out _)))">
+                @(deleting.Products + deleting.Materials > 0 ? "Move and delete" : "Delete")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => deleting = null)" Disabled="@busy">Cancel</FluentButton>
+        </div>
+    </AppDialog>
+}
+
+@code {
+    private List<ProductCategoryRow> categories = [];
+    private bool loading = true, busy;
+    private string? message; private bool messageIsError;
+    private string newName = string.Empty;
+    private Guid? renamingId; private string renameValue = string.Empty;
+    private ProductCategoryRow? deleting; private string moveToId = string.Empty; private string? deleteError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true;
+        var result = await CategoriesApi.GetCategoriesAsync();
+        if (result.IsSuccess) categories = result.Value ?? [];
+        else { message = result.ErrorMessage; messageIsError = true; }
+        loading = false;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName) || busy) return;
+        busy = true; message = null;
+        try
+        {
+            var result = await CategoriesApi.CreateAsync(newName.Trim());
+            if (result.IsSuccess) { message = $"✓ {result.Value!.Name} added."; messageIsError = false; newName = string.Empty; await LoadAsync(); }
+            else { message = result.ErrorMessage; messageIsError = true; }
+        }
+        finally { busy = false; }
+    }
+
+    private async Task RenameAsync(ProductCategoryRow c)
+    {
+        if (busy || string.IsNullOrWhiteSpace(renameValue) || renameValue.Trim() == c.Name) { renamingId = null; return; }
+        busy = true; message = null;
+        try
+        {
+            using var _ = Busy.Begin("Renaming everywhere…");
+            var result = await CategoriesApi.RenameAsync(c.Id, renameValue.Trim());
+            if (result.IsSuccess && result.Value is { } r)
+            {
+                message = $"✓ {c.Name} is now {r.Name} — on {r.Products} product{(r.Products == 1 ? "" : "s")} and {r.Materials} material{(r.Materials == 1 ? "" : "s")}.";
+                messageIsError = false; renamingId = null; await LoadAsync();
+            }
+            else { message = result.ErrorMessage; messageIsError = true; }
+        }
+        finally { busy = false; }
+    }
+
+    private void BeginDelete(ProductCategoryRow c) { deleting = c; moveToId = string.Empty; deleteError = null; }
+
+    private async Task DeleteAsync()
+    {
+        if (deleting is null || busy) return;
+        busy = true; deleteError = null;
+        try
+        {
+            var moveTo = Guid.TryParse(moveToId, out var g) ? g : (Guid?)null;
+            var result = await CategoriesApi.DeleteAsync(deleting.Id, moveTo);
+            if (result.IsSuccess)
+            {
+                message = moveTo is null ? $"✓ {deleting.Name} deleted." : $"✓ {deleting.Name} deleted; its products and materials moved to {categories.First(c => c.Id == moveTo).Name}.";
+                messageIsError = false; deleting = null; await LoadAsync();
+            }
+            else deleteError = result.ErrorMessage;
+        }
+        finally { busy = false; }
+    }
+}

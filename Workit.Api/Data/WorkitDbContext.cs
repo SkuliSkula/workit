@@ -31,6 +31,7 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<JobAttachment>      JobAttachments     => Set<JobAttachment>();
     public DbSet<JobTask>            JobTasks           => Set<JobTask>();
     public DbSet<PaydayProductCache> PaydayProducts     => Set<PaydayProductCache>();
+    public DbSet<ProductCategory>    ProductCategories  => Set<ProductCategory>();
     public DbSet<PayrollExport>      PayrollExports     => Set<PayrollExport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -248,6 +249,10 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .Ignore(x => x.IsStockTracked);
         modelBuilder.Entity<Material>()
             .Ignore(x => x.UninvoicedQuantity);
+        modelBuilder.Entity<ProductCategory>().ToTable("ProductCategories");
+        modelBuilder.Entity<ProductCategory>()
+            .HasIndex(x => new { x.CompanyId, x.Name })
+            .IsUnique();
 
         // ── Payroll exports ───────────────────────────────────────────────────
         modelBuilder.Entity<PayrollExport>().ToTable("PayrollExports");

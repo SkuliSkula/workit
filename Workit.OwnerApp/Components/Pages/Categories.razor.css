@@ -1,0 +1,8 @@
+.cat-add { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+
+.cats { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.cats th { text-align: left; font-weight: 600; color: #475569; padding: 0.5rem 0.6rem; border-bottom: 1px solid #e2e8f0; }
+.cats td { padding: 0.45rem 0.6rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.cats .num { text-align: right; font-variant-numeric: tabular-nums; width: 90px; }
+.cats .actions { text-align: right; white-space: nowrap; }
+.cat-name { font-weight: 600; }

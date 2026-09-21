@@ -66,10 +66,13 @@ internal static class MaterialEndpoints
                         return Results.BadRequest("Material name is required.");
 
                     var userContext = httpContext.User.ToUserContext();
+                    // Chosen from the company's categories, never typed.
+                    var category = string.IsNullOrWhiteSpace(material.Category) ? "" : await ProductCategoryEndpoints.ResolveAsync(db, userContext.CompanyId, material.Category, ct);
+                    if (category is null) return Results.BadRequest($"There is no category called {material.Category.Trim()}. Add it under Categories first.");
                     material.CompanyId   = userContext.CompanyId;
                     material.Name        = material.Name.Trim();
                     material.ProductCode = material.ProductCode.Trim();
-                    material.Category    = material.Category.Trim();
+                    material.Category    = category;
                     material.Description = material.Description.Trim();
                     material.Unit        = material.Unit.Trim();
 
@@ -101,9 +104,11 @@ internal static class MaterialEndpoints
                     if (existing is null)
                         return Results.NotFound();
 
+                    var category = string.IsNullOrWhiteSpace(material.Category) ? "" : await ProductCategoryEndpoints.ResolveAsync(db, userContext.CompanyId, material.Category, ct);
+                    if (category is null) return Results.BadRequest($"There is no category called {material.Category.Trim()}. Add it under Categories first.");
                     existing.Name          = material.Name.Trim();
                     existing.ProductCode   = material.ProductCode.Trim();
-                    existing.Category      = material.Category.Trim();
+                    existing.Category      = category;
                     existing.Unit          = material.Unit.Trim();
                     existing.PurchasePrice = material.PurchasePrice;
                     existing.MarkupFactor  = material.MarkupFactor > 0 ? material.MarkupFactor : 1.5m;

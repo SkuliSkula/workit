@@ -3,6 +3,7 @@
 @inject IMaterialsApi MaterialsApi
 @inject IPaydayProductsCacheApi PaydayProducts
 @inject ICompanyApi CompanyApi
+@inject ICategoriesApi CategoriesApi
 @inject BusyService Busy
 @inject NavigationManager Nav
 
@@ -119,6 +120,10 @@
                         <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
                     }
                 </FluentSelect>
+                @if (Categories.Count == 0)
+                {
+                    <FluentLabel Style="color:#b45309; font-size:0.8rem;">No categories yet — add them under Resources → <a href="/categories">Categories</a>.</FluentLabel>
+                }
             </div>
 
             <div>
@@ -310,27 +315,9 @@
 </div>
 
 @code {
-    // ── Static lists ───────────────────────────────────────────────────────────
-    private static readonly string[] Categories =
-    [
-        "Rafstrengir",
-        "Lagnaefni",
-        "Lagnaleiðir",
-        "Töflubúnaður",
-        "Stýribúnaður",
-        "Fjarskiptabúnaður",
-        "Hitabúnaður",
-        "Lýsing",
-        "Rofa- og tenglaefni",
-        "Verkfæri",
-        "Tengibúnaður",
-        "Veitubúnaður",
-        "Hleðsla rafbíla",
-        "Dyrasímar",
-        "Snjalllausnir",
-        "Brunavarnir",
-        "Annað"
-    ];
+    // ── Lists ──────────────────────────────────────────────────────────────────
+    /// <summary>The company's categories (Resources → Categories); never typed here.</summary>
+    private List<string> Categories = [];
 
     private static readonly string[] Units = ["stk.", "m.", "pk.", "rúll.", "box", "kg", "ltr."];
 
@@ -388,7 +375,7 @@
     }
     private readonly List<PaydayProductCache> paydayMaterials = [];
     private readonly Dictionary<Guid, PaydayProductCache> paydayBySku = [];
-    private string  formCategory      = Categories[0];
+    private string  formCategory      = string.Empty;
     private string  formUnit          = "stk.";
     private decimal formPurchasePrice;
     private decimal formMarkupFactor  = 1.5m;
@@ -411,6 +398,7 @@
     {
         loading = true;
         loadError = string.Empty;
+        var categoriesTask = CategoriesApi.GetCategoriesAsync();
         var productsTask = PaydayProducts.GetProductsAsync(includeArchived: true);
         var companyTask  = CompanyApi.GetCompanyAsync();
         var result = await MaterialsApi.GetMaterialsAsync();
@@ -434,6 +422,9 @@
             paydayBySku[p.PaydayId] = p;
             if (!p.Archived && p.Role == PaydayProductRole.Material) paydayMaterials.Add(p);
         }
+        var categoriesResult = await categoriesTask;
+        if (categoriesResult.IsSuccess) Categories = (categoriesResult.Value ?? []).Select(c => c.Name).ToList();
+        if (string.IsNullOrEmpty(formCategory)) formCategory = Categories.FirstOrDefault() ?? string.Empty;
         loading = false;
     }
 
@@ -573,7 +564,7 @@
         formName          = string.Empty;
         formCode          = string.Empty;
         formPaydayProductId = string.Empty;
-        formCategory      = Categories[0];
+        formCategory      = Categories.FirstOrDefault() ?? string.Empty;
         formUnit          = "stk.";
         formPurchasePrice = 0m;
         formMarkupFactor  = 1.5m;

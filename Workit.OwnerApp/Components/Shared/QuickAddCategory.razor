@@ -1,0 +1,48 @@
+@inject ICategoriesApi CategoriesApi
+
+@* A small "+ New category" that turns into a name box, so a missing category
+   never forces a trip to the Categories page mid-task. *@
+@if (!open)
+{
+    <button type="button" class="qa-link" @onclick="@(() => { open = true; name = string.Empty; error = null; })">+ New category</button>
+}
+else
+{
+    <span class="qa-row @(Inline ? "qa-row--inline" : "")">
+        <FluentTextField @bind-Value="name" Immediate="true" Placeholder="Category name" style="width:200px;" @onkeydown="@(e => { if (e.Key == "Enter") _ = AddAsync(); if (e.Key == "Escape") open = false; })" />
+        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="AddAsync" Disabled="@(busy || string.IsNullOrWhiteSpace(name))">Add</FluentButton>
+        <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => open = false)" Disabled="@busy">Cancel</FluentButton>
+        @if (error is not null)
+        {
+            <span class="qa-error">@error</span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>Called with the created category's name.</summary>
+    [Parameter] public EventCallback<string> OnAdded { get; set; }
+    /// <summary>Lay out on one line (inside a sentence) rather than as a block under a field.</summary>
+    [Parameter] public bool Inline { get; set; }
+
+    private bool open, busy;
+    private string name = string.Empty;
+    private string? error;
+
+    private async Task AddAsync()
+    {
+        if (busy || string.IsNullOrWhiteSpace(name)) return;
+        busy = true; error = null;
+        try
+        {
+            var result = await CategoriesApi.CreateAsync(name.Trim());
+            if (result.IsSuccess && result.Value is { } created)
+            {
+                open = false;
+                await OnAdded.InvokeAsync(created.Name);
+            }
+            else error = result.ErrorMessage ?? "Could not add the category.";
+        }
+        finally { busy = false; }
+    }
+}
