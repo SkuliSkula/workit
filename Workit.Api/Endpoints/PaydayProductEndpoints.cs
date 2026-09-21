@@ -39,13 +39,13 @@ internal static class PaydayProductEndpoints
         // The console's list: search, role filter, sort and paging happen in SQL so a
         // company with a thousand products gets fifty rows, not a thousand editors.
         cache.MapGet("/page", async (WorkitDbContext db, HttpContext http, CancellationToken ct,
-                string? q = null, PaydayProductRole? role = null, bool includeArchived = false,
+                string? q = null, PaydayProductRole? role = null, string? category = null, bool includeArchived = false,
                 string sort = "sku", string dir = "asc", int page = 1, int pageSize = 50) =>
                 await ExecuteDbAsync(async () =>
                 {
                     var user = http.User.ToUserContext();
                     var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
-                    return Results.Ok(await QueryPageAsync(db, user.CompanyId, q, role, includeArchived, sort, desc, page, pageSize, ct));
+                    return Results.Ok(await QueryPageAsync(db, user.CompanyId, q, role, category, includeArchived, sort, desc, page, pageSize, ct));
                 }, logger, "loading a page of Payday products"))
             .WithName("GetPaydayProductsPage");
 
@@ -70,6 +70,54 @@ internal static class PaydayProductEndpoints
                     return Results.Ok(new { changed });
                 }, logger, "assigning a role to unset Payday products"))
             .WithName("AssignUnsetPaydayProductRoles");
+
+        // Categories are Workit's own grouping of Payday's flat list. The suggester reads
+        // the names; the owner accepts, corrects or fills in; applied categories teach it.
+        cache.MapGet("/categories/suggest", async (WorkitDbContext db, HttpContext http, CancellationToken ct, bool includeCategorised = false) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!http.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    var user = http.User.ToUserContext();
+                    var live = await db.PaydayProducts.AsNoTracking()
+                        .Where(p => p.CompanyId == user.CompanyId && !p.Archived)
+                        .OrderBy(p => p.Sku).ToListAsync(ct);
+                    var examples = live.Where(p => !string.IsNullOrWhiteSpace(p.Category)).ToList();
+                    var targets  = includeCategorised ? live : live.Where(p => string.IsNullOrWhiteSpace(p.Category)).ToList();
+                    var items = ProductCategorizer.Suggest(targets, examples)
+                        .Select(s => new PaydayProductCategorySuggestion(s.ProductId, s.Sku, s.Name, s.Category, s.Confidence.ToString(), s.Because.ToList()))
+                        .ToList();
+                    var known = examples.Select(p => p.Category).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c).ToList();
+                    return Results.Ok(new PaydayProductCategorySuggestions(items, known, live.Count(p => string.IsNullOrWhiteSpace(p.Category))));
+                }, logger, "suggesting product categories"))
+            .WithName("SuggestPaydayProductCategories");
+
+        cache.MapPost("/categories/apply", async (WorkitDbContext db, HttpContext http, PaydayProductSyncService sync, List<PaydayProductCategoryAssignment> body, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!http.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    var user = http.User.ToUserContext();
+                    var wanted = body.Where(a => !string.IsNullOrWhiteSpace(a.Category))
+                        .ToDictionary(a => a.ProductId, a => a.Category.Trim());
+                    if (wanted.Count == 0) return Results.Ok(new { changed = 0 });
+
+                    var ids = wanted.Keys.ToList();
+                    var rows = await db.PaydayProducts.Where(p => p.CompanyId == user.CompanyId && ids.Contains(p.Id)).ToListAsync(ct);
+                    var changed = 0;
+                    foreach (var p in rows)
+                    {
+                        var category = wanted[p.Id];
+                        if (p.Category == category) continue;
+                        p.Category = category; changed++;
+                    }
+                    await db.SaveChangesAsync(ct);
+
+                    // Materials mirror the category so the apps' pickers group by it.
+                    var company = await db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == user.CompanyId, ct);
+                    if (changed > 0 && company?.MaterialsManagedInPayday == true)
+                        await sync.MirrorMaterialsAsync(user.CompanyId, await db.PaydayProducts.Where(p => p.CompanyId == user.CompanyId).ToListAsync(ct), ct);
+                    return Results.Ok(new { changed });
+                }, logger, "applying product categories"))
+            .WithName("ApplyPaydayProductCategories");
 
         cache.MapPut("/{id:guid}/role", async (WorkitDbContext db, HttpContext http, Guid id, PaydayProductRoleUpdate body, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -184,7 +232,10 @@ internal static class PaydayProductEndpoints
     /// case-insensitively; role counts are for the live set regardless of the
     /// search so the filter chips stay stable while typing.
     /// </summary>
-    internal static async Task<PaydayProductPage> QueryPageAsync(WorkitDbContext db, Guid companyId, string? q, PaydayProductRole? role,
+    /// <summary>The <c>category</c> filter value that means "no category yet".</summary>
+    public const string UncategorisedFilter = "-";
+
+    internal static async Task<PaydayProductPage> QueryPageAsync(WorkitDbContext db, Guid companyId, string? q, PaydayProductRole? role, string? category,
         bool includeArchived, string sort, bool descending, int page, int pageSize, CancellationToken ct)
     {
         page = Math.Max(1, page);
@@ -192,10 +243,13 @@ internal static class PaydayProductEndpoints
 
         var live = db.PaydayProducts.Where(p => p.CompanyId == companyId && (includeArchived || !p.Archived));
         var roleCounts = await live.GroupBy(p => p.Role).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+        var categoryCounts = await live.GroupBy(p => p.Category).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
         var lastSynced = await live.Select(p => (DateTimeOffset?)p.SyncedAt).MaxAsync(ct);
 
         var query = live;
         if (role is not null) query = query.Where(p => p.Role == role);
+        if (!string.IsNullOrEmpty(category))
+            query = category == UncategorisedFilter ? query.Where(p => p.Category == "") : query.Where(p => p.Category == category);
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim().ToLowerInvariant();
@@ -217,7 +271,7 @@ internal static class PaydayProductEndpoints
 
         var total = await query.CountAsync(ct);
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return new PaydayProductPage(items, total, page, pageSize, roleCounts, lastSynced);
+        return new PaydayProductPage(items, total, page, pageSize, roleCounts, lastSynced, categoryCounts);
     }
     /// <summary>Gives <paramref name="role"/> to every live product still Unassigned (optionally only those matching <paramref name="q"/>).</summary>
     internal static async Task<int> AssignUnsetAsync(WorkitDbContext db, Guid companyId, PaydayProductRole role, string? q, CancellationToken ct)

@@ -13,7 +13,11 @@ public interface IPaydayProductsCacheApi
     /// <summary>Plans (dry run) or performs the switch-over of the company's materials to Payday products.</summary>
     Task<ApiResult<MaterialsMigrationResult>> MigrateMaterialsAsync(bool dryRun);
     /// <summary>One page of the cache, searched/sorted/filtered in SQL. Sort: sku | name | price | stock.</summary>
-    Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, bool includeArchived, string sort, bool descending, int page, int pageSize);
+    Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, string? category, bool includeArchived, string sort, bool descending, int page, int pageSize);
+    /// <summary>Suggested categories for products without one (or for all, to re-check).</summary>
+    Task<ApiResult<PaydayProductCategorySuggestions>> SuggestCategoriesAsync(bool includeCategorised = false);
+    /// <summary>Sets the category on each listed product. Returns how many changed.</summary>
+    Task<ApiResult<int>> ApplyCategoriesAsync(List<PaydayProductCategoryAssignment> assignments);
     /// <summary>Gives every product that still has no role the given one (optionally only those matching q). Returns how many changed.</summary>
     Task<ApiResult<int>> AssignUnsetAsync(PaydayProductRole role, string? q);
     /// <summary>Payday's sales ledger accounts, for the New product form.</summary>
@@ -41,12 +45,22 @@ internal sealed class PaydayProductsCacheApi(HttpClient httpClient, IAccessToken
     public Task<ApiResult<MaterialsMigrationResult>> MigrateMaterialsAsync(bool dryRun) =>
         PostForJsonAsync<object, MaterialsMigrationResult>($"api/payday/materials/migrate?dryRun={(dryRun ? "true" : "false")}", new { }, "The materials migration could not be run right now.");
 
-    public Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, bool includeArchived, string sort, bool descending, int page, int pageSize)
+    public Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, string? category, bool includeArchived, string sort, bool descending, int page, int pageSize)
     {
         var url = $"api/payday/products/page?page={page}&pageSize={pageSize}&sort={Uri.EscapeDataString(sort)}&dir={(descending ? "desc" : "asc")}&includeArchived={(includeArchived ? "true" : "false")}";
         if (!string.IsNullOrWhiteSpace(q)) url += $"&q={Uri.EscapeDataString(q.Trim())}";
         if (role is not null) url += $"&role={role}";
+        if (!string.IsNullOrEmpty(category)) url += $"&category={Uri.EscapeDataString(category)}";
         return GetAsync<PaydayProductPage>(url, "Payday products could not be loaded right now.");
+    }
+
+    public Task<ApiResult<PaydayProductCategorySuggestions>> SuggestCategoriesAsync(bool includeCategorised = false) =>
+        GetAsync<PaydayProductCategorySuggestions>($"api/payday/products/categories/suggest?includeCategorised={(includeCategorised ? "true" : "false")}", "Category suggestions could not be loaded right now.");
+
+    public async Task<ApiResult<int>> ApplyCategoriesAsync(List<PaydayProductCategoryAssignment> assignments)
+    {
+        var result = await PostForJsonAsync<List<PaydayProductCategoryAssignment>, ChangedResponse>("api/payday/products/categories/apply", assignments, "The categories could not be saved right now.");
+        return result.IsSuccess ? ApiResult<int>.Success(result.Value?.Changed ?? 0) : ApiResult<int>.Failure(result.ErrorMessage ?? "The categories could not be saved right now.");
     }
 
     private sealed record ChangedResponse(int Changed);
