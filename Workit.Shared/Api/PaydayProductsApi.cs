@@ -14,6 +14,8 @@ public interface IPaydayProductsCacheApi
     Task<ApiResult<MaterialsMigrationResult>> MigrateMaterialsAsync(bool dryRun);
     /// <summary>One page of the cache, searched/sorted/filtered in SQL. Sort: sku | name | price | stock.</summary>
     Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, bool includeArchived, string sort, bool descending, int page, int pageSize);
+    /// <summary>Gives every product that still has no role the given one (optionally only those matching q). Returns how many changed.</summary>
+    Task<ApiResult<int>> AssignUnsetAsync(PaydayProductRole role, string? q);
     /// <summary>Payday's sales ledger accounts, for the New product form.</summary>
     Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync();
     /// <summary>Creates the product in Payday and returns the cached row with its role set.</summary>
@@ -45,6 +47,18 @@ internal sealed class PaydayProductsCacheApi(HttpClient httpClient, IAccessToken
         if (!string.IsNullOrWhiteSpace(q)) url += $"&q={Uri.EscapeDataString(q.Trim())}";
         if (role is not null) url += $"&role={role}";
         return GetAsync<PaydayProductPage>(url, "Payday products could not be loaded right now.");
+    }
+
+    private sealed record ChangedResponse(int Changed);
+
+    public async Task<ApiResult<int>> AssignUnsetAsync(PaydayProductRole role, string? q)
+    {
+        var url = $"api/payday/products/roles/assign-unset?role={role}";
+        if (!string.IsNullOrWhiteSpace(q)) url += $"&q={Uri.EscapeDataString(q.Trim())}";
+        var result = await PostForJsonAsync<object, ChangedResponse>(url, new { }, "The roles could not be assigned right now.");
+        return result.IsSuccess
+            ? ApiResult<int>.Success(result.Value?.Changed ?? 0)
+            : ApiResult<int>.Failure(result.ErrorMessage ?? "The roles could not be assigned right now.");
     }
 
     public async Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync()

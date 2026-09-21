@@ -49,6 +49,28 @@ internal static class PaydayProductEndpoints
                 }, logger, "loading a page of Payday products"))
             .WithName("GetPaydayProductsPage");
 
+        // Most of a wholesaler's list is goods. One press gives every product that has no
+        // role yet the chosen one — products already assigned elsewhere are left alone, and
+        // an optional search narrows it to what the owner is looking at.
+        cache.MapPost("/roles/assign-unset", async (WorkitDbContext db, HttpContext http, PaydayProductSyncService sync, CancellationToken ct,
+                PaydayProductRole role = PaydayProductRole.Material, string? q = null) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!http.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    if (role == PaydayProductRole.Unassigned) return Results.BadRequest("Pick the role to give them.");
+                    var user = http.User.ToUserContext();
+
+                    var changed = await AssignUnsetAsync(db, user.CompanyId, role, q, ct);
+                    if (changed > 0 && role == PaydayProductRole.Material)
+                    {
+                        var company = await db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == user.CompanyId, ct);
+                        if (company?.MaterialsManagedInPayday == true)
+                            await sync.MirrorMaterialsAsync(user.CompanyId, await db.PaydayProducts.Where(p => p.CompanyId == user.CompanyId).ToListAsync(ct), ct);
+                    }
+                    return Results.Ok(new { changed });
+                }, logger, "assigning a role to unset Payday products"))
+            .WithName("AssignUnsetPaydayProductRoles");
+
         cache.MapPut("/{id:guid}/role", async (WorkitDbContext db, HttpContext http, Guid id, PaydayProductRoleUpdate body, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
@@ -196,5 +218,19 @@ internal static class PaydayProductEndpoints
         var total = await query.CountAsync(ct);
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         return new PaydayProductPage(items, total, page, pageSize, roleCounts, lastSynced);
+    }
+    /// <summary>Gives <paramref name="role"/> to every live product still Unassigned (optionally only those matching <paramref name="q"/>).</summary>
+    internal static async Task<int> AssignUnsetAsync(WorkitDbContext db, Guid companyId, PaydayProductRole role, string? q, CancellationToken ct)
+    {
+        var query = db.PaydayProducts.Where(p => p.CompanyId == companyId && !p.Archived && p.Role == PaydayProductRole.Unassigned);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLowerInvariant();
+            query = query.Where(p => p.Sku.ToLower().Contains(term) || p.Name.ToLower().Contains(term) || p.Category.ToLower().Contains(term));
+        }
+        var rows = await query.ToListAsync(ct);
+        foreach (var p in rows) p.Role = role;
+        await db.SaveChangesAsync(ct);
+        return rows.Count;
     }
 }

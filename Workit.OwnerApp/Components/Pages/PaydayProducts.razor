@@ -123,6 +123,12 @@
             }
         </div>
         <FluentCheckbox Value="@showArchived" ValueChanged="OnShowArchivedChanged" Label="Show archived" />
+        @if (UnsetCount > 0)
+        {
+            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Style="margin-left:auto;" @onclick="@(() => confirmBulk = true)" Disabled="@loading">
+                Mark unset as Material
+            </FluentButton>
+        }
     </div>
 
     @if (loading && listPage is null)
@@ -216,6 +222,34 @@
         </div>
     }
 </FluentCard>
+
+@* ── Bulk: every product without a role becomes a Material ── *@
+@if (confirmBulk)
+{
+    <AppDialog Title="Mark unset products as Material?" OnClose="@(() => confirmBulk = false)" Busy="bulkRunning">
+        <p style="margin:0 0 0.75rem;">
+            @if (string.IsNullOrWhiteSpace(search))
+            {
+                <text><strong>@UnsetCount</strong> product@(UnsetCount == 1 ? "" : "s") @(UnsetCount == 1 ? "has" : "have") no role yet. Each becomes a <strong>Material</strong> — stock items the apps can log on a job.</text>
+            }
+            else
+            {
+                <text>Every product with no role yet <strong>matching “@search”</strong> becomes a <strong>Material</strong> — stock items the apps can log on a job. Clear the search to do the whole list.</text>
+            }
+        </p>
+        <p style="margin:0 0 0.75rem; color:#60758b; font-size:0.9rem;">
+            Products already marked as something else — Regular hour, Overtime hour, Driving unit, Not used — are left as they are. You can change any single product afterwards with Edit.
+        </p>
+        @if (!string.IsNullOrWhiteSpace(bulkError))
+        {
+            <FluentLabel Color="Color.Error" role="alert" style="margin-bottom:0.5rem; display:block;">@bulkError</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="RunBulkAsync" Disabled="@bulkRunning">Mark as Material</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="@(() => confirmBulk = false)" Disabled="@bulkRunning">Cancel</FluentButton>
+        </div>
+    </AppDialog>
+}
 
 @* ── Edit one product's Workit fields ── *@
 @if (editing is not null)
@@ -414,6 +448,35 @@
             // Payday's own reason, verbatim — "Client authentication failed…" tells the owner what to fix.
             message = result.ErrorMessage ?? "Payday products could not be synced right now.";
             messageIsError = true;
+        }
+    }
+
+    // ── Bulk assign ──
+    private bool confirmBulk, bulkRunning;
+    private string? bulkError;
+    private int UnsetCount => listPage?.RoleCounts.GetValueOrDefault(PaydayProductRole.Unassigned) ?? 0;
+
+    private async Task RunBulkAsync()
+    {
+        if (bulkRunning) return;
+        bulkRunning = true; bulkError = null;
+        try
+        {
+            using var busy = Busy.Begin("Marking products as Material…");
+            var result = await ProductsApi.AssignUnsetAsync(PaydayProductRole.Material, search);
+            if (!result.IsSuccess)
+            {
+                bulkError = result.ErrorMessage ?? "The roles could not be assigned right now.";
+                return;
+            }
+            confirmBulk = false;
+            message = $"✓ {result.Value} product{(result.Value == 1 ? "" : "s")} marked as Material.";
+            messageIsError = false;
+            await LoadAsync();
+        }
+        finally
+        {
+            bulkRunning = false;
         }
     }
 

@@ -73,4 +73,21 @@ public class PaydayProductPageTests
         withArchived.Total.Should().Be(6);
         withArchived.Items.First().Sku.Should().Be("FK016", "tracked stock sorts before untracked");
     }
+
+    [Fact]
+    public async Task AssignUnset_TouchesOnlyLiveUnassignedProducts_OptionallyWithinASearch()
+    {
+        await using var db = NewDb();
+
+        var narrowed = await PaydayProductEndpoints.AssignUnsetAsync(db, CompanyId, PaydayProductRole.Material, "1,5mm", CancellationToken.None);
+        narrowed.Should().Be(1);
+        (await db.PaydayProducts.SingleAsync(p => p.Sku == "0209621")).Role.Should().Be(PaydayProductRole.Material);
+        (await db.PaydayProducts.SingleAsync(p => p.Sku == "0209631")).Role.Should().Be(PaydayProductRole.Unassigned);
+
+        var rest = await PaydayProductEndpoints.AssignUnsetAsync(db, CompanyId, PaydayProductRole.Material, null, CancellationToken.None);
+        rest.Should().Be(1);
+        (await db.PaydayProducts.SingleAsync(p => p.Sku == "DAGV")).Role.Should().Be(PaydayProductRole.RegularHour, "already assigned products are left alone");
+        (await db.PaydayProducts.SingleAsync(p => p.Sku == "OTHER")).Role.Should().Be(PaydayProductRole.Unassigned, "other companies are untouched");
+        (await PaydayProductEndpoints.AssignUnsetAsync(db, CompanyId, PaydayProductRole.Material, null, CancellationToken.None)).Should().Be(0);
+    }
 }
