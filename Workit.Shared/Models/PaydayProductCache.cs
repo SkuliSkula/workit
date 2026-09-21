@@ -59,3 +59,22 @@ public sealed record PaydayProductSyncResult(int Fetched, int Added, int Updated
 
 /// <summary>Body of PUT /api/payday/products/{id}/role.</summary>
 public sealed record PaydayProductRoleUpdate(PaydayProductRole Role, string? Unit, string? Category);
+
+/// <summary>
+/// A product the owner creates from Workit. It is created in Payday (which owns
+/// the price list) and lands in the cache with its Workit role in one go.
+/// </summary>
+public sealed record PaydayProductCreate(
+    string Name,
+    string Sku,
+    string? Description,
+    decimal SalePriceExVat,
+    decimal VatPercentage,
+    Guid SalesLedgerAccountId,
+    /// <summary>Stock-tracked in Payday (a material) or a service line (labor, driving).</summary>
+    bool TrackStock,
+    decimal? OpeningQuantity,
+    decimal? PurchasePriceExVat,
+    PaydayProductRole Role,
+    string? Unit,
+    string? Category);
