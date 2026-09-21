@@ -4,6 +4,7 @@
 @inject BusyService Busy
 @inject NavigationManager Navigation
 @inject ICompanyApi CompanyApi
+@inject ICategoriesApi CategoriesApi
 @using Workit.Shared.Payday
 
 <PageTitle>Payday Products</PageTitle>
@@ -70,7 +71,15 @@
                 </FluentSelect>
             </div>
             <div><FluentTextField Label="Unit" @bind-Value="newUnit" Placeholder="klst. / stk. / m" style="width:100%" /></div>
-            <div><FluentTextField Label="Category" @bind-Value="newCategory" Placeholder="Optional" style="width:100%" /></div>
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="Category" @bind-Value="newCategory" style="width:100%">
+                    <FluentOption TOption="string" Value="">— None —</FluentOption>
+                    @foreach (var c in categoryNames)
+                    {
+                        <FluentOption TOption="string" Value="@c">@c</FluentOption>
+                    }
+                </FluentSelect>
+            </div>
             <div style="grid-column:1 / -1;"><FluentTextField Label="Description" @bind-Value="newDescription" Placeholder="Optional" style="width:100%" /></div>
             <div style="grid-column:1 / -1;">
                 <FluentSwitch @bind-Value="newTrackStock" Label="Track stock in Payday" />
@@ -268,7 +277,7 @@
         else
         {
             <FluentLabel Style="color:#60758b; font-size:0.9rem;">
-                Read from each product's name. Tick what looks right, fix the rest in the list — the pick list has your categories, or type a new one.
+                Read from each product's name. Tick what looks right, fix the rest in the list — every row is a pick from your categories.
                 Every category you save teaches the next run.
             </FluentLabel>
             <div class="sg-toolbar">
@@ -295,18 +304,21 @@
                             }
                         </div>
                         <div class="sg-pick">
-                            <input class="sg-input" list="sg-categories" placeholder="@(item.Category is null ? "Type a category" : "")" value="@chosen"
-                                   @onchange="@(e => Choose(item.ProductId, e.Value?.ToString()))" />
+                            <select class="sg-input" value="@chosen" @onchange="@(e => Choose(item.ProductId, e.Value?.ToString()))">
+                                <option value="">— Pick a category —</option>
+                                @foreach (var c in AllCategoryChoices)
+                                {
+                                    <option value="@c" selected="@(c == chosen)">@c@(IsNewCategory(c) ? " (new)" : "")</option>
+                                }
+                            </select>
                             <span class="sg-conf sg-conf--@item.Confidence.ToLowerInvariant()" title="How sure the suggester is">@ConfidenceLabel(item)</span>
                         </div>
                     </div>
                 }
-                <datalist id="sg-categories">
-                    @foreach (var c in AllCategoryChoices)
-                    {
-                        <option value="@c"></option>
-                    }
-                </datalist>
+            </div>
+            <div class="sg-footnote">
+                Categories marked <em>(new)</em> come from the suggester and are created when you apply. Need one that isn't listed?
+                <QuickAddCategory OnAdded="OnCategoryAddedAsync" Inline="true" />
             </div>
         }
         @if (!string.IsNullOrWhiteSpace(applyError))
@@ -372,7 +384,16 @@
                 </FluentSelect>
             </div>
             <div><FluentTextField Label="Unit" @bind-Value="editUnit" Placeholder="stk. / klst. / m" style="width:100%" /></div>
-            <div><FluentTextField Label="Category" @bind-Value="editCategory" Placeholder="Optional — groups the app's material picker" style="width:100%" /></div>
+            <div>
+                <FluentSelect TValue="string" TOption="string" Label="Category" @bind-Value="editCategory" style="width:100%">
+                    <FluentOption TOption="string" Value="">— None —</FluentOption>
+                    @foreach (var c in categoryNames)
+                    {
+                        <FluentOption TOption="string" Value="@c">@c</FluentOption>
+                    }
+                </FluentSelect>
+                <QuickAddCategory OnAdded="OnCategoryAddedAsync" />
+            </div>
         </div>
         @if (!string.IsNullOrWhiteSpace(editError))
         {
@@ -397,6 +418,26 @@
 
     private PaydayProductPage? listPage;
     private Company? company;
+    /// <summary>The company's categories (Resources → Categories) — the only values a product can take.</summary>
+    private List<string> categoryNames = [];
+
+    private async Task LoadCategoriesAsync()
+    {
+        var result = await CategoriesApi.GetCategoriesAsync();
+        if (result.IsSuccess) categoryNames = (result.Value ?? []).Select(c => c.Name).ToList();
+    }
+
+    private async Task OnCategoryAddedAsync(string name)
+    {
+        await LoadCategoriesAsync();
+        // FluentSelect only takes a value its options already contain: render the new
+        // option first, then select it on the next tick.
+        StateHasChanged();
+        await Task.Delay(50);
+        if (editing is not null) editCategory = name;
+        if (showCreate) newCategory = name;
+        StateHasChanged();
+    }
     private int MaterialCount => listPage?.RoleCounts.GetValueOrDefault(PaydayProductRole.Material) ?? 0;
     private bool loading = true;
     private bool showArchived;
@@ -453,6 +494,7 @@
         if (!firstRender) return;
         var companyResult = await CompanyApi.GetCompanyAsync();
         if (companyResult.IsSuccess) company = companyResult.Value;
+        await LoadCategoriesAsync();
         await LoadAsync();
     }
 
@@ -583,9 +625,10 @@
 
     private bool AllTicked => suggestions is not null && suggestions.Items.Where(i => !string.IsNullOrWhiteSpace(chosenCategory.GetValueOrDefault(i.ProductId))).All(i => ticked.Contains(i.ProductId));
     private IEnumerable<string> AllCategoryChoices =>
-        (suggestions?.KnownCategories ?? []).Concat(suggestions?.Items.Select(i => i.Category).Where(c => c is not null).Cast<string>() ?? [])
-        .Concat(chosenCategory.Values.Where(c => !string.IsNullOrWhiteSpace(c)).Cast<string>())
+        categoryNames.Concat(suggestions?.KnownCategories ?? []).Concat(suggestions?.Items.Select(i => i.Category).Where(c => c is not null).Cast<string>() ?? [])
         .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c);
+
+    private bool IsNewCategory(string name) => !categoryNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     private static string ConfidenceLabel(PaydayProductCategorySuggestion i) =>
         i.Category is null ? "?" : i.Confidence switch { "High" => "sure", "Medium" => "likely", _ => "guess" };
@@ -650,6 +693,7 @@
             var result = await ProductsApi.ApplyCategoriesAsync(assignments);
             if (!result.IsSuccess) { applyError = result.ErrorMessage; return; }
             message = $"✓ {result.Value} product{(result.Value == 1 ? "" : "s")} categorised."; messageIsError = false;
+            await LoadCategoriesAsync();
             // Stay in the dialog with what is left, so a long list is done in passes.
             await LoadSuggestionsAsync();
             if (suggestions is { Items.Count: 0 }) showSuggest = false;

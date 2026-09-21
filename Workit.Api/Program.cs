@@ -285,6 +285,7 @@ app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapPaydayProductEndpoints();
 app.MapPaydayCustomerEndpoints();
+app.MapProductCategoryEndpoints();
 app.MapPayrollEndpoints();
 app.MapDevSeedEndpoints();
 

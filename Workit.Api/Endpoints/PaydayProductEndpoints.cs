@@ -100,12 +100,17 @@ internal static class PaydayProductEndpoints
                         .ToDictionary(a => a.ProductId, a => a.Category.Trim());
                     if (wanted.Count == 0) return Results.Ok(new { changed = 0 });
 
+                    // An accepted suggestion may name a category the company does not have yet — it is created.
+                    var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var name in wanted.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+                        names[name] = await ProductCategoryEndpoints.ResolveOrCreateAsync(db, user.CompanyId, name, ct);
+
                     var ids = wanted.Keys.ToList();
                     var rows = await db.PaydayProducts.Where(p => p.CompanyId == user.CompanyId && ids.Contains(p.Id)).ToListAsync(ct);
                     var changed = 0;
                     foreach (var p in rows)
                     {
-                        var category = wanted[p.Id];
+                        var category = names[wanted[p.Id]];
                         if (p.Category == category) continue;
                         p.Category = category; changed++;
                     }
@@ -127,9 +132,15 @@ internal static class PaydayProductEndpoints
                     var product = await db.PaydayProducts.FirstOrDefaultAsync(p => p.Id == id && p.CompanyId == user.CompanyId, ct);
                     if (product is null) return Results.NotFound();
 
-                    product.Role     = body.Role;
-                    product.Unit     = body.Unit?.Trim() ?? product.Unit;
-                    product.Category = body.Category?.Trim() ?? product.Category;
+                    if (body.Category is not null)
+                    {
+                        // Categories are chosen, not typed: the name must be one of the company's.
+                        var resolved = string.IsNullOrWhiteSpace(body.Category) ? "" : await ProductCategoryEndpoints.ResolveAsync(db, user.CompanyId, body.Category, ct);
+                        if (resolved is null) return Results.BadRequest($"There is no category called {body.Category.Trim()}. Add it under Categories first.");
+                        product.Category = resolved;
+                    }
+                    product.Role = body.Role;
+                    product.Unit = body.Unit?.Trim() ?? product.Unit;
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(product);
                 }, logger, "updating a Payday product role"))
@@ -197,7 +208,8 @@ internal static class PaydayProductEndpoints
 
                     cached.Role     = body.Role;
                     cached.Unit     = body.Unit?.Trim() ?? cached.Unit;
-                    cached.Category = body.Category?.Trim() ?? cached.Category;
+                    cached.Category = string.IsNullOrWhiteSpace(body.Category) ? cached.Category
+                        : await ProductCategoryEndpoints.ResolveAsync(db, user.CompanyId, body.Category, ct) ?? cached.Category;
                     await db.SaveChangesAsync(ct);
                     if (body.Role == PaydayProductRole.Material)
                     {

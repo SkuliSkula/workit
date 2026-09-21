@@ -1,0 +1,5 @@
+.qa-link { all: unset; cursor: pointer; color: #1d4ed8; font-size: 0.82rem; margin-top: 0.3rem; display: inline-block; }
+.qa-link:hover { text-decoration: underline; }
+.qa-row { display: inline-flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; margin-top: 0.3rem; }
+.qa-row--inline { margin-top: 0; }
+.qa-error { color: #b91c1c; font-size: 0.8rem; }
