@@ -3,6 +3,8 @@
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
 @inject ICustomersApi CustomersApi
+@inject IJobTasksApi TasksApi
+@inject IEmployeesApi EmployeesApi
 @inject NavigationManager Nav
 
 <PageTitle>Kanban</PageTitle>
@@ -12,6 +14,10 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
         <FluentLabel Typo="Typography.PaneHeader">Kanban</FluentLabel>
         <div style="display:flex; gap:0.5rem; align-items:center;">
+            <div class="kanban-toggle" role="tablist">
+                <button class="kanban-toggle-btn @(byTask ? "" : "kanban-toggle-btn--on")" @onclick="@(() => byTask = false)">By job</button>
+                <button class="kanban-toggle-btn @(byTask ? "kanban-toggle-btn--on" : "")" @onclick="@(() => byTask = true)">By task <span class="kanban-toggle-n">@tasks.Count</span></button>
+            </div>
             <span style="font-size:0.82rem; color:#6b7280;">@jobs.Count job@(jobs.Count == 1 ? "" : "s")</span>
             <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="LoadAsync" Disabled="@loading">
                 Refresh
@@ -31,6 +37,62 @@
 @if (loading)
 {
     <PageLoader />
+}
+else if (byTask)
+{
+    @* ── Task board: every task is a card; lanes come from hours and status ── *@
+    <div class="kanban-board kanban-board--tasks">
+        @foreach (var lane in TaskLanes)
+        {
+            var laneTasks = TasksIn(lane);
+            <div class="kanban-lane">
+                <div class="kanban-lane-header @TaskLaneClass(lane)">
+                    <span class="kanban-lane-title">@TaskLaneTitle(lane)</span>
+                    <span class="kanban-lane-count">@laneTasks.Count</span>
+                </div>
+                <div class="kanban-cards">
+                    @if (laneTasks.Count == 0)
+                    {
+                        <div class="kanban-empty">@(lane == TaskLane.Todo && tasks.Count == 0 ? "No tasks yet — add them on a job" : "No tasks")</div>
+                    }
+                    @foreach (var task in laneTasks)
+                    {
+                        var job = jobById.GetValueOrDefault(task.JobId);
+                        var hours = TaskHours(task.Id);
+                        var over = task.EstimatedHours is decimal est && hours > est;
+                        <div class="kanban-card kanban-card--clickable @(lane == TaskLane.Done ? "kanban-card--done" : "")" @onclick="@(() => Nav.NavigateTo($"/jobs/{task.JobId}"))">
+                            <div class="kanban-card-code">@task.Code</div>
+                            <div class="kanban-card-name">@task.Name</div>
+                            <div class="kanban-card-customer">@(job?.Name ?? "—")@(job is not null ? $" · {customerLookup.GetValueOrDefault(job.CustomerId, "—")}" : "")</div>
+                            <div class="kanban-card-meta">
+                                <span class="@(over ? "kanban-over" : "")" title="@(task.EstimatedHours is decimal e2 ? $"Estimate {e2:0.#} h" : "No estimate")">
+                                    @hours.ToString("0.#") h@(task.EstimatedHours is decimal e3 ? $" / {e3:0.#}" : "")
+                                </span>
+                                <span>@AssigneeNames(task)</span>
+                            </div>
+                            @if (lane == TaskLane.Done && task.DoneAt is DateTimeOffset doneAt)
+                            {
+                                <div class="kanban-card-timestamp kanban-card-timestamp--done">
+                                    <span class="kanban-ts-label">Done</span>
+                                    <span class="kanban-ts-value">@FormatDate(doneAt)</span>
+                                </div>
+                            }
+                            <div class="kanban-card-actions" @onclick:stopPropagation="true">
+                                @if (lane == TaskLane.Done)
+                                {
+                                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Disabled="@(busyTaskId == task.Id)" @onclick="@(() => ReopenTaskAsync(task))">Reopen</FluentButton>
+                                }
+                                else
+                                {
+                                    <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" Disabled="@(busyTaskId == task.Id)" @onclick="@(() => MarkTaskDoneAsync(task))">Done</FluentButton>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
 }
 else
 {
@@ -54,6 +116,7 @@ else
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        @TaskSummary(job)
                     </div>
                 }
             </div>
@@ -76,6 +139,7 @@ else
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        @TaskSummary(job)
                         <div class="kanban-card-meta">
                             <span>@EntryCount(job.Id) entr@(EntryCount(job.Id) == 1 ? "y" : "ies")</span>
                             <span>@TotalHours(job.Id).ToString("0.#") h</span>
@@ -116,6 +180,7 @@ else
                         <div class="kanban-card-code">@job.Code</div>
                         <div class="kanban-card-name">@job.Name</div>
                         <div class="kanban-card-customer">@customerLookup.GetValueOrDefault(job.CustomerId, "—")</div>
+                        @TaskSummary(job)
                         @if (!string.IsNullOrWhiteSpace(job.WaitingReason))
                         {
                             <div class="kanban-card-reason">@job.WaitingReason</div>
@@ -432,6 +497,29 @@ else
         font-size: 0.85rem;
         color: #6b7280;
     }
+
+    /* View toggle */
+    .kanban-toggle { display: inline-flex; border: 1px solid #d5dbe3; border-radius: 8px; overflow: hidden; }
+    .kanban-toggle-btn { all: unset; cursor: pointer; padding: 0.3rem 0.75rem; font-size: 0.82rem; font-weight: 500; color: #475569; background: #fff; }
+    .kanban-toggle-btn--on { background: #1f2f4d; color: #fff; }
+    .kanban-toggle-n { opacity: 0.75; margin-left: 0.25rem; font-variant-numeric: tabular-nums; }
+
+    /* Tasks on a job card */
+    .kanban-tasks { margin-top: 0.5rem; border-top: 1px solid #f1f5f9; padding-top: 0.45rem; }
+    .kanban-tasks-head { display: flex; justify-content: space-between; font-size: 0.75rem; color: #6b7280; margin-bottom: 0.3rem; }
+    .kanban-tasks-bar { height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 0.4rem; }
+    .kanban-tasks-bar > span { display: block; height: 100%; background: #15803d; }
+    .kanban-task { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; padding: 0.15rem 0; }
+    .kanban-task-code { color: #6b7280; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .kanban-task-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kanban-task-hours { color: #6b7280; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .kanban-task-done { all: unset; cursor: pointer; width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #15803d; }
+    .kanban-task-done:hover { border-color: #15803d; background: #f0fdf4; }
+    .kanban-task-more { font-size: 0.75rem; color: #6b7280; padding-top: 0.15rem; }
+    .kanban-over { color: #b45309; font-weight: 600; }
+    .kanban-lane-header--todo { background: #f1f5f9; color: #475569; }
+    .kanban-board--tasks { grid-template-columns: repeat(3, 1fr); }
+    @@media (max-width: 900px) { .kanban-board--tasks { grid-template-columns: 1fr; } }
 </style>
 
 @code {
@@ -443,7 +531,95 @@ else
 
     private List<Job>       jobs       = [];
     private List<TimeEntry> allEntries = [];
+    private List<JobTask>   tasks      = [];
     private readonly Dictionary<Guid, string> customerLookup = new();
+    private readonly Dictionary<Guid, string> employeeLookup = new();
+    private readonly Dictionary<Guid, Job>    jobById        = new();
+    private bool  byTask;
+    private Guid? busyTaskId;
+
+    // ── Tasks ─────────────────────────────────────────────────────────────────
+
+    private enum TaskLane { Todo, InProgress, Done }
+    private static readonly TaskLane[] TaskLanes = [TaskLane.Todo, TaskLane.InProgress, TaskLane.Done];
+
+    private static string TaskLaneTitle(TaskLane lane) => lane switch { TaskLane.Todo => "To do", TaskLane.InProgress => "In progress", _ => "Done" };
+    private static string TaskLaneClass(TaskLane lane) => lane switch { TaskLane.Todo => "kanban-lane-header--todo", TaskLane.InProgress => "kanban-lane-header--inprogress", _ => "kanban-lane-header--done" };
+
+    /// <summary>Done is the task's own status; before that, hours logged on it mean it is under way.</summary>
+    private TaskLane LaneOf(JobTask t) =>
+        t.Status == JobTaskStatus.Done ? TaskLane.Done : TaskHours(t.Id) > 0 ? TaskLane.InProgress : TaskLane.Todo;
+
+    private List<JobTask> TasksIn(TaskLane lane) => lane == TaskLane.Done
+        ? tasks.Where(t => LaneOf(t) == lane).OrderByDescending(t => t.DoneAt).ToList()
+        : tasks.Where(t => LaneOf(t) == lane).OrderBy(t => jobById.GetValueOrDefault(t.JobId)?.Code).ThenBy(t => t.SortOrder).ThenBy(t => t.TaskNumber).ToList();
+
+    private decimal TaskHours(Guid taskId) => allEntries.Where(e => e.TaskId == taskId).Sum(e => e.Hours + e.OvertimeHours);
+
+    private List<JobTask> TasksOf(Guid jobId) => tasks.Where(t => t.JobId == jobId).OrderBy(t => t.SortOrder).ThenBy(t => t.TaskNumber).ToList();
+
+    private string AssigneeNames(JobTask t) => t.AssignedEmployeeIds.Count == 0
+        ? "Job's crew"
+        : string.Join(", ", t.AssignedEmployeeIds.Select(id => employeeLookup.GetValueOrDefault(id, "?")));
+
+    /// <summary>Progress bar plus the open tasks, each with a ✓ — only on jobs that have tasks.</summary>
+    private RenderFragment TaskSummary(Job job) => __builder =>
+    {
+        var all = TasksOf(job.Id);
+        if (all.Count == 0) return;
+        var done = all.Count(t => t.Status == JobTaskStatus.Done);
+        var open = all.Where(t => t.Status != JobTaskStatus.Done).ToList();
+        const int show = 4;
+        <div class="kanban-tasks" @onclick:stopPropagation="true">
+            <div class="kanban-tasks-head"><span>Tasks</span><span>@done / @all.Count done</span></div>
+            <div class="kanban-tasks-bar"><span style="width:@(all.Count == 0 ? 0 : done * 100 / all.Count)%"></span></div>
+            @foreach (var t in open.Take(show))
+            {
+                var h = TaskHours(t.Id);
+                <div class="kanban-task">
+                    <button class="kanban-task-done" title="Mark @t.Code done" disabled="@(busyTaskId == t.Id)" @onclick="@(() => MarkTaskDoneAsync(t))">@(busyTaskId == t.Id ? "…" : "")</button>
+                    <span class="kanban-task-code">@t.Code</span>
+                    <span class="kanban-task-name" title="@t.Name">@t.Name</span>
+                    @if (h > 0)
+                    {
+                        <span class="kanban-task-hours @(t.EstimatedHours is decimal est && h > est ? "kanban-over" : "")">@h.ToString("0.#") h</span>
+                    }
+                </div>
+            }
+            @if (open.Count > show)
+            {
+                <div class="kanban-task-more">+ @(open.Count - show) more</div>
+            }
+        </div>
+    };
+
+    private async Task MarkTaskDoneAsync(JobTask task)
+    {
+        if (busyTaskId is not null) return;
+        busyTaskId = task.Id; actionResult = string.Empty;
+        var result = await TasksApi.MarkDoneAsync(task.Id);
+        if (result.IsSuccess && result.Value is { } saved)
+        {
+            task.Status = saved.Status; task.DoneAt = saved.DoneAt; task.DoneByUserId = saved.DoneByUserId;
+            actionError = false; actionResult = $"{task.Code} done.";
+        }
+        else { actionError = true; actionResult = result.ErrorMessage ?? "Could not mark the task done."; }
+        busyTaskId = null;
+    }
+
+    private async Task ReopenTaskAsync(JobTask task)
+    {
+        if (busyTaskId is not null) return;
+        busyTaskId = task.Id; actionResult = string.Empty;
+        var result = await TasksApi.ReopenAsync(task.Id);
+        if (result.IsSuccess && result.Value is { } saved)
+        {
+            task.Status = saved.Status; task.DoneAt = saved.DoneAt; task.DoneByUserId = saved.DoneByUserId;
+            actionError = false; actionResult = $"{task.Code} reopened.";
+        }
+        else { actionError = true; actionResult = result.ErrorMessage ?? "Could not reopen the task."; }
+        busyTaskId = null;
+    }
 
     // Waiting sheet state
     private Job?   waitingJob;
@@ -511,12 +687,22 @@ else
         actionResult = string.Empty;
         jobs.Clear();
         allEntries.Clear();
+        tasks.Clear();
         customerLookup.Clear();
+        employeeLookup.Clear();
+        jobById.Clear();
 
         var jobsTask    = JobsApi.GetJobsAsync();
         var entriesTask = TimeEntriesApi.GetTimeEntriesAsync();
         var custTask    = CustomersApi.GetCustomersAsync();
-        await Task.WhenAll(jobsTask, entriesTask, custTask);
+        var tasksTask   = TasksApi.GetTasksAsync();
+        var empTask     = EmployeesApi.GetEmployeesAsync();
+        await Task.WhenAll(jobsTask, entriesTask, custTask, tasksTask, empTask);
+
+        var tasksResult = await tasksTask;
+        var empResult   = await empTask;
+        if (tasksResult.IsSuccess) tasks.AddRange(tasksResult.Value ?? []);
+        foreach (var e in empResult.Value ?? []) employeeLookup[e.Id] = e.DisplayName;
 
         var jobsResult    = await jobsTask;
         var entriesResult = await entriesTask;
@@ -527,6 +713,7 @@ else
 
         jobs.AddRange(jobsResult.Value ?? []);
         allEntries.AddRange(entriesResult.Value ?? []);
+        foreach (var j in jobs) jobById[j.Id] = j;
 
         foreach (var c in custResult.Value ?? [])
             customerLookup[c.Id] = c.Name;
