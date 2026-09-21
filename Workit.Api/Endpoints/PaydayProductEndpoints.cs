@@ -36,6 +36,19 @@ internal static class PaydayProductEndpoints
                 }, logger, "loading Payday products"))
             .WithName("GetPaydayProducts");
 
+        // The console's list: search, role filter, sort and paging happen in SQL so a
+        // company with a thousand products gets fifty rows, not a thousand editors.
+        cache.MapGet("/page", async (WorkitDbContext db, HttpContext http, CancellationToken ct,
+                string? q = null, PaydayProductRole? role = null, bool includeArchived = false,
+                string sort = "sku", string dir = "asc", int page = 1, int pageSize = 50) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var user = http.User.ToUserContext();
+                    var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+                    return Results.Ok(await QueryPageAsync(db, user.CompanyId, q, role, includeArchived, sort, desc, page, pageSize, ct));
+                }, logger, "loading a page of Payday products"))
+            .WithName("GetPaydayProductsPage");
+
         cache.MapPut("/{id:guid}/role", async (WorkitDbContext db, HttpContext http, Guid id, PaydayProductRoleUpdate body, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
@@ -143,5 +156,45 @@ internal static class PaydayProductEndpoints
             .AddEndpointFilter<PaydayCredentialsFilter>()
             .WithTags("Payday products")
             .WithName("MigrateMaterialsToPayday");
+    }
+    /// <summary>
+    /// The console's list query. Search matches SKU, name and category
+    /// case-insensitively; role counts are for the live set regardless of the
+    /// search so the filter chips stay stable while typing.
+    /// </summary>
+    internal static async Task<PaydayProductPage> QueryPageAsync(WorkitDbContext db, Guid companyId, string? q, PaydayProductRole? role,
+        bool includeArchived, string sort, bool descending, int page, int pageSize, CancellationToken ct)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 10, 200);
+
+        var live = db.PaydayProducts.Where(p => p.CompanyId == companyId && (includeArchived || !p.Archived));
+        var roleCounts = await live.GroupBy(p => p.Role).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
+        var lastSynced = await live.Select(p => (DateTimeOffset?)p.SyncedAt).MaxAsync(ct);
+
+        var query = live;
+        if (role is not null) query = query.Where(p => p.Role == role);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLowerInvariant();
+            query = query.Where(p => p.Sku.ToLower().Contains(term) || p.Name.ToLower().Contains(term) || p.Category.ToLower().Contains(term));
+        }
+
+        query = (sort.ToLowerInvariant(), descending) switch
+        {
+            ("name", false)  => query.OrderBy(p => p.Name).ThenBy(p => p.Sku),
+            ("name", true)   => query.OrderByDescending(p => p.Name).ThenBy(p => p.Sku),
+            ("price", false) => query.OrderBy(p => p.SalePriceExVat).ThenBy(p => p.Sku),
+            ("price", true)  => query.OrderByDescending(p => p.SalePriceExVat).ThenBy(p => p.Sku),
+            // Untracked products sort last either way; they have no stock to compare.
+            ("stock", false) => query.OrderBy(p => p.Quantity == null).ThenBy(p => p.Quantity).ThenBy(p => p.Sku),
+            ("stock", true)  => query.OrderBy(p => p.Quantity == null).ThenByDescending(p => p.Quantity).ThenBy(p => p.Sku),
+            (_, true)        => query.OrderByDescending(p => p.Sku),
+            _                => query.OrderBy(p => p.Sku),
+        };
+
+        var total = await query.CountAsync(ct);
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new PaydayProductPage(items, total, page, pageSize, roleCounts, lastSynced);
     }
 }

@@ -12,6 +12,8 @@ public interface IPaydayProductsCacheApi
     Task<ApiResult<PaydayProductCache>> SetRoleAsync(Guid id, PaydayProductRole role, string? unit = null, string? category = null);
     /// <summary>Plans (dry run) or performs the switch-over of the company's materials to Payday products.</summary>
     Task<ApiResult<MaterialsMigrationResult>> MigrateMaterialsAsync(bool dryRun);
+    /// <summary>One page of the cache, searched/sorted/filtered in SQL. Sort: sku | name | price | stock.</summary>
+    Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, bool includeArchived, string sort, bool descending, int page, int pageSize);
     /// <summary>Payday's sales ledger accounts, for the New product form.</summary>
     Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync();
     /// <summary>Creates the product in Payday and returns the cached row with its role set.</summary>
@@ -36,6 +38,14 @@ internal sealed class PaydayProductsCacheApi(HttpClient httpClient, IAccessToken
 
     public Task<ApiResult<MaterialsMigrationResult>> MigrateMaterialsAsync(bool dryRun) =>
         PostForJsonAsync<object, MaterialsMigrationResult>($"api/payday/materials/migrate?dryRun={(dryRun ? "true" : "false")}", new { }, "The materials migration could not be run right now.");
+
+    public Task<ApiResult<PaydayProductPage>> GetPageAsync(string? q, PaydayProductRole? role, bool includeArchived, string sort, bool descending, int page, int pageSize)
+    {
+        var url = $"api/payday/products/page?page={page}&pageSize={pageSize}&sort={Uri.EscapeDataString(sort)}&dir={(descending ? "desc" : "asc")}&includeArchived={(includeArchived ? "true" : "false")}";
+        if (!string.IsNullOrWhiteSpace(q)) url += $"&q={Uri.EscapeDataString(q.Trim())}";
+        if (role is not null) url += $"&role={role}";
+        return GetAsync<PaydayProductPage>(url, "Payday products could not be loaded right now.");
+    }
 
     public async Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync()
     {
