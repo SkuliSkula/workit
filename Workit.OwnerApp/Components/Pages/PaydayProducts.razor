@@ -3,6 +3,7 @@
 @inject IPaydayProductsCacheApi ProductsApi
 @inject BusyService Busy
 @inject NavigationManager Navigation
+@inject ICompanyApi CompanyApi
 @using Workit.Shared.Payday
 
 <PageTitle>Payday Products</PageTitle>
@@ -105,6 +106,21 @@
             }.
             If Payday has no such product yet, press <strong>+ New product</strong> — it is created in Payday and given the role in one step.
         </FluentLabel>
+    </FluentCard>
+}
+
+@if (!loading && company is { MaterialsManagedInPayday: false } && MaterialCount > 0)
+{
+    <FluentCard Class="admin-card" AreaRestricted="false" Style="border-left:4px solid #1d4ed8;">
+        <FluentLabel Style="font-weight:600; color:#1d4ed8;">The apps don't see these materials yet</FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.9rem; margin-top:0.25rem;">
+            <strong>@MaterialCount</strong> product@(MaterialCount == 1 ? "" : "s") @(MaterialCount == 1 ? "is" : "are") marked as Material, but the apps read Workit's own
+            material list until this company's materials are managed in Payday. Switch over once on the Materials page and they appear
+            in the apps straight away — and stay in step with Payday from then on.
+        </FluentLabel>
+        <div style="margin-top:0.6rem;">
+            <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => Navigation.NavigateTo("/materials"))">Go to Materials → Move materials to Payday</FluentButton>
+        </div>
     </FluentCard>
 }
 
@@ -240,6 +256,12 @@
         <p style="margin:0 0 0.75rem; color:#60758b; font-size:0.9rem;">
             Products already marked as something else — Regular hour, Overtime hour, Driving unit, Not used — are left as they are. You can change any single product afterwards with Edit.
         </p>
+        @if (company is { MaterialsManagedInPayday: false })
+        {
+            <p style="margin:0 0 0.75rem; color:#1d4ed8; font-size:0.9rem;">
+                To see them in the apps, also switch this company's materials over to Payday on the Materials page — one press, done once.
+            </p>
+        }
         @if (!string.IsNullOrWhiteSpace(bulkError))
         {
             <FluentLabel Color="Color.Error" role="alert" style="margin-bottom:0.5rem; display:block;">@bulkError</FluentLabel>
@@ -292,6 +314,8 @@
     [Parameter, SupplyParameterFromQuery(Name = "archived")] public bool? QueryArchived { get; set; }
 
     private PaydayProductPage? listPage;
+    private Company? company;
+    private int MaterialCount => listPage?.RoleCounts.GetValueOrDefault(PaydayProductRole.Material) ?? 0;
     private bool loading = true;
     private bool showArchived;
     private string search = string.Empty;
@@ -342,7 +366,10 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await LoadAsync();
+        if (!firstRender) return;
+        var companyResult = await CompanyApi.GetCompanyAsync();
+        if (companyResult.IsSuccess) company = companyResult.Value;
+        await LoadAsync();
     }
 
     private async Task LoadAsync()
