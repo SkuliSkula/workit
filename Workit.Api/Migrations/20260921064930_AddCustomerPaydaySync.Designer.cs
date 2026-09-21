@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Workit.Api.Data;
@@ -12,9 +13,11 @@ using Workit.Api.Data;
 namespace Workit.Api.Migrations
 {
     [DbContext(typeof(WorkitDbContext))]
-    partial class WorkitDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921064930_AddCustomerPaydaySync")]
+    partial class AddCustomerPaydaySync
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

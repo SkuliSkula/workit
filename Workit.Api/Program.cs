@@ -170,7 +170,8 @@ else
 builder.Services.AddPaydayApiClients(builder.Configuration["Payday:BaseUrl"]);
 builder.Services.AddScoped<Workit.Api.Payday.PaydayProductSyncService>();
 builder.Services.AddScoped<Workit.Api.Payday.MaterialsMigrationService>();
-builder.Services.AddHostedService<Workit.Api.Payday.PaydayProductSyncBackgroundService>();
+builder.Services.AddScoped<Workit.Api.Payday.PaydayCustomerSyncService>();
+builder.Services.AddHostedService<Workit.Api.Payday.PaydaySyncBackgroundService>();
 
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
@@ -283,6 +284,7 @@ app.MapExpenseAutoLinkEndpoints();
 app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapPaydayProductEndpoints();
+app.MapPaydayCustomerEndpoints();
 app.MapPayrollEndpoints();
 app.MapDevSeedEndpoints();
 

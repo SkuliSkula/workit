@@ -3,7 +3,7 @@
 @inject IPaydayCompaniesApi PaydayCompaniesApi
 @inject BusyService Busy
 @inject IPaydayUsersApi PaydayUsersApi
-@inject IPaydayCustomersApi PaydayCustomersApi
+@inject IPaydayCustomerSyncApi PaydayCustomerSync
 @inject IPaydayEmployeesApi PaydayEmployeesApi
 @inject IPaydayPayrollApi PaydayPayrollApi
 @inject IAuthApi AuthApi
@@ -102,7 +102,10 @@
 
     @* ── Sync ── *@
     <FluentCard Class="admin-card">
-        <FluentLabel Typo="Typography.Body"><strong>Sync from Payday</strong></FluentLabel>
+        <FluentLabel Typo="Typography.Body"><strong>Sync with Payday</strong></FluentLabel>
+        <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.25rem;">
+            Customers sync both ways every 30 minutes on their own — a customer saved here goes to Payday, and Payday's list comes back. Press to run it now.
+        </FluentLabel>
         <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:0.75rem;">
 
             <div>
@@ -254,99 +257,28 @@
         await JS.InvokeVoidAsync("copyToClipboard", setupResult.GeneratedPassword);
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    private async Task<List<PaydayCustomer>> FetchAllPaydayCustomersAsync()
-    {
-        var all = new List<PaydayCustomer>();
-        var page = 1;
-        while (true)
-        {
-            var result = await PaydayCustomersApi.GetAllAsync(page, 100);
-            if (!result.IsSuccess || result.Value is null) break;
-            all.AddRange(result.Value.Customers);
-            if (page >= result.Value.Pages) break;
-            page++;
-        }
-        return all;
-    }
-
     // ── Sync Customers ───────────────────────────────────────────────────────
     private async Task SyncCustomersAsync()
     {
-        using var busy = Busy.Begin("Syncing customers from Payday…");
+        using var busy = Busy.Begin("Syncing customers with Payday…");
         syncingCustomers = true;
         customerSyncResult = null;
 
         try
         {
-            var companyResult = await CompanyApi.GetCompanyAsync();
-            if (!companyResult.IsSuccess || companyResult.Value is null)
+            var result = await PaydayCustomerSync.SyncAsync();
+            if (!result.IsSuccess || result.Value is null)
             {
-                customerSyncResult = $"Could not load company: {companyResult.ErrorMessage}";
+                customerSyncResult = result.ErrorMessage ?? "Customers could not be synced with Payday right now.";
                 return;
             }
 
-            var workitResult = await CustomersApi.GetCustomersAsync();
-            if (!workitResult.IsSuccess)
-            {
-                customerSyncResult = $"Could not load customers: {workitResult.ErrorMessage}";
-                return;
-            }
-
-            var bySsn = (workitResult.Value ?? [])
-                .Where(c => !string.IsNullOrWhiteSpace(c.Ssn) && c.Ssn != "0000000000")
-                .GroupBy(c => c.Ssn!)
-                .ToDictionary(g => g.Key, g => g.First());
-
-            var paydayList = await FetchAllPaydayCustomersAsync();
-            int created = 0, updated = 0, errors = 0;
-
-            foreach (var pc in paydayList)
-            {
-                if (string.IsNullOrWhiteSpace(pc.Ssn)) continue;
-
-                if (bySsn.TryGetValue(pc.Ssn, out var existing))
-                {
-                    existing.Name          = pc.Name          ?? existing.Name;
-                    existing.Email         = pc.Email         ?? existing.Email;
-                    existing.Phone         = pc.Phone         ?? existing.Phone;
-                    existing.ContactPerson = pc.Contact       ?? existing.ContactPerson;
-                    existing.Address       = pc.Address       ?? existing.Address;
-                    existing.ZipCode       = pc.ZipCode       ?? existing.ZipCode;
-                    existing.City          = pc.City          ?? existing.City;
-                    existing.Country       = pc.Country       ?? existing.Country;
-                    existing.Language      = pc.Language       ?? existing.Language;
-                    existing.Comment       = pc.Comment        ?? existing.Comment;
-                    existing.Source        = DataSource.Payday;
-                    existing.PaydayId      = pc.Id;
-                    var r = await CustomersApi.UpdateCustomerAsync(existing);
-                    if (r.IsSuccess) updated++; else errors++;
-                }
-                else
-                {
-                    var r = await CustomersApi.CreateCustomerAsync(new Customer
-                    {
-                        CompanyId     = companyResult.Value.Id,
-                        Name          = pc.Name    ?? string.Empty,
-                        Ssn           = pc.Ssn,
-                        Email         = pc.Email   ?? string.Empty,
-                        Phone         = pc.Phone   ?? string.Empty,
-                        ContactPerson = pc.Contact ?? string.Empty,
-                        Address       = pc.Address ?? string.Empty,
-                        ZipCode       = pc.ZipCode ?? string.Empty,
-                        City          = pc.City    ?? string.Empty,
-                        Country       = pc.Country ?? string.Empty,
-                        Language      = pc.Language ?? string.Empty,
-                        Comment       = pc.Comment  ?? string.Empty,
-                        Source        = DataSource.Payday,
-                        PaydayId      = pc.Id
-                    });
-                    if (r.IsSuccess) created++; else errors++;
-                }
-            }
-
-            customerSyncResult = $"✓ {created} created, {updated} updated"
-                + (errors > 0 ? $", {errors} errors" : string.Empty);
+            var r = result.Value;
+            var parts = new List<string> { $"{r.Fetched} in Payday", $"{r.Added} added", $"{r.Updated} updated" };
+            if (r.Linked > 0) parts.Add($"{r.Linked} linked by SSN");
+            if (r.Pushed > 0) parts.Add($"{r.Pushed} sent to Payday");
+            if (r.PushFailed > 0) parts.Add($"{r.PushFailed} refused by Payday — see Customers");
+            customerSyncResult = "✓ " + string.Join(", ", parts);
         }
         finally
         {

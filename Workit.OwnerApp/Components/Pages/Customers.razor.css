@@ -49,3 +49,30 @@
     font-size: 0.82rem;
     color: #60758b;
 }
+
+/* Payday link state per customer */
+.pd-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pd-pill--linked  { background: #d1fae5; color: #065f46; }
+.pd-pill--none    { background: #f1f5f9; color: #475569; }
+.pd-pill--pending { background: #fef3c7; color: #92400e; }
+
+.pd-refused {
+    margin: 0.5rem 0 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-left: 3px solid #d97706;
+    background: #fffbeb;
+    color: #78350f;
+    font-size: 0.85rem;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.pd-refused-hint { color: #92400e; opacity: 0.85; }

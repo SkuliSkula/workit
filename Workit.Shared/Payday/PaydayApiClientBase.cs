@@ -9,6 +9,16 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    /// <summary>
+    /// Requests omit null members. Payday treats an explicit <c>null</c> on some
+    /// optional fields as a value — <c>"sendElectronicInvoices": null</c> on a
+    /// customer create is a 500 — while a missing member is fine.
+    /// </summary>
+    private static readonly JsonSerializerOptions RequestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
     protected async Task<ApiResult<T>> GetAsync<T>(string requestUri, string defaultErrorMessage)
     {
         try
@@ -143,14 +153,41 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         if (payload is not null)
-            request.Content = JsonContent.Create(payload);
+            request.Content = JsonContent.Create(payload, options: RequestJsonOptions);
 
         return request;
     }
 
+    /// <summary>
+    /// Payday answers errors three ways — a plain string, <c>{"message"}</c>, or
+    /// <c>{"errorCode","errorMessage"}</c>. Owners see whichever text it carried,
+    /// never the JSON wrapper; a bare 500 gets a sentence they can act on.
+    /// </summary>
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response, string defaultErrorMessage)
     {
-        var errorMessage = await response.Content.ReadAsStringAsync();
-        return string.IsNullOrWhiteSpace(errorMessage) ? defaultErrorMessage : errorMessage;
+        var body = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(body)) return defaultErrorMessage;
+
+        var text = body.Trim();
+        if (text.StartsWith('{'))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(text);
+                foreach (var key in new[] { "message", "errorMessage", "Message" })
+                {
+                    if (doc.RootElement.TryGetProperty(key, out var value) && value.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        text = value.GetString() ?? text;
+                        break;
+                    }
+                }
+            }
+            catch (System.Text.Json.JsonException) { /* not JSON after all; show it as is */ }
+        }
+
+        if ((int)response.StatusCode >= 500 && text.Equals("InternalServerError", StringComparison.OrdinalIgnoreCase))
+            return "Payday could not process the request (its server returned an error). For a customer with an SSN this means Payday's registry lookup failed — check the kennitala, or try again later.";
+        return text;
     }
 }

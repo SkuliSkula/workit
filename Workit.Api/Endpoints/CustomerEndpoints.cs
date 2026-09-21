@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Payday;
+using Workit.Api.Services;
 using Workit.Shared.Models;
+using Workit.Shared.Payday;
 using static Workit.Api.Endpoints.EndpointHelpers;
 
 namespace Workit.Api.Endpoints;
@@ -32,7 +35,8 @@ internal static class CustomerEndpoints
                 "loading customers"))
             .WithName("GetCustomers");
 
-        securedApi.MapPost("/customers", async (WorkitDbContext db, HttpContext httpContext, Customer customer, CancellationToken ct) =>
+        securedApi.MapPost("/customers", async (WorkitDbContext db, HttpContext httpContext, Customer customer,
+                ICredentialProtectionService protection, IPaydayTokenService tokens, PaydayCustomerSyncService payday, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -58,8 +62,14 @@ internal static class CustomerEndpoints
                     customer.Language = customer.Language.Trim();
                     customer.Comment = customer.Comment.Trim();
 
+                    // A new customer starts unlinked; the write-through below links it.
+                    customer.PaydayId          = null;
+                    customer.PaydayPushPending = false;
+                    customer.PaydayPushError   = null;
+
                     await customer.StampCreatedAsync(db, httpContext, httpContext.User.ToUserContext(), ct);
                     db.Customers.Add(customer);
+                    await WriteThroughAsync(db, protection, tokens, payday, customer, ct);
                     await db.SaveChangesAsync(ct);
                     return Results.Created($"/api/customers/{customer.Id}", customer);
                 },
@@ -67,7 +77,8 @@ internal static class CustomerEndpoints
                 "creating a customer"))
             .WithName("CreateCustomer");
 
-        securedApi.MapPut("/customers/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Customer customer, CancellationToken ct) =>
+        securedApi.MapPut("/customers/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Customer customer,
+                ICredentialProtectionService protection, IPaydayTokenService tokens, PaydayCustomerSyncService payday, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     if (!httpContext.User.IsOwnerOrAdmin())
@@ -103,15 +114,28 @@ internal static class CustomerEndpoints
                     existing.Country = customer.Country.Trim();
                     existing.Language = customer.Language.Trim();
                     existing.Comment = customer.Comment.Trim();
-                    existing.Source = customer.Source;
-                    existing.PaydayId = customer.PaydayId;
                     existing.PlanJobsInTasks = customer.PlanJobsInTasks;
+                    // The Payday link is owned by the sync, not the form.
 
+                    await WriteThroughAsync(db, protection, tokens, payday, existing, ct);
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
                 },
                 logger,
                 "updating a customer"))
             .WithName("UpdateCustomer");
+    }
+
+    /// <summary>
+    /// Workit → Payday on save. Not connected: nothing to do. Connected: push now;
+    /// if Payday refuses, the row is flagged pending with Payday's message and the
+    /// background sync retries — the owner's save never fails because of Payday.
+    /// </summary>
+    private static async Task WriteThroughAsync(WorkitDbContext db, ICredentialProtectionService protection, IPaydayTokenService tokens,
+        PaydayCustomerSyncService payday, Customer customer, CancellationToken ct)
+    {
+        if (!await PaydayConnection.TryConnectAsync(db, protection, tokens, customer.CompanyId, ct))
+            return;
+        await payday.PushAsync(customer, ct);
     }
 }

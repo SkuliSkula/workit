@@ -6,17 +6,18 @@ using Workit.Shared.Payday;
 namespace Workit.Api.Payday;
 
 /// <summary>
-/// Keeps every connected company's product cache (and, where switched on, its
-/// materials) fresh without anyone pressing Sync now — prices change in Payday,
-/// invoices consume stock there. One company's failure never stops the loop.
+/// Keeps every connected company in step with Payday without anyone pressing
+/// Sync now: the product cache (and, where switched on, materials), and
+/// customers in both directions — pending Workit edits go out, Payday's list
+/// comes in. One company's failure never stops the loop.
 /// </summary>
-public sealed class PaydayProductSyncBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PaydayProductSyncBackgroundService> logger) : BackgroundService
+public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PaydaySyncBackgroundService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(30);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Payday product sync started (interval: {Interval})", Interval);
+        logger.LogInformation("Payday sync started (interval: {Interval})", Interval);
         using var timer = new PeriodicTimer(Interval);
         // First pass a minute after startup so a deploy does not hammer Payday alongside migrations.
         try { await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken); } catch (OperationCanceledException) { return; }
@@ -50,13 +51,21 @@ public sealed class PaydayProductSyncBackgroundService(IServiceScopeFactory scop
                 if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret)) continue;
                 tokens.SetCredentials(clientId, secret);
 
-                var sync = companyScope.ServiceProvider.GetRequiredService<PaydayProductSyncService>();
-                var outcome = await sync.SyncAsync(company.Id, ct);
+                var products = companyScope.ServiceProvider.GetRequiredService<PaydayProductSyncService>();
+                var outcome = await products.SyncAsync(company.Id, ct);
                 if (outcome.Error is not null)
                     logger.LogWarning("Payday product sync for {Company} failed: {Error}", company.Name, outcome.Error);
                 else
                     logger.LogInformation("Payday product sync for {Company}: {Fetched} products, {Added} new, {Archived} archived",
                         company.Name, outcome.Result!.Fetched, outcome.Result.Added, outcome.Result.Archived);
+
+                var customers = companyScope.ServiceProvider.GetRequiredService<PaydayCustomerSyncService>();
+                var customerOutcome = await customers.SyncAsync(company.Id, ct);
+                if (customerOutcome.Error is not null)
+                    logger.LogWarning("Payday customer sync for {Company} failed: {Error}", company.Name, customerOutcome.Error);
+                else
+                    logger.LogInformation("Payday customer sync for {Company}: {Fetched} customers, {Added} new, {Linked} linked, {Pushed} pushed, {PushFailed} push failures",
+                        company.Name, customerOutcome.Result!.Fetched, customerOutcome.Result.Added, customerOutcome.Result.Linked, customerOutcome.Result.Pushed, customerOutcome.Result.PushFailed);
             }
             catch (Exception ex)
             {

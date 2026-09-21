@@ -14,6 +14,7 @@ public static class WorkitApiServiceCollectionExtensions
         services.AddScoped<IJobsApi, JobsApi>();
         services.AddScoped<IJobTasksApi, JobTasksApi>();
         services.AddScoped<IPaydayProductsCacheApi, PaydayProductsCacheApi>();
+        services.AddScoped<IPaydayCustomerSyncApi, PaydayCustomerSyncApi>();
         services.AddScoped<IPayrollApi, PayrollApi>();
         services.AddScoped<ITimeEntriesApi, TimeEntriesApi>();
         services.AddScoped<IToolsApi, ToolsApi>();

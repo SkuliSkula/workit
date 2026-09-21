@@ -29,6 +29,9 @@ public sealed class UpdateCustomerRequest
     /// <summary>Optional.</summary>
     public string? Comment { get; set; }
 
+    /// <summary>Optional. Not in the alpha docs for update, but accepted (verified in the sandbox 2026-09-21).</summary>
+    public string? Phone { get; set; }
+
     /// <summary>Optional.</summary>
     public bool? SendElectronicInvoices { get; set; }
 
