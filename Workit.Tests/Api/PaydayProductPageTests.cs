@@ -33,7 +33,7 @@ public class PaydayProductPageTests
     public async Task DefaultPage_IsLiveProductsOfTheCompany_BySku_WithRoleCounts()
     {
         await using var db = NewDb();
-        var page = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, false, "sku", false, 1, 50, CancellationToken.None);
+        var page = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, null, false, "sku", false, 1, 50, CancellationToken.None);
 
         page.Total.Should().Be(5);
         page.Items.Select(p => p.Sku).Should().Equal("0209621", "0209631", "AKSTUR", "DAGV", "FK016");
@@ -47,9 +47,9 @@ public class PaydayProductPageTests
     public async Task Search_IsCaseInsensitive_OverSkuNameAndCategory_AndLeavesCountsAlone()
     {
         await using var db = NewDb();
-        var byName = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "plaststrengur", null, false, "sku", false, 1, 50, CancellationToken.None);
-        var byCat  = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "STRENGIR", null, false, "sku", false, 1, 50, CancellationToken.None);
-        var bySku  = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "fk0", null, false, "sku", false, 1, 50, CancellationToken.None);
+        var byName = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "plaststrengur", null, null, false, "sku", false, 1, 50, CancellationToken.None);
+        var byCat  = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "STRENGIR", null, null, false, "sku", false, 1, 50, CancellationToken.None);
+        var bySku  = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, "fk0", null, null, false, "sku", false, 1, 50, CancellationToken.None);
 
         byName.Total.Should().Be(2);
         byCat.Total.Should().Be(2);
@@ -61,15 +61,15 @@ public class PaydayProductPageTests
     public async Task RoleFilter_Sort_AndPaging()
     {
         await using var db = NewDb();
-        var unassigned = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, PaydayProductRole.Unassigned, false, "price", true, 1, 50, CancellationToken.None);
+        var unassigned = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, PaydayProductRole.Unassigned, null, false, "price", true, 1, 50, CancellationToken.None);
         unassigned.Items.Select(p => p.Sku).Should().Equal("0209631", "0209621");
 
-        var page2 = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, false, "name", false, 2, 10, CancellationToken.None);
+        var page2 = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, null, false, "name", false, 2, 10, CancellationToken.None);
         page2.PageSize.Should().Be(10, "the minimum page size is 10");
         page2.Items.Should().BeEmpty();
         page2.Total.Should().Be(5);
 
-        var withArchived = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, true, "stock", true, 1, 50, CancellationToken.None);
+        var withArchived = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, null, true, "stock", true, 1, 50, CancellationToken.None);
         withArchived.Total.Should().Be(6);
         withArchived.Items.First().Sku.Should().Be("FK016", "tracked stock sorts before untracked");
     }
@@ -89,5 +89,18 @@ public class PaydayProductPageTests
         (await db.PaydayProducts.SingleAsync(p => p.Sku == "DAGV")).Role.Should().Be(PaydayProductRole.RegularHour, "already assigned products are left alone");
         (await db.PaydayProducts.SingleAsync(p => p.Sku == "OTHER")).Role.Should().Be(PaydayProductRole.Unassigned, "other companies are untouched");
         (await PaydayProductEndpoints.AssignUnsetAsync(db, CompanyId, PaydayProductRole.Material, null, CancellationToken.None)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CategoryFilter_AndCounts()
+    {
+        await using var db = NewDb();
+        var strengir = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, "Strengir", false, "sku", false, 1, 50, CancellationToken.None);
+        strengir.Total.Should().Be(2);
+        strengir.CategoryCounts["Strengir"].Should().Be(2);
+        strengir.CategoryCounts[""].Should().Be(3, "the uncategorised bucket");
+
+        var none = await PaydayProductEndpoints.QueryPageAsync(db, CompanyId, null, null, PaydayProductEndpoints.UncategorisedFilter, false, "sku", false, 1, 50, CancellationToken.None);
+        none.Total.Should().Be(3);
     }
 }

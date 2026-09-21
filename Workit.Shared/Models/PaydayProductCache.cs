@@ -87,4 +87,18 @@ public sealed record PaydayProductPage(
     int Page,
     int PageSize,
     Dictionary<PaydayProductRole, int> RoleCounts,
-    DateTimeOffset? LastSyncedAt);
+    DateTimeOffset? LastSyncedAt,
+    /// <summary>Live products per category, "" for uncategorised — for the category filter.</summary>
+    Dictionary<string, int> CategoryCounts);
+
+/// <summary>One suggested category for a product; a null category means "no idea, please fill in".</summary>
+public sealed record PaydayProductCategorySuggestion(
+    Guid ProductId, string Sku, string Name, string? Category, string Confidence, List<string> Because);
+
+public sealed record PaydayProductCategorySuggestions(
+    List<PaydayProductCategorySuggestion> Items,
+    /// <summary>Categories already in use in this company, for the pick list.</summary>
+    List<string> KnownCategories,
+    int Uncategorised);
+
+public sealed record PaydayProductCategoryAssignment(Guid ProductId, string Category);

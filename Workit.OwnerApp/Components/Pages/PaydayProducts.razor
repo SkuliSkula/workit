@@ -138,10 +138,24 @@
                 </button>
             }
         </div>
+        <FluentSelect TValue="string" TOption="string" Value="@(categoryFilter ?? "")" ValueChanged="OnCategoryFilterChanged" style="width:200px;" title="Category">
+            <FluentOption TOption="string" Value="">All categories</FluentOption>
+            @if (UncategorisedCount > 0)
+            {
+                <FluentOption TOption="string" Value="-">No category (@UncategorisedCount)</FluentOption>
+            }
+            @foreach (var c in KnownCategories)
+            {
+                <FluentOption TOption="string" Value="@c">@c (@(listPage?.CategoryCounts.GetValueOrDefault(c) ?? 0))</FluentOption>
+            }
+        </FluentSelect>
         <FluentCheckbox Value="@showArchived" ValueChanged="OnShowArchivedChanged" Label="Show archived" />
+        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Style="margin-left:auto;" @onclick="OpenSuggestAsync" Disabled="@loading">
+            @(UncategorisedCount > 0 ? $"Suggest categories ({UncategorisedCount})" : "Re-check categories")
+        </FluentButton>
         @if (UnsetCount > 0)
         {
-            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Style="margin-left:auto;" @onclick="@(() => confirmBulk = true)" Disabled="@loading">
+            <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => confirmBulk = true)" Disabled="@loading">
                 Mark unset as Material
             </FluentButton>
         }
@@ -239,6 +253,73 @@
     }
 </FluentCard>
 
+@* ── Category suggestions ── *@
+@if (showSuggest)
+{
+    <AppDialog Title="Suggest categories" OnClose="CloseSuggest" Busy="@(suggestLoading || applying)" Wide="true">
+        @if (suggestLoading)
+        {
+            <PageLoader />
+        }
+        else if (suggestions is null)
+        {
+            <FluentLabel Color="Color.Error">@suggestError</FluentLabel>
+        }
+        else
+        {
+            <FluentLabel Style="color:#60758b; font-size:0.9rem;">
+                Read from each product's name. Tick what looks right, fix the rest in the list — the pick list has your categories, or type a new one.
+                Every category you save teaches the next run.
+            </FluentLabel>
+            <div class="sg-toolbar">
+                <label class="sg-check"><input type="checkbox" checked="@AllTicked" @onchange="@(e => TickAll((bool)e.Value!))" /> <span>Select all with a suggestion</span></label>
+                <span class="sg-summary">
+                    @suggestions.Items.Count(i => i.Category is not null) suggested ·
+                    @suggestions.Items.Count(i => i.Category is null) need a hand ·
+                    <strong>@ticked.Count</strong> selected
+                </span>
+                <label class="sg-check"><input type="checkbox" checked="@suggestIncludeCategorised" @onchange="@(async e => { suggestIncludeCategorised = (bool)e.Value!; await LoadSuggestionsAsync(); })" /> <span>Include already categorised</span></label>
+            </div>
+            <div class="sg-list">
+                @foreach (var item in suggestions.Items)
+                {
+                    var chosen = chosenCategory.GetValueOrDefault(item.ProductId) ?? "";
+                    <div class="sg-row @(item.Category is null ? "sg-row--blank" : "") @(ticked.Contains(item.ProductId) ? "sg-row--on" : "")">
+                        <input type="checkbox" checked="@ticked.Contains(item.ProductId)" disabled="@string.IsNullOrWhiteSpace(chosen)" @onchange="@(e => Tick(item.ProductId, (bool)e.Value!))" />
+                        <div class="sg-product">
+                            <span class="sg-sku">@item.Sku</span>
+                            <span class="sg-name" title="@item.Name">@item.Name</span>
+                            @if (item.Because.Count > 0)
+                            {
+                                <span class="sg-because">because: @string.Join(", ", item.Because)</span>
+                            }
+                        </div>
+                        <div class="sg-pick">
+                            <input class="sg-input" list="sg-categories" placeholder="@(item.Category is null ? "Type a category" : "")" value="@chosen"
+                                   @onchange="@(e => Choose(item.ProductId, e.Value?.ToString()))" />
+                            <span class="sg-conf sg-conf--@item.Confidence.ToLowerInvariant()" title="How sure the suggester is">@ConfidenceLabel(item)</span>
+                        </div>
+                    </div>
+                }
+                <datalist id="sg-categories">
+                    @foreach (var c in AllCategoryChoices)
+                    {
+                        <option value="@c"></option>
+                    }
+                </datalist>
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(applyError))
+        {
+            <FluentLabel Color="Color.Error" role="alert" style="margin-top:0.5rem; display:block;">@applyError</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem; align-items:center;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="ApplySuggestionsAsync" Disabled="@(applying || ticked.Count == 0)">Apply @ticked.Count selected</FluentButton>
+            <FluentButton Appearance="Appearance.Outline" @onclick="CloseSuggest" Disabled="@applying">Close</FluentButton>
+        </div>
+    </AppDialog>
+}
+
 @* ── Bulk: every product without a role becomes a Material ── *@
 @if (confirmBulk)
 {
@@ -312,6 +393,7 @@
     [Parameter, SupplyParameterFromQuery(Name = "size")] public int? QuerySize { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "sort")] public string? QuerySort { get; set; }
     [Parameter, SupplyParameterFromQuery(Name = "archived")] public bool? QueryArchived { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "cat")]  public string? QueryCategory { get; set; }
 
     private PaydayProductPage? listPage;
     private Company? company;
@@ -320,6 +402,7 @@
     private bool showArchived;
     private string search = string.Empty;
     private PaydayProductRole? roleFilter;
+    private string? categoryFilter;
     private string sort = "sku";
     private bool sortDesc;
     private int pageNumber = 1;
@@ -359,6 +442,7 @@
         pageNumber = Math.Max(1, QueryPage ?? 1);
         pageSize = QuerySize is 25 or 50 or 100 ? QuerySize.Value : 50;
         showArchived = QueryArchived ?? false;
+        categoryFilter = string.IsNullOrEmpty(QueryCategory) ? null : QueryCategory;
         var s = QuerySort ?? "sku";
         sortDesc = s.EndsWith("-desc", StringComparison.Ordinal);
         sort = sortDesc ? s[..^5] : s;
@@ -376,7 +460,7 @@
     {
         var version = ++loadVersion;
         loading = true; StateHasChanged();
-        var result = await ProductsApi.GetPageAsync(search, roleFilter, showArchived, sort, sortDesc, pageNumber, pageSize);
+        var result = await ProductsApi.GetPageAsync(search, roleFilter, categoryFilter, showArchived, sort, sortDesc, pageNumber, pageSize);
         if (version != loadVersion) return; // a newer request superseded this one
         if (result.IsSuccess && result.Value is { } p)
         {
@@ -409,6 +493,7 @@
             ["size"]     = pageSize != 50 ? pageSize : null,
             ["sort"]     = sort == "sku" && !sortDesc ? null : sort + (sortDesc ? "-desc" : ""),
             ["archived"] = showArchived ? true : null,
+            ["cat"]      = categoryFilter,
         });
         Navigation.NavigateTo(url, replace: true);
     }
@@ -424,6 +509,17 @@
     private async Task SetRoleFilterAsync(PaydayProductRole? role)
     {
         roleFilter = roleFilter == role ? null : role;
+        pageNumber = 1;
+        PushUrl();
+        await LoadAsync();
+    }
+
+    private int UncategorisedCount => listPage?.CategoryCounts.GetValueOrDefault("") ?? 0;
+    private List<string> KnownCategories => listPage is null ? [] : listPage.CategoryCounts.Keys.Where(c => c != "").OrderBy(c => c).ToList();
+
+    private async Task OnCategoryFilterChanged(string? value)
+    {
+        categoryFilter = string.IsNullOrEmpty(value) ? null : value;
         pageNumber = 1;
         PushUrl();
         await LoadAsync();
@@ -476,6 +572,90 @@
             message = result.ErrorMessage ?? "Payday products could not be synced right now.";
             messageIsError = true;
         }
+    }
+
+    // ── Category suggestions ──
+    private bool showSuggest, suggestLoading, applying, suggestIncludeCategorised;
+    private string? suggestError, applyError;
+    private PaydayProductCategorySuggestions? suggestions;
+    private readonly Dictionary<Guid, string?> chosenCategory = new();
+    private readonly HashSet<Guid> ticked = [];
+
+    private bool AllTicked => suggestions is not null && suggestions.Items.Where(i => !string.IsNullOrWhiteSpace(chosenCategory.GetValueOrDefault(i.ProductId))).All(i => ticked.Contains(i.ProductId));
+    private IEnumerable<string> AllCategoryChoices =>
+        (suggestions?.KnownCategories ?? []).Concat(suggestions?.Items.Select(i => i.Category).Where(c => c is not null).Cast<string>() ?? [])
+        .Concat(chosenCategory.Values.Where(c => !string.IsNullOrWhiteSpace(c)).Cast<string>())
+        .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c);
+
+    private static string ConfidenceLabel(PaydayProductCategorySuggestion i) =>
+        i.Category is null ? "?" : i.Confidence switch { "High" => "sure", "Medium" => "likely", _ => "guess" };
+
+    private async Task OpenSuggestAsync()
+    {
+        showSuggest = true; applyError = null; suggestIncludeCategorised = false;
+        await LoadSuggestionsAsync();
+    }
+
+    private async Task LoadSuggestionsAsync()
+    {
+        suggestLoading = true; suggestError = null; suggestions = null; chosenCategory.Clear(); ticked.Clear();
+        StateHasChanged();
+        var result = await ProductsApi.SuggestCategoriesAsync(suggestIncludeCategorised);
+        if (result.IsSuccess && result.Value is { } s)
+        {
+            suggestions = s;
+            foreach (var item in s.Items)
+            {
+                chosenCategory[item.ProductId] = item.Category;
+                // Pre-tick what the suggester is reasonably sure of; the owner looks at the rest.
+                if (item.Category is not null && item.Confidence != "Low") ticked.Add(item.ProductId);
+            }
+        }
+        else suggestError = result.ErrorMessage ?? "Category suggestions could not be loaded right now.";
+        suggestLoading = false;
+    }
+
+    private void Tick(Guid id, bool on) { if (on) ticked.Add(id); else ticked.Remove(id); }
+
+    private void TickAll(bool on)
+    {
+        if (suggestions is null) return;
+        foreach (var i in suggestions.Items)
+        {
+            if (string.IsNullOrWhiteSpace(chosenCategory.GetValueOrDefault(i.ProductId))) continue;
+            if (on) ticked.Add(i.ProductId); else ticked.Remove(i.ProductId);
+        }
+    }
+
+    private void Choose(Guid id, string? value)
+    {
+        var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        chosenCategory[id] = v;
+        // Typing a category is choosing it; clearing one un-selects the row.
+        if (v is null) ticked.Remove(id); else ticked.Add(id);
+    }
+
+    private void CloseSuggest() { if (!applying) showSuggest = false; }
+
+    private async Task ApplySuggestionsAsync()
+    {
+        if (applying || ticked.Count == 0) return;
+        applying = true; applyError = null;
+        try
+        {
+            using var busy = Busy.Begin("Saving categories…");
+            var assignments = ticked
+                .Select(id => new PaydayProductCategoryAssignment(id, chosenCategory.GetValueOrDefault(id) ?? ""))
+                .Where(a => a.Category.Length > 0).ToList();
+            var result = await ProductsApi.ApplyCategoriesAsync(assignments);
+            if (!result.IsSuccess) { applyError = result.ErrorMessage; return; }
+            message = $"✓ {result.Value} product{(result.Value == 1 ? "" : "s")} categorised."; messageIsError = false;
+            // Stay in the dialog with what is left, so a long list is done in passes.
+            await LoadSuggestionsAsync();
+            if (suggestions is { Items.Count: 0 }) showSuggest = false;
+            await LoadAsync();
+        }
+        finally { applying = false; }
     }
 
     // ── Bulk assign ──
