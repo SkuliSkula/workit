@@ -8,12 +8,13 @@ public sealed class PaydayInvoiceLine
     public int      Position                      { get; set; }
     public string   Description                   { get; set; } = string.Empty;
     public string?  Comment                       { get; set; }
-    public decimal  Quantity                      { get; set; }
+    /// <summary>Null on a draft line that has no quantity yet (seen on a DRAFT invoice 2026-09-21).</summary>
+    public decimal? Quantity                      { get; set; }
     public decimal? UnitPriceExcludingVat         { get; set; }
     public decimal? UnitPriceIncludingVat         { get; set; }
     public decimal? ForeignUnitPriceExcludingVat  { get; set; }
     public decimal? ForeignUnitPriceIncludingVat  { get; set; }
-    public decimal  VatPercentage                 { get; set; }
+    public decimal? VatPercentage                 { get; set; }
     // API can return null for discountPercentage
     public decimal? DiscountPercentage            { get; set; }
     public string?  Sku                           { get; set; }
