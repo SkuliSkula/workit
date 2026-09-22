@@ -20,7 +20,6 @@ public static class WorkitApiServiceCollectionExtensions
         services.AddScoped<ITimeEntriesApi, TimeEntriesApi>();
         services.AddScoped<IToolsApi, ToolsApi>();
         services.AddScoped<IMaterialsApi, MaterialsApi>();
-        services.AddScoped<IInvoicesApi, InvoicesApi>();
         services.AddScoped<IAbsenceApi, AbsenceApi>();
         services.AddScoped<IWorkDutyApi, WorkDutyApi>();
         services.AddScoped<ISalesInvoicesApi, SalesInvoicesApi>();
