@@ -96,6 +96,12 @@
                     <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
                 </FluentSelect>
             </div>
+            <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
+            <div><FluentTextField Label="Location" @bind-Value="newLocation" Placeholder="Address or site, e.g. Hraun 1, Reyðarfjörður" style="width:100%" /></div>
+            <div><FluentTextField Label="Contact on site" @bind-Value="newContactName" Placeholder="Name" style="width:100%" /></div>
+            <div><FluentTextField Label="Contact phone" @bind-Value="newContactPhone" Placeholder="555 1234" style="width:100%" /></div>
+            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="newInstructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
+            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="newToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
         </div>
         @if (SelectedCustomerPlansTasks)
         {
@@ -245,6 +251,24 @@ else if (jobs.Count > 0)
                                     </div>
                                 }
                             </div>
+
+                            @* What the crew sees in the app *@
+                            @if (HasSiteDetails(job))
+                            {
+                                <div class="job-site">
+                                    @if (!string.IsNullOrWhiteSpace(job.Location)) { <div><span class="job-site-lbl">Location</span><span>@job.Location</span></div> }
+                                    @if (!string.IsNullOrWhiteSpace(job.ContactName) || !string.IsNullOrWhiteSpace(job.ContactPhone))
+                                    {
+                                        <div><span class="job-site-lbl">Contact</span><span>@job.ContactName@(job.ContactName.Length > 0 && job.ContactPhone.Length > 0 ? " · " : "")@job.ContactPhone</span></div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(job.Instructions)) { <div><span class="job-site-lbl">Instructions</span><span class="job-site-text">@job.Instructions</span></div> }
+                                    @if (!string.IsNullOrWhiteSpace(job.ToolsSuggestion)) { <div><span class="job-site-lbl">Tools to bring</span><span class="job-site-text">@job.ToolsSuggestion</span></div> }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="job-site job-site--empty">Nothing for the crew yet — Edit job to add location, contact, instructions and tools.</div>
+                            }
 
                             @* Tasks — shown once the job has any, or when its customer plans jobs in tasks *@
                             @{
@@ -465,6 +489,12 @@ else if (jobs.Count > 0)
                                                 <FluentOption TOption="string" Value="FixedPrice">Fixed price</FluentOption>
                                             </FluentSelect>
                                         </div>
+                                        <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
+                                        <div><FluentTextField Label="Location" @bind-Value="editingJob.Location" Placeholder="Address or site" style="width:100%" /></div>
+                                        <div><FluentTextField Label="Contact on site" @bind-Value="editingJob.ContactName" Placeholder="Name" style="width:100%" /></div>
+                                        <div><FluentTextField Label="Contact phone" @bind-Value="editingJob.ContactPhone" Placeholder="555 1234" style="width:100%" /></div>
+                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="editingJob.Instructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
+                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="editingJob.ToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
                                         <div style="display:flex; align-items:flex-end; gap:0.5rem;">
                                             <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save changes</FluentButton>
                                             <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
@@ -569,6 +599,11 @@ else if (company is not null)
     private List<Guid> selectedEmployeeIds = [];
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
+    private string newLocation = "", newContactName = "", newContactPhone = "", newInstructions = "", newToolsSuggestion = "";
+
+    private static bool HasSiteDetails(Job j) =>
+        !string.IsNullOrWhiteSpace(j.Location) || !string.IsNullOrWhiteSpace(j.ContactName) || !string.IsNullOrWhiteSpace(j.ContactPhone)
+        || !string.IsNullOrWhiteSpace(j.Instructions) || !string.IsNullOrWhiteSpace(j.ToolsSuggestion);
     private JobCategory newCategory    = JobCategory.NewInstallation;
     private string?  loadError;
 
@@ -819,7 +854,12 @@ else if (company is not null)
             AssignedEmployeeIds = [.. selectedEmployeeIds],
             Name               = newJobName.Trim(),
             BillingType        = newBillingType,
-            Category           = newCategory
+            Category           = newCategory,
+            Location           = newLocation,
+            ContactName        = newContactName,
+            ContactPhone       = newContactPhone,
+            Instructions       = newInstructions,
+            ToolsSuggestion    = newToolsSuggestion
         });
 
         if (result.IsSuccess && result.Value is Job created)
@@ -832,7 +872,12 @@ else if (company is not null)
             }
             newTasks.Clear(); newTasks.Add(new NewTaskRow());
         }
-        if (result.IsSuccess) { newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = []; showCreateForm = false; await LoadAsync(); }
+        if (result.IsSuccess)
+        {
+            newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = [];
+            newLocation = newContactName = newContactPhone = newInstructions = newToolsSuggestion = string.Empty;
+            showCreateForm = false; await LoadAsync();
+        }
         else { loadError = result.ErrorMessage; }
     }
 
@@ -926,7 +971,12 @@ else if (company is not null)
 
     private void BeginEditJob(Job job)
     {
-        editingJob = new Job { Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeIds = [.. job.AssignedEmployeeIds], Code = job.Code, Name = job.Name, BillingType = job.BillingType };
+        editingJob = new Job
+        {
+            Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeIds = [.. job.AssignedEmployeeIds],
+            Code = job.Code, Name = job.Name, BillingType = job.BillingType, Category = job.Category,
+            Location = job.Location, ContactName = job.ContactName, ContactPhone = job.ContactPhone, Instructions = job.Instructions, ToolsSuggestion = job.ToolsSuggestion,
+        };
         editingCustomerId = job.CustomerId.ToString();
         editingEmployeeIds = [.. job.AssignedEmployeeIds];
     }

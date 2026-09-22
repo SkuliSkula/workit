@@ -16,6 +16,15 @@ public sealed class Job : ICreatedAudit
 
     public string       Name          { get; set; } = string.Empty;
     public string       Code          { get; set; } = string.Empty;
+
+    // What a crew member needs to start: where, who to ask for, what to do,
+    // what to bring. Written by the owner, shown in the apps' job detail.
+    public string Location            { get; set; } = string.Empty;
+    public string ContactName         { get; set; } = string.Empty;
+    public string ContactPhone        { get; set; } = string.Empty;
+    public string Instructions        { get; set; } = string.Empty;
+    public string ToolsSuggestion     { get; set; } = string.Empty;
+
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;
     public JobCategory  Category      { get; set; } = JobCategory.NewInstallation;
     public int          JobNumber     { get; set; }
