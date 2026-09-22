@@ -103,12 +103,12 @@ builder.Services.AddDbContext<WorkitDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
-// ── Invoice scanning services ──────────────────────────────────────────────────
+// ── PDF invoice parsing (PdfPig + Claude) ────────────────────────────────────
+// Kept for reading supplier product codes and purchase prices off a Payday
+// expense attachment; the IMAP inbox that used to feed it was dropped (2026-09-22).
 var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"] ?? string.Empty;
 builder.Services.AddSingleton(_ => new AnthropicClient(new Anthropic.SDK.APIAuthentication(anthropicApiKey)));
 builder.Services.AddScoped<InvoiceParserService>();
-builder.Services.AddScoped<EmailScanService>();
-builder.Services.AddHostedService<InvoiceScanBackgroundService>();
 
 // ── Analytics (PostHog) ────────────────────────────────────────────────────────
 var postHogApiKey = builder.Configuration["PostHog:ProjectApiKey"];
@@ -238,8 +238,8 @@ using (var scope = app.Services.CreateScope())
 // company's own rows.
 //
 // This must run here — immediately after migrations and before the startup
-// tasks — not later in the file. Once hosted services are in play,
-// InvoiceScanBackgroundService can throw, and the default
+// tasks — not later in the file. Once hosted services are in play, a
+// background service can throw, and the default
 // BackgroundServiceExceptionBehavior.StopHost then tears down the host and
 // disposes the service provider out from under this block.
 if (args.Contains("--seed-demo"))
@@ -273,8 +273,6 @@ app.MapJobTaskEndpoints();
 app.MapTimeEntryEndpoints();
 app.MapToolEndpoints();
 app.MapMaterialEndpoints();
-app.MapEmailSettingsEndpoints();
-app.MapInvoiceEndpoints();
 app.MapAbsenceEndpoints();
 app.MapWorkDutyEndpoints();
 app.MapStatusEndpoints();
