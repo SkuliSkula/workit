@@ -97,9 +97,7 @@
                 </FluentSelect>
             </div>
             <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
-            <div><FluentTextField Label="Location" @bind-Value="newLocation" Placeholder="Address or site, e.g. Hraun 1, Reyðarfjörður" style="width:100%" /></div>
-            <div><FluentTextField Label="Contact on site" @bind-Value="newContactName" Placeholder="Name" style="width:100%" /></div>
-            <div><FluentTextField Label="Contact phone" @bind-Value="newContactPhone" Placeholder="555 1234" style="width:100%" /></div>
+            <div style="grid-column: 1 / -1;"><SitePicker Job="newSite" CustomerId="@(Guid.TryParse(selectedCustomerId, out var newSiteCustomer) ? newSiteCustomer : null)" /></div>
             <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="newInstructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
             <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="newToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
             <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="newMaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
@@ -257,7 +255,15 @@ else if (jobs.Count > 0)
                             @if (HasSiteDetails(job))
                             {
                                 <div class="job-site">
-                                    @if (!string.IsNullOrWhiteSpace(job.Location)) { <div><span class="job-site-lbl">Location</span><span>@job.Location</span></div> }
+                                    @if (!string.IsNullOrWhiteSpace(job.Location) || job.Latitude is not null)
+                                    {
+                                        <div><span class="job-site-lbl">Location</span><span>@(string.IsNullOrWhiteSpace(job.Location) ? "Pinned on the map" : job.Location)
+                                            @if (job.Latitude is double plat && job.Longitude is double plng)
+                                            {
+                                                <a class="job-site-map" href="@($"https://www.openstreetmap.org/?mlat={plat.ToString(System.Globalization.CultureInfo.InvariantCulture)}&mlon={plng.ToString(System.Globalization.CultureInfo.InvariantCulture)}#map=17/{plat.ToString(System.Globalization.CultureInfo.InvariantCulture)}/{plng.ToString(System.Globalization.CultureInfo.InvariantCulture)}")" target="_blank" rel="noopener">Map ↗</a>
+                                            }
+                                        </span></div>
+                                    }
                                     @if (!string.IsNullOrWhiteSpace(job.ContactName) || !string.IsNullOrWhiteSpace(job.ContactPhone))
                                     {
                                         <div><span class="job-site-lbl">Contact</span><span>@job.ContactName@(job.ContactName.Length > 0 && job.ContactPhone.Length > 0 ? " · " : "")@job.ContactPhone</span></div>
@@ -492,9 +498,7 @@ else if (jobs.Count > 0)
                                             </FluentSelect>
                                         </div>
                                         <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
-                                        <div><FluentTextField Label="Location" @bind-Value="editingJob.Location" Placeholder="Address or site" style="width:100%" /></div>
-                                        <div><FluentTextField Label="Contact on site" @bind-Value="editingJob.ContactName" Placeholder="Name" style="width:100%" /></div>
-                                        <div><FluentTextField Label="Contact phone" @bind-Value="editingJob.ContactPhone" Placeholder="555 1234" style="width:100%" /></div>
+                                        <div style="grid-column: 1 / -1;"><SitePicker Job="editingJob" CustomerId="@(Guid.TryParse(editingCustomerId, out var editSiteCustomer) ? editSiteCustomer : null)" /></div>
                                         <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="editingJob.Instructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
                                         <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="editingJob.ToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
                                         <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="editingJob.MaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
@@ -602,11 +606,13 @@ else if (company is not null)
     private List<Guid> selectedEmployeeIds = [];
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
-    private string newLocation = "", newContactName = "", newContactPhone = "", newInstructions = "", newToolsSuggestion = "", newMaterialsSuggestion = "";
+    private string newInstructions = "", newToolsSuggestion = "", newMaterialsSuggestion = "";
+    // Location, pin and contact for the create form; SitePicker edits it in place.
+    private Job newSite = new();
 
     private static bool HasSiteDetails(Job j) =>
         !string.IsNullOrWhiteSpace(j.Location) || !string.IsNullOrWhiteSpace(j.ContactName) || !string.IsNullOrWhiteSpace(j.ContactPhone)
-        || !string.IsNullOrWhiteSpace(j.Instructions) || !string.IsNullOrWhiteSpace(j.ToolsSuggestion) || !string.IsNullOrWhiteSpace(j.MaterialsSuggestion);
+        || !string.IsNullOrWhiteSpace(j.Instructions) || !string.IsNullOrWhiteSpace(j.ToolsSuggestion) || !string.IsNullOrWhiteSpace(j.MaterialsSuggestion) || j.Latitude is not null;
     private JobCategory newCategory    = JobCategory.NewInstallation;
     private string?  loadError;
 
@@ -858,9 +864,12 @@ else if (company is not null)
             Name               = newJobName.Trim(),
             BillingType        = newBillingType,
             Category           = newCategory,
-            Location           = newLocation,
-            ContactName        = newContactName,
-            ContactPhone       = newContactPhone,
+            Location           = newSite.Location,
+            Latitude           = newSite.Latitude,
+            Longitude          = newSite.Longitude,
+            AddressLandNr      = newSite.AddressLandNr,
+            ContactName        = newSite.ContactName,
+            ContactPhone       = newSite.ContactPhone,
             Instructions       = newInstructions,
             ToolsSuggestion    = newToolsSuggestion,
             MaterialsSuggestion = newMaterialsSuggestion
@@ -879,7 +888,7 @@ else if (company is not null)
         if (result.IsSuccess)
         {
             newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = [];
-            newLocation = newContactName = newContactPhone = newInstructions = newToolsSuggestion = newMaterialsSuggestion = string.Empty;
+            newInstructions = newToolsSuggestion = newMaterialsSuggestion = string.Empty; newSite = new Job();
             showCreateForm = false; await LoadAsync();
         }
         else { loadError = result.ErrorMessage; }
@@ -980,6 +989,7 @@ else if (company is not null)
             Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeIds = [.. job.AssignedEmployeeIds],
             Code = job.Code, Name = job.Name, BillingType = job.BillingType, Category = job.Category,
             Location = job.Location, ContactName = job.ContactName, ContactPhone = job.ContactPhone, Instructions = job.Instructions, ToolsSuggestion = job.ToolsSuggestion, MaterialsSuggestion = job.MaterialsSuggestion,
+            Latitude = job.Latitude, Longitude = job.Longitude, AddressLandNr = job.AddressLandNr,
         };
         editingCustomerId = job.CustomerId.ToString();
         editingEmployeeIds = [.. job.AssignedEmployeeIds];

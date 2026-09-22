@@ -25,6 +25,14 @@ public sealed class Job : ICreatedAudit
     public string Instructions        { get; set; } = string.Empty;
     public string ToolsSuggestion     { get; set; } = string.Empty;
     public string MaterialsSuggestion { get; set; } = string.Empty;
+    // Where Location is on the map. Set from the address registry or by
+    // dragging the pin; null when the owner only typed a location.
+    public double? Latitude           { get; set; }
+    public double? Longitude          { get; set; }
+    // Staðfangaskrá land-parcel number of the picked address. Jobs on the
+    // same parcel share it, which is how contact suggestions find "the
+    // caretaker we called last time at this building".
+    public int?    AddressLandNr      { get; set; }
 
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;
     public JobCategory  Category      { get; set; } = JobCategory.NewInstallation;

@@ -35,6 +35,25 @@ internal static class JobEndpoints
                 "loading jobs"))
             .WithName("GetJobs");
 
+        // ── Address helper for the "For the crew" section ────────────────────
+        securedApi.MapGet("/addresses/search", async (IAddressLookupService lookup, HttpContext httpContext, string? q, CancellationToken ct) =>
+            {
+                if (!httpContext.User.IsOwnerOrAdmin()) return Results.Forbid();
+                return Results.Ok(await lookup.SearchAsync(q ?? string.Empty, ct));
+            })
+            .WithName("SearchAddresses");
+
+        securedApi.MapGet("/jobs/contact-suggestions", async (WorkitDbContext db, HttpContext httpContext, int? landNr, string? location, Guid? customerId, Guid? excludeJobId, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    if (!httpContext.User.IsOwnerOrAdmin()) return Results.Forbid();
+                    var userContext = httpContext.User.ToUserContext();
+                    return Results.Ok(await ContactSuggestionsAsync(db, userContext.CompanyId, landNr, location, customerId, excludeJobId, ct));
+                },
+                logger,
+                "loading contact suggestions"))
+            .WithName("GetContactSuggestions");
+
         securedApi.MapPost("/jobs", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, Job job, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
@@ -189,6 +208,9 @@ internal static class JobEndpoints
                     existing.Instructions        = job.Instructions;
                     existing.ToolsSuggestion     = job.ToolsSuggestion;
                     existing.MaterialsSuggestion = job.MaterialsSuggestion;
+                    existing.Latitude            = job.Latitude;
+                    existing.Longitude           = job.Longitude;
+                    existing.AddressLandNr       = job.AddressLandNr;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
@@ -332,5 +354,58 @@ internal static class JobEndpoints
         job.Instructions    = (job.Instructions ?? string.Empty).Trim();
         job.ToolsSuggestion = (job.ToolsSuggestion ?? string.Empty).Trim();
         job.MaterialsSuggestion = (job.MaterialsSuggestion ?? string.Empty).Trim();
+        // A pin without a location text is still a place; a pin off the globe is a bug.
+        if (job.Latitude is < -90 or > 90 || job.Longitude is < -180 or > 180 || job.Latitude is null != job.Longitude is null)
+        {
+            job.Latitude = null;
+            job.Longitude = null;
+        }
+    }
+
+    /// <summary>
+    /// Contacts to offer for a job at this address: people entered on earlier
+    /// jobs on the same parcel (or with the same location text), newest first,
+    /// then the customer's own contact person. Owners only — it reads across
+    /// the company's jobs.
+    /// </summary>
+    internal static async Task<List<ContactSuggestion>> ContactSuggestionsAsync(
+        WorkitDbContext db, Guid companyId, int? landNr, string? location, Guid? customerId, Guid? excludeJobId, CancellationToken ct)
+    {
+        var loc = (location ?? string.Empty).Trim().ToLower();
+        var suggestions = new List<ContactSuggestion>();
+        var seen = new HashSet<string>();
+
+        if (landNr is not null || loc.Length >= 3)
+        {
+            var jobs = await db.Jobs
+                .Where(j => j.CompanyId == companyId && j.Id != excludeJobId && j.ContactName != "")
+                .Where(j => (landNr != null && j.AddressLandNr == landNr) || (loc != "" && j.Location.ToLower() == loc))
+                .OrderByDescending(j => j.CreatedAt)
+                .Select(j => new { j.Code, j.ContactName, j.ContactPhone, j.CreatedAt })
+                .Take(50)
+                .ToListAsync(ct);
+            foreach (var j in jobs)
+            {
+                if (!seen.Add(Key(j.ContactName, j.ContactPhone))) continue;
+                suggestions.Add(new ContactSuggestion(j.ContactName, j.ContactPhone, $"{j.Code} · {j.CreatedAt:d MMM yyyy}"));
+                if (suggestions.Count == 5) break;
+            }
+        }
+
+        if (customerId is Guid cid)
+        {
+            var c = await db.Customers.Where(x => x.Id == cid && x.CompanyId == companyId)
+                .Select(x => new { x.Name, x.ContactPerson, x.Phone }).FirstOrDefaultAsync(ct);
+            if (c is not null)
+            {
+                var name = string.IsNullOrWhiteSpace(c.ContactPerson) ? c.Name : c.ContactPerson;
+                if (!string.IsNullOrWhiteSpace(name) && (!string.IsNullOrWhiteSpace(c.Phone) || !string.IsNullOrWhiteSpace(c.ContactPerson))
+                    && seen.Add(Key(name, c.Phone)))
+                    suggestions.Add(new ContactSuggestion(name.Trim(), c.Phone.Trim(), "Customer"));
+            }
+        }
+        return suggestions;
+
+        static string Key(string name, string phone) => name.Trim().ToLowerInvariant() + "|" + new string(phone.Where(char.IsDigit).ToArray());
     }
 }

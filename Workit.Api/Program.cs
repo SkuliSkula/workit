@@ -173,6 +173,16 @@ builder.Services.AddScoped<Workit.Api.Payday.MaterialsMigrationService>();
 builder.Services.AddScoped<Workit.Api.Payday.PaydayCustomerSyncService>();
 builder.Services.AddHostedService<Workit.Api.Payday.PaydaySyncBackgroundService>();
 
+// ── Address lookup (HMS Staðfangaskrá, open data) ─────────────────────────────
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient(Workit.Api.Services.AddressLookupService.HttpClientName, client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["AddressLookup:WfsBaseUrl"] ?? "https://gis.fasteignaskra.is/geoserver/");
+    client.Timeout = TimeSpan.FromSeconds(6);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Workit/1.0 (+https://workit.is)");
+});
+builder.Services.AddSingleton<Workit.Api.Services.IAddressLookupService, Workit.Api.Services.AddressLookupService>();
+
 // ── Email (Resend) ─────────────────────────────────────────────────────────────
 var resendApiKey = builder.Configuration["Resend:ApiKey"];
 if (!string.IsNullOrWhiteSpace(resendApiKey))
