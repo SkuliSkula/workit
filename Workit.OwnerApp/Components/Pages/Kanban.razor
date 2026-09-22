@@ -81,6 +81,11 @@ else if (byTask)
                                 @if (lane == TaskLane.Done)
                                 {
                                     <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Disabled="@(busyTaskId == task.Id)" @onclick="@(() => ReopenTaskAsync(task))">Reopen</FluentButton>
+                                    @if (HasUninvoicedHours(task.Id))
+                                    {
+                                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" title="Bill this task's hours — the job stays open"
+                                                      @onclick="@(() => Nav.NavigateTo($"/payday/invoice-builder?jobId={task.JobId}&taskId={task.Id}"))">Invoice</FluentButton>
+                                    }
                                 }
                                 else
                                 {
@@ -555,6 +560,7 @@ else
         : tasks.Where(t => LaneOf(t) == lane).OrderBy(t => jobById.GetValueOrDefault(t.JobId)?.Code).ThenBy(t => t.SortOrder).ThenBy(t => t.TaskNumber).ToList();
 
     private decimal TaskHours(Guid taskId) => allEntries.Where(e => e.TaskId == taskId).Sum(e => e.Hours + e.OvertimeHours);
+    private bool HasUninvoicedHours(Guid taskId) => allEntries.Any(e => e.TaskId == taskId && !e.IsInvoiced);
 
     private List<JobTask> TasksOf(Guid jobId) => tasks.Where(t => t.JobId == jobId).OrderBy(t => t.SortOrder).ThenBy(t => t.TaskNumber).ToList();
 
