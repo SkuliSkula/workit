@@ -1,0 +1,227 @@
+@inject IAddressesApi AddressesApi
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Location + contact for the job form's "For the crew" section. The location
+   box searches Staðfangaskrá (HMS's address registry) as you type; picking a
+   hit fills the text and drops a pin on the map. The pin can be dragged to the
+   site entrance or clicked into place where there is no address at all.
+   Under the contact fields, people from earlier jobs at the same address
+   (and the customer's own contact) are offered as one-click suggestions.
+   Mutates Job directly; Changed fires after a pick, pin move or suggestion. *@
+<div class="site">
+    <div class="site-fields">
+        <div class="site-address">
+            <FluentTextField Label="Location" Value="@Job.Location" ValueChanged="OnTypedAsync" Immediate="true" ImmediateDelay="300"
+                             Placeholder="Start typing an address — Borgartún 26" style="width:100%"
+                             @onkeydown="OnKeyDown" @onfocusout="OnBlur" @onfocusin="@(() => { if (hits.Count > 0) open = true; })" />
+            @if (open)
+            {
+                <div class="site-hits" role="listbox">
+                    @if (searching && hits.Count == 0)
+                    {
+                        <div class="site-hits-note">Searching the address registry…</div>
+                    }
+                    else if (!lookupAvailable)
+                    {
+                        <div class="site-hits-note">The address registry is not answering — keep the text as typed.</div>
+                    }
+                    else if (hits.Count == 0)
+                    {
+                        <div class="site-hits-note">No registered address matches — the text stays as typed. Click the map to drop a pin.</div>
+                    }
+                    else
+                    {
+                        @foreach (var h in hits)
+                        {
+                            <button type="button" class="site-hit" role="option" @onmousedown:preventDefault @onclick="@(() => PickAsync(h))">
+                                <span class="site-hit-main">@h.Street @h.HouseNumber</span>
+                                <span class="site-hit-sub">@h.PostCode @h.Town</span>
+                            </button>
+                        }
+                    }
+                </div>
+            }
+            <div class="site-pin">
+                @if (Job.Latitude is double lat && Job.Longitude is double lng)
+                {
+                    <span title="@($"{lat:F5}, {lng:F5}")">Pinned — drag the pin to the exact spot.</span>
+                    <button type="button" class="site-link" @onclick="ClearPinAsync">Clear pin</button>
+                }
+                else
+                {
+                    <span>No pin yet — pick an address or click the map.</span>
+                }
+            </div>
+        </div>
+        <div><FluentTextField Label="Contact on site" @bind-Value="Job.ContactName" Placeholder="Name" style="width:100%" /></div>
+        <div><FluentTextField Label="Contact phone" @bind-Value="Job.ContactPhone" Placeholder="555 1234" style="width:100%" /></div>
+        @if (suggestions.Count > 0)
+        {
+            <div class="site-suggestions">
+                <span class="site-suggestions-lbl">Suggested contacts</span>
+                @foreach (var s in suggestions)
+                {
+                    <button type="button" class="site-chip" title="@("From " + s.Source)" @onclick="@(() => UseAsync(s))">
+                        <span>@s.Name</span>@if (!string.IsNullOrEmpty(s.Phone)) { <span class="site-chip-phone">· @s.Phone</span> }
+                        <span class="site-chip-src">@s.Source</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
+    <div class="site-map" id="@mapId"></div>
+</div>
+
+@code {
+    /// <summary>Edited in place: Location, Latitude, Longitude, AddressLandNr, ContactName, ContactPhone.</summary>
+    [Parameter, EditorRequired] public Job Job { get; set; } = default!;
+    /// <summary>Whose contact person to suggest; the create form passes the chosen customer.</summary>
+    [Parameter] public Guid? CustomerId { get; set; }
+    /// <summary>Fires after a pick, a pin move, a cleared pin or a used suggestion.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private readonly string mapId = "site-map-" + Guid.NewGuid().ToString("N")[..8];
+    private DotNetObjectReference<SitePicker>? selfRef;
+    private bool mapShown;
+    private (double? Lat, double? Lng) shownPin;
+
+    private List<AddressHit> hits = [];
+    private bool open, searching, lookupAvailable = true;
+    private int searchSeq;
+    private AddressHit? picked;
+
+    private List<ContactSuggestion> suggestions = [];
+    private string suggestionKey = string.Empty;
+
+    protected override async Task OnParametersSetAsync() => await RefreshSuggestionsAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        selfRef ??= DotNetObjectReference.Create(this);
+        var pin = (Job.Latitude, Job.Longitude);
+        if (!mapShown || pin != shownPin)
+        {
+            mapShown = true;
+            shownPin = pin;
+            try { await JS.InvokeVoidAsync("workitSiteMap.show", mapId, Job.Latitude, Job.Longitude, selfRef); }
+            catch (JSException) { /* Leaflet blocked or not loaded — the form still works without the map. */ }
+        }
+    }
+
+    // ── Address search ───────────────────────────────────────────────────────
+
+    private async Task OnTypedAsync(string? value)
+    {
+        Job.Location = value ?? string.Empty;
+        // Editing away from the picked street means a different place: drop the
+        // registry link so suggestions and the pin don't describe the old one.
+        if (picked is not null && !Job.Location.Contains(picked.Street, StringComparison.OrdinalIgnoreCase))
+        {
+            picked = null;
+            Job.AddressLandNr = null;
+            Job.Latitude = Job.Longitude = null;
+        }
+
+        var q = Job.Location.Trim();
+        if (q.Length < 2)
+        {
+            hits = []; open = false; searching = false;
+            return;
+        }
+        var seq = ++searchSeq;
+        searching = true; open = true;
+        var result = await AddressesApi.SearchAsync(q);
+        if (seq != searchSeq) return; // a newer keystroke owns the box
+        searching = false;
+        if (result.IsSuccess && result.Value is { } r)
+        {
+            hits = r.Hits.ToList();
+            lookupAvailable = r.LookupAvailable;
+        }
+        else
+        {
+            hits = [];
+            lookupAvailable = false;
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") open = false;
+        else if (e.Key == "Enter" && open && hits.Count > 0) await PickAsync(hits[0]);
+    }
+
+    private async Task OnBlur()
+    {
+        // Let a click on a hit land first (its mousedown is preventDefault'd, so
+        // focus stays, but Safari still blurs on some pointer types).
+        await Task.Delay(150);
+        open = false;
+    }
+
+    private async Task PickAsync(AddressHit hit)
+    {
+        picked = hit;
+        Job.Location = hit.Display;
+        Job.Latitude = hit.Latitude;
+        Job.Longitude = hit.Longitude;
+        Job.AddressLandNr = hit.LandNr;
+        hits = []; open = false;
+        await RefreshSuggestionsAsync();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task ClearPinAsync()
+    {
+        Job.Latitude = Job.Longitude = null;
+        Job.AddressLandNr = null;
+        picked = null;
+        await Changed.InvokeAsync();
+    }
+
+    [JSInvokable]
+    public async Task OnPinMoved(double lat, double lng)
+    {
+        Job.Latitude = Math.Round(lat, 6);
+        Job.Longitude = Math.Round(lng, 6);
+        shownPin = (Job.Latitude, Job.Longitude); // the map already shows it
+        await InvokeAsync(StateHasChanged);
+        await Changed.InvokeAsync();
+    }
+
+    // ── Contact suggestions ──────────────────────────────────────────────────
+
+    private async Task RefreshSuggestionsAsync()
+    {
+        var landNr = Job.AddressLandNr;
+        var location = landNr is null ? Job.Location?.Trim() : null;
+        var key = $"{landNr}|{location}|{CustomerId}|{Job.Id}";
+        if (key == suggestionKey) return;
+        suggestionKey = key;
+
+        if (landNr is null && string.IsNullOrWhiteSpace(location) && CustomerId is null)
+        {
+            suggestions = [];
+            return;
+        }
+        var result = await AddressesApi.ContactSuggestionsAsync(landNr, location, CustomerId, Job.Id == Guid.Empty ? null : Job.Id);
+        if (key != suggestionKey) return;
+        suggestions = result.IsSuccess ? result.Value ?? [] : [];
+    }
+
+    private async Task UseAsync(ContactSuggestion s)
+    {
+        Job.ContactName = s.Name;
+        Job.ContactPhone = s.Phone;
+        await Changed.InvokeAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (mapShown) await JS.InvokeVoidAsync("workitSiteMap.destroy", mapId); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        selfRef?.Dispose();
+    }
+}

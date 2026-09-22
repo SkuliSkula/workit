@@ -460,3 +460,5 @@
 .job-site-lbl { color: #64748b; font-weight: 600; }
 .job-site-text { white-space: pre-wrap; }
 .job-site--empty { display: block; color: #94a3b8; font-style: italic; }
+.job-site-map { margin-left: 0.5rem; font-size: 0.8rem; color: #1d4ed8; text-decoration: none; }
+.job-site-map:hover { text-decoration: underline; }
