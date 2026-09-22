@@ -1,0 +1,11 @@
+/* Task scope under a job in Step 2 */
+.task-scope { margin: 0.4rem 0 0.2rem 2.4rem; padding: 0.5rem 0.75rem; background: #f8fafc; border-radius: 8px; font-size: 0.85rem; }
+.task-scope-head { display: flex; gap: 0.6rem; align-items: center; color: #475569; font-weight: 600; margin-bottom: 0.3rem; }
+.task-scope-link { all: unset; cursor: pointer; color: #1d4ed8; font-weight: 500; font-size: 0.8rem; }
+.task-scope-link:hover { text-decoration: underline; }
+.task-scope-row { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; cursor: pointer; }
+.task-scope-row--untasked { margin-top: 0.25rem; border-top: 1px solid #e2e8f0; padding-top: 0.35rem; color: #475569; }
+.task-scope-code { color: #475569; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task-scope-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-scope-done { background: #d1fae5; color: #065f46; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.task-scope-note { margin-top: 0.4rem; color: #92400e; font-size: 0.8rem; }

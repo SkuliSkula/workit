@@ -133,21 +133,62 @@
         {
             @foreach (var js in jobSelections)
             {
-                <div style="display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0; border-bottom:1px solid #f1f5f9;">
-                    <FluentCheckbox @bind-Value="js.IsSelected" />
-                    <div style="flex:1;">
-                        <FluentLabel Style="font-weight:600;">@js.Job.Code — @js.Job.Name</FluentLabel>
-                        <FluentLabel Style="font-size:0.8rem; color:#64748b;">
-                            @(js.Job.BillingType == BillingType.FixedPrice ? "Fixed price" : "Hourly")
-                        </FluentLabel>
+                <div style="padding:0.5rem 0; border-bottom:1px solid #f1f5f9;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <FluentCheckbox @bind-Value="js.IsSelected" />
+                        <div style="flex:1;">
+                            <FluentLabel Style="font-weight:600;">@js.Job.Code — @js.Job.Name</FluentLabel>
+                            <FluentLabel Style="font-size:0.8rem; color:#64748b;">
+                                @(js.Job.BillingType == BillingType.FixedPrice ? "Fixed price" : "Hourly")
+                                @if (js.HasTasks)
+                                {
+                                    <text> · @js.Tasks.Count task@(js.Tasks.Count == 1 ? "" : "s")</text>
+                                    @if (js.IsPartial)
+                                    {
+                                        <span style="margin-left:0.4rem; background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:4px; font-size:0.75rem; font-weight:600;">Part of the job</span>
+                                    }
+                                }
+                            </FluentLabel>
+                        </div>
                     </div>
+                    @if (js.IsSelected && js.HasTasks)
+                    {
+                        <div class="task-scope">
+                            <div class="task-scope-head">
+                                <span>Bill these tasks</span>
+                                <button type="button" class="task-scope-link" @onclick="@(() => SelectAllTasks(js, true))">All</button>
+                                <button type="button" class="task-scope-link" @onclick="@(() => SelectAllTasks(js, false))">None</button>
+                                <button type="button" class="task-scope-link" @onclick="@(() => SelectDoneTasks(js))">Done tasks only</button>
+                            </div>
+                            @foreach (var t in js.Tasks)
+                            {
+                                <label class="task-scope-row">
+                                    <input type="checkbox" checked="@js.SelectedTaskIds.Contains(t.Id)" @onchange="@(e => ToggleTask(js, t.Id, (bool)e.Value!))" />
+                                    <span class="task-scope-code">@t.Code</span>
+                                    <span class="task-scope-name">@t.Name</span>
+                                    @if (t.Status == JobTaskStatus.Done)
+                                    {
+                                        <span class="task-scope-done">Done</span>
+                                    }
+                                </label>
+                            }
+                            <label class="task-scope-row task-scope-row--untasked">
+                                <input type="checkbox" checked="@js.IncludeUntasked" @onchange="@(e => js.IncludeUntasked = (bool)e.Value!)" />
+                                <span class="task-scope-name">Hours logged without a task</span>
+                            </label>
+                            @if (js.IsPartial)
+                            {
+                                <div class="task-scope-note">Materials and expenses belong to the job, not to a task — they are left for the job's own invoice.</div>
+                            }
+                        </div>
+                    }
                 </div>
             }
 
             <div style="display:flex; gap:0.75rem; margin-top:1rem; flex-wrap:wrap;">
                 <FluentButton Appearance="Appearance.Accent"
                               @onclick="LoadJobDataAsync"
-                              Disabled="@(jobsLoading || !jobSelections.Any(j => j.IsSelected))">
+                              Disabled="@(jobsLoading || !jobSelections.Any(j => j.IsSelected && !j.NothingToBill))">
                     @(jobsLoading ? "Loading data…" : "Load Data")
                 </FluentButton>
             </div>
@@ -208,6 +249,13 @@
                     {
                         <span style="font-size:0.75rem; background:#dbeafe; color:#1d4ed8; padding:1px 6px; border-radius:4px; margin-left:0.5rem;">Fixed price</span>
                     }
+                    @if (js.IsPartial)
+                    {
+                        <div style="font-size:0.82rem; color:#92400e; margin-top:0.25rem;">
+                            Billing @(js.SelectedTaskIds.Count) of @js.Tasks.Count task@(js.Tasks.Count == 1 ? "" : "s")@(js.IncludeUntasked ? " plus hours without a task" : "") —
+                            @string.Join(", ", js.Tasks.Where(t => js.SelectedTaskIds.Contains(t.Id)).Select(t => t.Code)). Materials and expenses stay with the job.
+                        </div>
+                    }
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:0.5rem; margin-top:0.5rem; font-size:0.85rem;">
                         <div>
                             <span style="color:#64748b;">Hours:</span>
@@ -248,11 +296,15 @@
                 </div>
             }
 
-            @if (jobSelections.Any(j => j.IsSelected && allTasks.Any(t => t.JobId == j.Job.Id)))
+            @if (jobSelections.Any(j => j.IsSelected && j.HasTasks))
             {
                 <div style="margin-top:1rem; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                     <FluentSwitch @bind-Value="groupLinesByTask" Label="One labor line per task" />
                     <span style="font-size:0.82rem; color:#60758b;">Hours read "Vinna · MNT102-3 Ný lýsing í móttöku" on the invoice; hours logged without a task stay as "Vinna".</span>
+                </div>
+                <div style="margin-top:0.5rem; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <FluentSwitch @bind-Value="markTasksDone" Label="Mark the billed tasks as done" />
+                    <span style="font-size:0.82rem; color:#60758b;">When the invoice is created, the tasks whose hours are on it are marked Done (they can be reopened).</span>
                 </div>
             }
             <div style="display:flex; gap:0.75rem; margin-top:1rem;">
@@ -482,6 +534,10 @@
                     <div style="margin-top:0.25rem;">
                         Status: <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">DRAFT</span>
                     </div>
+                    @if (tasksMarkedDone > 0)
+                    {
+                        <div style="margin-top:0.25rem; color:#15803d;">@tasksMarkedDone task@(tasksMarkedDone == 1 ? "" : "s") marked done.</div>
+                    }
                 </div>
             }
 
@@ -501,6 +557,10 @@
     // ── Query parameters ──────────────────────────────────────────────────────
     [Parameter, SupplyParameterFromQuery(Name = "jobId")]
     public Guid? PrefillJobId { get; set; }
+    /// <summary>With jobId: bill just this task (from the Kanban task board).</summary>
+    [Parameter, SupplyParameterFromQuery(Name = "taskId")]
+    public Guid? PrefillTaskId { get; set; }
+    private bool markTasksDone = true;
 
     // ── Wizard state ─────────────────────────────────────────────────────────
     private enum WizardStep { SelectCustomer, SelectJobs, PreviewLines, MapCustomer, Done }
@@ -601,12 +661,27 @@
 
     // ── Step 5 state ─────────────────────────────────────────────────────────
     private PaydayInvoice? createdInvoice;
+    private int tasksMarkedDone;
 
     // ── Inner types ──────────────────────────────────────────────────────────
     private sealed class JobSelection
     {
         public Job Job { get; set; } = null!;
         public bool IsSelected { get; set; } = true;
+
+        // Which of the job's tasks to bill. Everything is in by default; unticking
+        // narrows the invoice to those tasks' hours and leaves the rest for later —
+        // the job stays open, nothing has to be closed to bill a finished task.
+        public List<JobTask> Tasks { get; set; } = [];
+        public HashSet<Guid> SelectedTaskIds { get; set; } = [];
+        /// <summary>Hours logged on the job without a task.</summary>
+        public bool IncludeUntasked { get; set; } = true;
+        public bool HasTasks => Tasks.Count > 0;
+        /// <summary>True when not everything on the job is being billed — materials and expenses then stay with the job.</summary>
+        public bool IsPartial => HasTasks && (!IncludeUntasked || SelectedTaskIds.Count < Tasks.Count);
+        public bool BillsTimeEntry(TimeEntry te) =>
+            !HasTasks || (te.TaskId is Guid tid ? SelectedTaskIds.Contains(tid) : IncludeUntasked);
+        public bool NothingToBill => HasTasks && !IncludeUntasked && SelectedTaskIds.Count == 0;
         public decimal TotalHours { get; set; }
         public decimal TotalOvertimeHours { get; set; }
         public int TotalDrivingUnits { get; set; }
@@ -726,11 +801,40 @@
         GoToSelectJobs();
 
         foreach (var js in jobSelections)
+        {
             js.IsSelected = js.Job.Id == jobId;
+            if (js.IsSelected && PrefillTaskId is Guid tid && js.Tasks.Any(t => t.Id == tid))
+            {
+                js.SelectedTaskIds = [tid];
+                js.IncludeUntasked = false;
+            }
+        }
 
         await LoadJobDataAsync();
         // Stop here so the user sees the data summary — including any rate warnings —
         // before moving on. They click "Generate Invoice Lines →" themselves.
+    }
+
+    // ── Task scope ───────────────────────────────────────────────────────────
+    private void ToggleTask(JobSelection js, Guid taskId, bool on)
+    {
+        if (on) js.SelectedTaskIds.Add(taskId); else js.SelectedTaskIds.Remove(taskId);
+        jobDataLoaded = false;
+    }
+
+    private void SelectAllTasks(JobSelection js, bool on)
+    {
+        js.SelectedTaskIds = on ? js.Tasks.Select(t => t.Id).ToHashSet() : [];
+        js.IncludeUntasked = on;
+        jobDataLoaded = false;
+    }
+
+    /// <summary>The usual case: bill what is finished, leave the rest running.</summary>
+    private void SelectDoneTasks(JobSelection js)
+    {
+        js.SelectedTaskIds = js.Tasks.Where(t => t.Status == JobTaskStatus.Done).Select(t => t.Id).ToHashSet();
+        js.IncludeUntasked = false;
+        jobDataLoaded = false;
     }
 
     // ── Step 1 → 2 ──────────────────────────────────────────────────────────
@@ -739,7 +843,11 @@
         if (!Guid.TryParse(selectedCustomerIdStr, out var customerId)) return;
 
         customerJobs = allJobs.Where(j => j.CustomerId == customerId).OrderBy(j => j.Code).ToList();
-        jobSelections = customerJobs.Select(j => new JobSelection { Job = j, IsSelected = true }).ToList();
+        jobSelections = customerJobs.Select(j =>
+        {
+            var tasks = allTasks.Where(t => t.JobId == j.Id).OrderBy(t => t.SortOrder).ThenBy(t => t.TaskNumber).ToList();
+            return new JobSelection { Job = j, IsSelected = true, Tasks = tasks, SelectedTaskIds = tasks.Select(t => t.Id).ToHashSet() };
+        }).ToList();
         jobDataLoaded = false;
         currentStep = WizardStep.SelectJobs;
     }
@@ -779,11 +887,13 @@
                 if (toDate.HasValue)
                     allMaterialUsages = allMaterialUsages.Where(u => DateOnly.FromDateTime(u.UsedAt.DateTime) <= toDate.Value).ToList();
 
-                // Separate already-invoiced from available entries
+                // Separate already-invoiced from available entries, then keep only the
+                // tasks the owner ticked. Materials and usages are on the job, so a
+                // partial (per-task) invoice leaves them for the job's own invoice.
                 var invoicedTe = allTimeEntries.Where(te => te.IsInvoiced).ToList();
-                var timeEntries = allTimeEntries.Where(te => !te.IsInvoiced).ToList();
+                var timeEntries = allTimeEntries.Where(te => !te.IsInvoiced && js.BillsTimeEntry(te)).ToList();
                 var invoicedMu = allMaterialUsages.Where(mu => mu.IsInvoiced).ToList();
-                var materialUsages = allMaterialUsages.Where(mu => !mu.IsInvoiced).ToList();
+                var materialUsages = js.IsPartial ? [] : allMaterialUsages.Where(mu => !mu.IsInvoiced).ToList();
 
                 return (js, timeEntries, materialUsages, invoicedTe.Count, invoicedMu.Count);
             }).ToList();
@@ -875,6 +985,7 @@
             foreach (var js in jobSelections.Where(j => j.IsSelected))
             {
                 js.Expenses = [];
+                if (js.IsPartial) continue;
                 var expensesResult = await ExpensesApi.GetExpensesAsync(jobId: js.Job.Id);
                 if (expensesResult.IsSuccess)
                     js.Expenses.AddRange(expensesResult.Value ?? []);
@@ -1187,6 +1298,18 @@
                 if (markTasks.Count > 0)
                     await Task.WhenAll(markTasks);
 
+                // The tasks whose hours are on this invoice are finished as far as billing goes.
+                if (markTasksDone)
+                {
+                    var billedTaskIds = jobSelections.Where(j => j.IsSelected)
+                        .SelectMany(j => j.TimeEntries.Select(te => te.TaskId))
+                        .Where(id => id is not null).Select(id => id!.Value).Distinct().ToList();
+                    var openBilled = allTasks.Where(t => billedTaskIds.Contains(t.Id) && t.Status != JobTaskStatus.Done).ToList();
+                    await Task.WhenAll(openBilled.Select(t => JobTasksApi.MarkDoneAsync(t.Id)));
+                    foreach (var t in openBilled) t.Status = JobTaskStatus.Done;
+                    tasksMarkedDone = openBilled.Count;
+                }
+
                 currentStep = WizardStep.Done;
             }
             else
@@ -1203,6 +1326,7 @@
     // ── Reset wizard ─────────────────────────────────────────────────────────
     private void ResetWizard()
     {
+        tasksMarkedDone = 0;
         currentStep = WizardStep.SelectCustomer;
         selectedCustomerIdStr = string.Empty;
         jobSelections = [];
