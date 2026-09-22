@@ -228,19 +228,6 @@
                 </div>
             }
 
-            @if (lowStockWarnings.Count > 0)
-            {
-                <div style="padding:0.5rem 0.75rem; background:#fff7ed; border:1px solid #fdba74; border-radius:8px; margin-bottom:0.75rem; font-size:0.85rem; color:#9a3412;">
-                    ⚠ Low stock on @(lowStockWarnings.Count == 1 ? "material" : "materials"):
-                    <ul style="margin:0.25rem 0 0 1.25rem; padding:0;">
-                        @foreach (var w in lowStockWarnings)
-                        {
-                            <li>@w</li>
-                        }
-                    </ul>
-                </div>
-            }
-
             @foreach (var js in jobSelections.Where(j => j.IsSelected))
             {
                 <div style="padding:0.75rem; background:#f8fafc; border-radius:8px; margin-bottom:0.5rem;">
@@ -272,10 +259,6 @@
                         <div>
                             <span style="color:#64748b;">Materials:</span>
                             <strong>@js.Materials.Count</strong> items
-                            @if (js.Materials.Any(m => m.IsLowStock))
-                            {
-                                <span style="color:#dc2626; font-size:0.8rem;"> (⚠ low stock)</span>
-                            }
                         </div>
                         <div>
                             <span style="color:#64748b;">Expenses:</span>
@@ -365,12 +348,8 @@
             <div style="display:grid; grid-template-columns: 2.5fr 0.7fr 1.2fr 0.8fr 0.8fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Description</FluentLabel>
-                    <FluentTextField @bind-Value="line.Description" Style="width:100%" />
-                    @if (line.ProductId is not null)
-                    {
-                        <span title="Payday product" style="font-family:monospace; font-size:0.72rem; color:#1d6fb8;">@line.Sku</span>
-                    }
-                    else if (line.NeedsProduct)
+                    <FluentTextField @bind-Value="line.Description" Style="width:100%" title="@(line.Sku is { Length: > 0 } ? $"Payday product {line.Sku}" : null)" />
+                    @if (line.ProductId is null && line.NeedsProduct)
                     {
                         <span style="font-size:0.72rem; color:#b45309;">no Payday product</span>
                     }
@@ -605,7 +584,6 @@
     private List<string> rateWarnings = [];
     private int alreadyInvoicedTimeEntryCount;
     private int alreadyInvoicedMaterialUsageCount;
-    private List<string> lowStockWarnings = [];
 
     // ── Invoiced tracking (IDs to mark after successful invoice creation) ──
     private List<Guid> timeEntryIdsToMark = [];
@@ -701,8 +679,6 @@
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal VatRate { get; set; }
-        public decimal StockQuantity { get; set; }
-        public bool IsLowStock => StockQuantity < Quantity;
     }
 
     private sealed class InvoiceLineForm
@@ -964,22 +940,12 @@
                             Unit = mat?.Unit ?? "stk.",
                             Quantity = g.Sum(u => u.Quantity),
                             UnitPrice = mat?.UnitPrice ?? 0,
-                            VatRate = mat?.VatRate ?? 24m,
-                            StockQuantity = mat?.Quantity ?? 0
+                            VatRate = mat?.VatRate ?? 24m
                         };
                     })
                     .Where(m => m.Quantity > 0)
                     .ToList();
             }
-
-            // Collect low-stock warnings
-            lowStockWarnings = jobSelections
-                .Where(j => j.IsSelected)
-                .SelectMany(j => j.Materials)
-                .Where(m => m.IsLowStock)
-                .Select(m => $"{m.Name} (used {m.Quantity:0.##} {m.Unit}, stock: {m.StockQuantity:0.##} {m.Unit})")
-                .Distinct()
-                .ToList();
 
             // Load expenses (with lines + billings) for each selected job from the Workit DB
             foreach (var js in jobSelections.Where(j => j.IsSelected))
@@ -1344,7 +1310,6 @@
         materialUsageIdsToMark = [];
         alreadyInvoicedTimeEntryCount = 0;
         alreadyInvoicedMaterialUsageCount = 0;
-        lowStockWarnings = [];
 
         var today = DateTime.Today;
         var firstOfMonth = new DateTime(today.Year, today.Month, 1);
