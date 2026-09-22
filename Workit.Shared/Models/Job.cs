@@ -24,6 +24,7 @@ public sealed class Job : ICreatedAudit
     public string ContactPhone        { get; set; } = string.Empty;
     public string Instructions        { get; set; } = string.Empty;
     public string ToolsSuggestion     { get; set; } = string.Empty;
+    public string MaterialsSuggestion { get; set; } = string.Empty;
 
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;
     public JobCategory  Category      { get; set; } = JobCategory.NewInstallation;

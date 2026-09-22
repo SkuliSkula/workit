@@ -188,6 +188,7 @@ internal static class JobEndpoints
                     existing.ContactPhone        = job.ContactPhone;
                     existing.Instructions        = job.Instructions;
                     existing.ToolsSuggestion     = job.ToolsSuggestion;
+                    existing.MaterialsSuggestion = job.MaterialsSuggestion;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
@@ -330,5 +331,6 @@ internal static class JobEndpoints
         job.ContactPhone    = (job.ContactPhone ?? string.Empty).Trim();
         job.Instructions    = (job.Instructions ?? string.Empty).Trim();
         job.ToolsSuggestion = (job.ToolsSuggestion ?? string.Empty).Trim();
+        job.MaterialsSuggestion = (job.MaterialsSuggestion ?? string.Empty).Trim();
     }
 }

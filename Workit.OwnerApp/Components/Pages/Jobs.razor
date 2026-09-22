@@ -102,6 +102,7 @@
             <div><FluentTextField Label="Contact phone" @bind-Value="newContactPhone" Placeholder="555 1234" style="width:100%" /></div>
             <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="newInstructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
             <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="newToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
+            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="newMaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
         </div>
         @if (SelectedCustomerPlansTasks)
         {
@@ -263,6 +264,7 @@ else if (jobs.Count > 0)
                                     }
                                     @if (!string.IsNullOrWhiteSpace(job.Instructions)) { <div><span class="job-site-lbl">Instructions</span><span class="job-site-text">@job.Instructions</span></div> }
                                     @if (!string.IsNullOrWhiteSpace(job.ToolsSuggestion)) { <div><span class="job-site-lbl">Tools to bring</span><span class="job-site-text">@job.ToolsSuggestion</span></div> }
+                                    @if (!string.IsNullOrWhiteSpace(job.MaterialsSuggestion)) { <div><span class="job-site-lbl">Materials to bring</span><span class="job-site-text">@job.MaterialsSuggestion</span></div> }
                                 </div>
                             }
                             else
@@ -495,6 +497,7 @@ else if (jobs.Count > 0)
                                         <div><FluentTextField Label="Contact phone" @bind-Value="editingJob.ContactPhone" Placeholder="555 1234" style="width:100%" /></div>
                                         <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="editingJob.Instructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
                                         <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="editingJob.ToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
+                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="editingJob.MaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
                                         <div style="display:flex; align-items:flex-end; gap:0.5rem;">
                                             <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save changes</FluentButton>
                                             <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
@@ -599,11 +602,11 @@ else if (company is not null)
     private List<Guid> selectedEmployeeIds = [];
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
-    private string newLocation = "", newContactName = "", newContactPhone = "", newInstructions = "", newToolsSuggestion = "";
+    private string newLocation = "", newContactName = "", newContactPhone = "", newInstructions = "", newToolsSuggestion = "", newMaterialsSuggestion = "";
 
     private static bool HasSiteDetails(Job j) =>
         !string.IsNullOrWhiteSpace(j.Location) || !string.IsNullOrWhiteSpace(j.ContactName) || !string.IsNullOrWhiteSpace(j.ContactPhone)
-        || !string.IsNullOrWhiteSpace(j.Instructions) || !string.IsNullOrWhiteSpace(j.ToolsSuggestion);
+        || !string.IsNullOrWhiteSpace(j.Instructions) || !string.IsNullOrWhiteSpace(j.ToolsSuggestion) || !string.IsNullOrWhiteSpace(j.MaterialsSuggestion);
     private JobCategory newCategory    = JobCategory.NewInstallation;
     private string?  loadError;
 
@@ -859,7 +862,8 @@ else if (company is not null)
             ContactName        = newContactName,
             ContactPhone       = newContactPhone,
             Instructions       = newInstructions,
-            ToolsSuggestion    = newToolsSuggestion
+            ToolsSuggestion    = newToolsSuggestion,
+            MaterialsSuggestion = newMaterialsSuggestion
         });
 
         if (result.IsSuccess && result.Value is Job created)
@@ -875,7 +879,7 @@ else if (company is not null)
         if (result.IsSuccess)
         {
             newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = [];
-            newLocation = newContactName = newContactPhone = newInstructions = newToolsSuggestion = string.Empty;
+            newLocation = newContactName = newContactPhone = newInstructions = newToolsSuggestion = newMaterialsSuggestion = string.Empty;
             showCreateForm = false; await LoadAsync();
         }
         else { loadError = result.ErrorMessage; }
@@ -975,7 +979,7 @@ else if (company is not null)
         {
             Id = job.Id, CompanyId = job.CompanyId, CustomerId = job.CustomerId, AssignedEmployeeIds = [.. job.AssignedEmployeeIds],
             Code = job.Code, Name = job.Name, BillingType = job.BillingType, Category = job.Category,
-            Location = job.Location, ContactName = job.ContactName, ContactPhone = job.ContactPhone, Instructions = job.Instructions, ToolsSuggestion = job.ToolsSuggestion,
+            Location = job.Location, ContactName = job.ContactName, ContactPhone = job.ContactPhone, Instructions = job.Instructions, ToolsSuggestion = job.ToolsSuggestion, MaterialsSuggestion = job.MaterialsSuggestion,
         };
         editingCustomerId = job.CustomerId.ToString();
         editingEmployeeIds = [.. job.AssignedEmployeeIds];
