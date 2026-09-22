@@ -159,10 +159,13 @@
                 <FluentNumberField Label="VAT rate (%)" TValue="decimal" @bind-Value="formVatRate" Min="0" Max="100" Step="0.5" style="width:100%" />
             </div>
 
-            <div>
-                <FluentNumberField Label="Quantity in stock" TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
-                                   Placeholder="e.g. 500 (metres of cable)" />
-            </div>
+            @if (!Managed)
+            {
+                <div>
+                    <FluentNumberField Label="Quantity in stock" TValue="decimal" @bind-Value="formQuantity" Min="0" Step="1" style="width:100%"
+                                       Placeholder="e.g. 500 (metres of cable)" />
+                </div>
+            }
 
             <div style="grid-column: span 2">
                 <FluentTextField Label="Description" @bind-Value="formDescription" Placeholder="Optional notes" style="width:100%" />
@@ -257,18 +260,24 @@
                     <span>@((context.UnitPrice * (1 + context.VatRate / 100m)).ToString("N0")) kr.</span>
                 </TemplateColumn>
                 <PropertyColumn Property="@(x => x.VatRate)"     Title="VAT %" Format="0.#" />
-                <TemplateColumn Title="In stock">
-                    @{
+                @* Stock is Payday's business once the company is managed there; Workit only knows what is logged and not yet billed. *@
+                <TemplateColumn Title="@(Managed ? "Not invoiced" : "In stock")">
+                    @if (!Managed)
+                    {
                         var stockStyle = context.Quantity <= 0
                             ? "color:#dc2626; font-weight:600;"
                             : context.Quantity < 10
                                 ? "color:#d97706; font-weight:600;"
                                 : "color:#059669; font-weight:600;";
+                        <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
                     }
-                    <span style="@stockStyle">@context.Quantity.ToString("0.##") @context.Unit</span>
                     @if (context.UninvoicedQuantity > 0)
                     {
-                        <div style="font-size:0.75rem; color:#b45309;" title="Logged on jobs but not yet invoiced — Payday's stock still includes it">@context.UninvoicedQuantity.ToString("0.##") not invoiced</div>
+                        <div style="font-size:@(Managed ? "0.9rem" : "0.75rem"); color:#b45309;" title="Logged on jobs but not yet invoiced">@context.UninvoicedQuantity.ToString("0.##") @context.Unit@(Managed ? "" : " not invoiced")</div>
+                    }
+                    else if (Managed)
+                    {
+                        <span style="color:#9ca3af;">—</span>
                     }
                 </TemplateColumn>
                 <TemplateColumn Title="Payday">
