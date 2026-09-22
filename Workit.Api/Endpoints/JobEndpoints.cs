@@ -46,6 +46,7 @@ internal static class JobEndpoints
                     var userContext = httpContext.User.ToUserContext();
                     job.CompanyId = userContext.CompanyId;
                     job.Name      = job.Name.Trim();
+                    TrimSiteDetails(job);
 
                     var customerExists = await db.Customers.AnyAsync(
                         c => c.Id == job.CustomerId && c.CompanyId == userContext.CompanyId, ct);
@@ -181,6 +182,13 @@ internal static class JobEndpoints
                     existing.AssignedEmployeeIds = assignees;
                     existing.Name                = job.Name.Trim();
                     existing.BillingType         = job.BillingType;
+                    TrimSiteDetails(job);
+                    existing.Location            = job.Location;
+                    existing.ContactName         = job.ContactName;
+                    existing.ContactPhone        = job.ContactPhone;
+                    existing.Instructions        = job.Instructions;
+                    existing.ToolsSuggestion     = job.ToolsSuggestion;
+                    existing.MaterialsSuggestion = job.MaterialsSuggestion;
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
@@ -314,5 +322,15 @@ internal static class JobEndpoints
             .CountAsync(ct);
 
         return known == ids.Count ? ids : null;
+    }
+
+    private static void TrimSiteDetails(Job job)
+    {
+        job.Location        = (job.Location ?? string.Empty).Trim();
+        job.ContactName     = (job.ContactName ?? string.Empty).Trim();
+        job.ContactPhone    = (job.ContactPhone ?? string.Empty).Trim();
+        job.Instructions    = (job.Instructions ?? string.Empty).Trim();
+        job.ToolsSuggestion = (job.ToolsSuggestion ?? string.Empty).Trim();
+        job.MaterialsSuggestion = (job.MaterialsSuggestion ?? string.Empty).Trim();
     }
 }

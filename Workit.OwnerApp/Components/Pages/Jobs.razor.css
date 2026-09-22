@@ -443,3 +443,20 @@
     align-items: center;
     margin-bottom: 0.4rem;
 }
+
+/* What the crew sees in the app */
+.job-site {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 0.35rem 0.75rem;
+    margin: 0.75rem 0 0.25rem;
+    padding: 0.6rem 0.8rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.job-site > div { display: contents; }
+.job-site-lbl { color: #64748b; font-weight: 600; }
+.job-site-text { white-space: pre-wrap; }
+.job-site--empty { display: block; color: #94a3b8; font-style: italic; }
