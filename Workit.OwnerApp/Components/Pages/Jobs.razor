@@ -98,9 +98,6 @@
             </div>
             <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
             <div style="grid-column: 1 / -1;"><SitePicker Job="newSite" CustomerId="@(Guid.TryParse(selectedCustomerId, out var newSiteCustomer) ? newSiteCustomer : null)" /></div>
-            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="newInstructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
-            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="newToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
-            <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="newMaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
         </div>
         @if (SelectedCustomerPlansTasks)
         {
@@ -499,9 +496,6 @@ else if (jobs.Count > 0)
                                         </div>
                                         <div style="grid-column: 1 / -1;" class="job-section-title">For the crew</div>
                                         <div style="grid-column: 1 / -1;"><SitePicker Job="editingJob" CustomerId="@(Guid.TryParse(editingCustomerId, out var editSiteCustomer) ? editSiteCustomer : null)" /></div>
-                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Instructions" @bind-Value="editingJob.Instructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
-                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Tools to bring" @bind-Value="editingJob.ToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
-                                        <div style="grid-column: 1 / -1;"><FluentTextArea Label="Materials to bring" @bind-Value="editingJob.MaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
                                         <div style="display:flex; align-items:flex-end; gap:0.5rem;">
                                             <FluentButton Appearance="Appearance.Accent" @onclick="SaveJobAsync" Disabled="@(!HasEditingCustomer)">Save changes</FluentButton>
                                             <FluentButton Appearance="Appearance.Outline" @onclick="CancelJobEdit">Cancel</FluentButton>
@@ -606,8 +600,7 @@ else if (company is not null)
     private List<Guid> selectedEmployeeIds = [];
     private string      newJobName     = string.Empty;
     private BillingType newBillingType = BillingType.Hourly;
-    private string newInstructions = "", newToolsSuggestion = "", newMaterialsSuggestion = "";
-    // Location, pin and contact for the create form; SitePicker edits it in place.
+    // The whole "For the crew" section of the create form; SitePicker edits it in place.
     private Job newSite = new();
 
     private static bool HasSiteDetails(Job j) =>
@@ -870,9 +863,9 @@ else if (company is not null)
             AddressLandNr      = newSite.AddressLandNr,
             ContactName        = newSite.ContactName,
             ContactPhone       = newSite.ContactPhone,
-            Instructions       = newInstructions,
-            ToolsSuggestion    = newToolsSuggestion,
-            MaterialsSuggestion = newMaterialsSuggestion
+            Instructions       = newSite.Instructions,
+            ToolsSuggestion    = newSite.ToolsSuggestion,
+            MaterialsSuggestion = newSite.MaterialsSuggestion
         });
 
         if (result.IsSuccess && result.Value is Job created)
@@ -888,7 +881,7 @@ else if (company is not null)
         if (result.IsSuccess)
         {
             newJobName = string.Empty; newBillingType = BillingType.Hourly; newCategory = JobCategory.NewInstallation; selectedEmployeeIds = [];
-            newInstructions = newToolsSuggestion = newMaterialsSuggestion = string.Empty; newSite = new Job();
+            newSite = new Job();
             showCreateForm = false; await LoadAsync();
         }
         else { loadError = result.ErrorMessage; }

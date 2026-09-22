@@ -1,7 +1,8 @@
-.site { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 320px); gap: 0.75rem 1rem; align-items: start; }
-.site-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; min-width: 0; }
+.site { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.75rem 1rem; align-items: stretch; }
+.site-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; min-width: 0; align-content: start; }
+.site-wide { grid-column: 1 / -1; }
 .site-address { grid-column: 1 / -1; position: relative; }
-.site-map { height: 100%; min-height: 200px; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; background: #f1f5f9; }
+.site-map { height: 100%; min-height: 360px; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; background: #f1f5f9; }
 
 .site-hits { position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin-top: 2px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); max-height: 260px; overflow-y: auto; }
 .site-hit { all: unset; display: flex; justify-content: space-between; gap: 0.75rem; width: 100%; box-sizing: border-box; padding: 0.45rem 0.7rem; cursor: pointer; font-size: 0.9rem; }
@@ -22,7 +23,7 @@
 .site-chip-phone { color: #334155; font-variant-numeric: tabular-nums; }
 .site-chip-src { color: #94a3b8; font-size: 0.72rem; }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
     .site { grid-template-columns: 1fr; }
-    .site-map { min-height: 180px; }
+    .site-map { min-height: 240px; }
 }

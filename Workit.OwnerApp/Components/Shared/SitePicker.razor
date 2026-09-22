@@ -2,7 +2,8 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-@* Location + contact for the job form's "For the crew" section. The location
+@* The job form's whole "For the crew" section: location, contact, instructions,
+   tools and materials on the left, the site map down the right. The location
    box searches Staðfangaskrá (HMS's address registry) as you type; picking a
    hit fills the text and drops a pin on the map. The pin can be dragged to the
    site entrance or clicked into place where there is no address at all.
@@ -69,12 +70,15 @@
                 }
             </div>
         }
+        <div class="site-wide"><FluentTextArea Label="Instructions" @bind-Value="Job.Instructions" Placeholder="What needs to be done" Rows="3" style="width:100%" /></div>
+        <div class="site-wide"><FluentTextArea Label="Tools to bring" @bind-Value="Job.ToolsSuggestion" Placeholder="e.g. big ladder, SDS drill" Rows="2" style="width:100%" /></div>
+        <div class="site-wide"><FluentTextArea Label="Materials to bring" @bind-Value="Job.MaterialsSuggestion" Placeholder="e.g. 3 × 16 A breakers, 50 m 3×1.5 cable" Rows="2" style="width:100%" /></div>
     </div>
     <div class="site-map" id="@mapId"></div>
 </div>
 
 @code {
-    /// <summary>Edited in place: Location, Latitude, Longitude, AddressLandNr, ContactName, ContactPhone.</summary>
+    /// <summary>Edited in place: Location, Latitude, Longitude, AddressLandNr, ContactName, ContactPhone, Instructions, ToolsSuggestion, MaterialsSuggestion.</summary>
     [Parameter, EditorRequired] public Job Job { get; set; } = default!;
     /// <summary>Whose contact person to suggest; the create form passes the chosen customer.</summary>
     [Parameter] public Guid? CustomerId { get; set; }
