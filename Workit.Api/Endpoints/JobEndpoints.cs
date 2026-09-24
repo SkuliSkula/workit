@@ -29,6 +29,12 @@ internal static class JobEndpoints
                         .Where(x => x.CompanyId == userContext.CompanyId)
                         .OrderBy(x => x.Code)
                         .ToListAsync(ct);
+
+                    // Finished jobs still come back so an employee's past hours can
+                    // name the job they were worked on; the apps stop offering them.
+                    var finished = await JobClosure.FinishedJobIdsAsync(db, userContext.CompanyId, ct);
+                    foreach (var job in jobs) job.IsFinished = finished.Contains(job.Id);
+
                     return Results.Ok(jobs);
                 },
                 logger,
@@ -139,6 +145,8 @@ internal static class JobEndpoints
                     {
                         return Results.Forbid();
                     }
+                    if (await JobClosure.BlocksAsync(db, httpContext, userContext.CompanyId, id, ct))
+                        return Results.Conflict(JobClosure.FinishedMessage);
 
                     var now = DateTimeOffset.UtcNow;
                     existing.KanbanStatus  = req.Status;
@@ -180,6 +188,8 @@ internal static class JobEndpoints
 
                     if (!httpContext.User.IsOwnerOrAdmin() && !IsAssignedTo(existing, userContext))
                         return Results.Forbid();
+                    if (await JobClosure.BlocksAsync(db, httpContext, userContext.CompanyId, id, ct))
+                        return Results.Conflict(JobClosure.FinishedMessage);
 
                     existing.ToolsSuggestion     = (body.ToolsSuggestion ?? string.Empty).Trim();
                     existing.MaterialsSuggestion = (body.MaterialsSuggestion ?? string.Empty).Trim();

@@ -92,6 +92,8 @@ internal static class TimeEntryEndpoints
                     {
                         entry.CompanyId = userContext.CompanyId;
                         entry.EmployeeId = currentEmployeeId;
+                        if (await JobClosure.IsFinishedAsync(db, userContext.CompanyId, entry.JobId, ct))
+                            return Results.Conflict(JobClosure.FinishedMessage);
                     }
                     else
                     {
@@ -151,6 +153,10 @@ internal static class TimeEntryEndpoints
                         // restate — the same rule the delete path has always had.
                         if (existing.IsInvoiced)
                             return Results.Conflict("This entry has been invoiced and can't be changed. Ask the office if it is wrong.");
+
+                        // Nor may they move hours onto a job that is already finished.
+                        if (await JobClosure.IsFinishedAsync(db, userContext.CompanyId, entry.JobId, ct))
+                            return Results.Conflict(JobClosure.FinishedMessage);
                     }
 
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
