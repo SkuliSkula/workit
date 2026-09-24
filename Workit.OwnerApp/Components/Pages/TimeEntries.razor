@@ -253,7 +253,16 @@
                 }
                 else
                 {
-                    <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => StartEdit(context))">Edit</FluentButton>
+                    <div style="display:flex; gap:0.25rem;">
+                        <FluentButton Appearance="Appearance.Lightweight" @onclick="@(() => StartEdit(context))">Edit</FluentButton>
+                        @* Invoiced hours stay: the invoice is the record, and the API refuses. *@
+                        @if (!context.IsInvoiced)
+                        {
+                            <FluentButton Appearance="Appearance.Lightweight" Style="color:#b91c1c;"
+                                          Title="Delete this entry"
+                                          @onclick="@(() => ConfirmDelete(context))">Delete</FluentButton>
+                        }
+                    </div>
                 }
             </TemplateColumn>
         </FluentDataGrid>
@@ -264,6 +273,36 @@
         <FluentLabel>No entries found for the selected period.</FluentLabel>
     }
 </FluentCard>
+
+@* A modal, not an inline card: the grid runs to a couple of thousand pixels,
+   so a panel under it would be off-screen for most rows — the click would look
+   like it did nothing. *@
+@if (deletingRow is not null)
+{
+    <AppDialog Title="Delete time entry" OnClose="CancelDelete" Busy="@deleteSaving">
+        <FluentLabel Typo="Typography.Body">
+            <strong>@deletingRow.EmployeeName</strong> — @deletingRow.JobName<br />
+            @deletingRow.Date.ToString("d MMM yyyy") ·
+            @deletingRow.Hours.ToString("0.##") h@(deletingRow.OvertimeHours > 0 ? $" + {deletingRow.OvertimeHours:0.##} h overtime" : "")@(deletingRow.DrivingUnits > 0 ? $" · {deletingRow.DrivingUnits} driving" : "")
+            @if (!string.IsNullOrWhiteSpace(deletingRow.Notes))
+            {
+                <br />
+                <em>@deletingRow.Notes</em>
+            }
+        </FluentLabel>
+        <FluentLabel style="margin-top:0.75rem;">This cannot be undone.</FluentLabel>
+        @if (!string.IsNullOrWhiteSpace(deleteResult))
+        {
+            <FluentLabel style="margin-top:0.5rem;" Color="Color.Error">@deleteResult</FluentLabel>
+        }
+        <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+            <FluentButton Appearance="Appearance.Accent" Style="background:#dc2626;" @onclick="ExecuteDeleteAsync" Disabled="@deleteSaving">
+                @(deleteSaving ? "Deleting…" : "Yes, delete")
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Neutral" @onclick="CancelDelete" Disabled="@deleteSaving">Cancel</FluentButton>
+        </div>
+    </AppDialog>
+}
 
 @if (uninvoiceNumber.HasValue)
 {
@@ -418,6 +457,51 @@
     private int?   uninvoiceNumber;
     private bool   uninvoiceSaving;
     private string? uninvoiceResult;
+
+    // ── Delete state ────────────────────────────────────────────────────────
+    private EntryRow? deletingRow;
+    private bool      deleteSaving;
+    private string?   deleteResult;
+
+    private void ConfirmDelete(EntryRow row)
+    {
+        deletingRow  = row;
+        deleteResult = null;
+        editingRow   = null;   // never leave a half-finished edit behind the confirmation
+    }
+
+    private void CancelDelete()
+    {
+        deletingRow  = null;
+        deleteResult = null;
+    }
+
+    private async Task ExecuteDeleteAsync()
+    {
+        if (deletingRow is null) return;
+
+        deleteSaving = true;
+        deleteResult = null;
+        try
+        {
+            var result = await TimeEntriesApi.DeleteTimeEntryAsync(deletingRow.Id);
+            if (result.IsSuccess)
+            {
+                entries.Remove(deletingRow);
+                deletingRow = null;
+                editResult  = "✓ Entry deleted";
+            }
+            else
+            {
+                // The API refuses invoiced hours (409); say so rather than failing silently.
+                deleteResult = $"Error: {result.ErrorMessage}";
+            }
+        }
+        finally
+        {
+            deleteSaving = false;
+        }
+    }
 
     private void ConfirmUninvoice(int invoiceNumber)
     {
