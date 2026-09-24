@@ -100,6 +100,8 @@ public sealed class PaydayProductSyncService(WorkitDbContext db, IPaydayProducts
             m.IsActive    = !p.Archived;
             if (!string.IsNullOrWhiteSpace(p.Unit))     m.Unit     = p.Unit;
             if (!string.IsNullOrWhiteSpace(p.Category)) m.Category = p.Category;
+            // Payday owns tags outright, so an emptied tag list clears them here too.
+            m.Tags = p.Tags;
         }
 
         // Linked to a product that no longer carries the Material role → inactive.

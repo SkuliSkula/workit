@@ -119,6 +119,34 @@ public class PaydayProductSyncTests
     }
 
     [Fact]
+    public async Task Mirror_CopiesPaydayTagsOntoTheMaterial_AndClearsThemWhenPaydayDoes()
+    {
+        await using var db = NewDb();
+        var cableId = Guid.NewGuid();
+        var product = Cable(cableId);                      // Tags = ["strengir"]
+        product.Tags = ["Rönning", "strengir"];
+        var payday = new FakeProducts([product]);
+        var service = Service(db, payday);
+
+        await service.SyncAsync(CompanyId, CancellationToken.None);
+        await service.MirrorMaterialsAsync(CompanyId, await db.PaydayProducts.Where(p => p.CompanyId == CompanyId).ToListAsync(), CancellationToken.None);
+
+        var material = await db.Materials.SingleAsync(m => m.PaydayProductId == cableId);
+        material.Tags.Should().Be("Rönning,strengir");
+
+        // Payday owns them: dropping a tag there drops it here.
+        product.Tags = ["Rönning"];
+        await service.SyncAsync(CompanyId, CancellationToken.None);
+        await service.MirrorMaterialsAsync(CompanyId, await db.PaydayProducts.Where(p => p.CompanyId == CompanyId).ToListAsync(), CancellationToken.None);
+        (await db.Materials.SingleAsync(m => m.PaydayProductId == cableId)).Tags.Should().Be("Rönning");
+
+        product.Tags = null;
+        await service.SyncAsync(CompanyId, CancellationToken.None);
+        await service.MirrorMaterialsAsync(CompanyId, await db.PaydayProducts.Where(p => p.CompanyId == CompanyId).ToListAsync(), CancellationToken.None);
+        (await db.Materials.SingleAsync(m => m.PaydayProductId == cableId)).Tags.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Sync_IsScopedToTheCompany()
     {
         await using var db = NewDb();

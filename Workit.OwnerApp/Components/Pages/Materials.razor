@@ -215,7 +215,7 @@
     </AppDialog>
 }
 
-@* ── Category filter + grid ── *@
+@* ── Category and tag filters + grid ── *@
 <div class="mat-panel">
     <div class="mat-panel-header">
         <span class="mat-panel-title">Material Catalog</span>
@@ -232,6 +232,19 @@
                 <FluentOption TOption="string" Value="@cat">@cat</FluentOption>
             }
         </FluentSelect>
+        @* Payday's tags — ÓS tags by supplier, so this narrows to "what Rönning sells us". *@
+        @if (Tags.Count > 0)
+        {
+            <FluentLabel>Tag:</FluentLabel>
+            <FluentSelect TValue="string" TOption="string" @bind-Value="filterTag"
+                          @bind-Value:after="ApplyFilter" style="min-width:180px">
+                <FluentOption TOption="string" Value="">All</FluentOption>
+                @foreach (var tag in Tags)
+                {
+                    <FluentOption TOption="string" Value="@tag">@tag</FluentOption>
+                }
+            </FluentSelect>
+        }
     </div>
 
     @if (loading)
@@ -247,6 +260,12 @@
                 <PropertyColumn Property="@(x => x.Name)"        Title="Name" />
                 <PropertyColumn Property="@(x => x.ProductCode)" Title="Code" />
                 <PropertyColumn Property="@(x => x.Unit)"        Title="Unit" />
+                <TemplateColumn Title="Tags">
+                    @foreach (var tag in TagsOf(context))
+                    {
+                        <span class="mat-tag">@tag</span>
+                    }
+                </TemplateColumn>
                 <TemplateColumn Title="Purchase">
                     <span>@(context.PurchasePrice > 0 ? $"{context.PurchasePrice:N0} kr." : "—")</span>
                 </TemplateColumn>
@@ -327,6 +346,8 @@
     // ── Lists ──────────────────────────────────────────────────────────────────
     /// <summary>The company's categories (Resources → Categories); never typed here.</summary>
     private List<string> Categories = [];
+    /// <summary>Every distinct Payday tag in use, for the filter.</summary>
+    private List<string> Tags = [];
 
     private static readonly string[] Units = ["stk.", "m.", "pk.", "rúll.", "box", "kg", "ltr."];
 
@@ -338,6 +359,7 @@
     private Material?      editingMaterial;
 
     private string  filterCategory  = string.Empty;
+    private string  filterTag       = string.Empty;
     private string  loadError       = string.Empty;
     private string  saveResult      = string.Empty;
     private bool    saving;
@@ -433,16 +455,27 @@
         }
         var categoriesResult = await categoriesTask;
         if (categoriesResult.IsSuccess) Categories = (categoriesResult.Value ?? []).Select(c => c.Name).ToList();
+        // Tags come from Payday, so the list is whatever the materials carry.
+        Tags = [.. allMaterials.SelectMany(TagsOf).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(t => t, StringComparer.CurrentCultureIgnoreCase)];
         if (string.IsNullOrEmpty(formCategory)) formCategory = Categories.FirstOrDefault() ?? string.Empty;
         loading = false;
     }
 
     private void ApplyFilter()
     {
-        filteredMaterials = string.IsNullOrWhiteSpace(filterCategory)
-            ? [.. allMaterials]
-            : [.. allMaterials.Where(m => m.Category == filterCategory)];
+        IEnumerable<Material> rows = allMaterials;
+        if (!string.IsNullOrWhiteSpace(filterCategory))
+            rows = rows.Where(m => m.Category == filterCategory);
+        if (!string.IsNullOrWhiteSpace(filterTag))
+            rows = rows.Where(m => TagsOf(m).Contains(filterTag, StringComparer.OrdinalIgnoreCase));
+        filteredMaterials = [.. rows];
     }
+
+    /// <summary>Payday sends tags comma-separated; a material usually carries one (its supplier).</summary>
+    private static string[] TagsOf(Material m) =>
+        string.IsNullOrWhiteSpace(m.Tags)
+            ? []
+            : m.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private void ToggleCreateForm() => showCreateForm = !showCreateForm;
 
