@@ -142,9 +142,16 @@ internal static class TimeEntryEndpoints
                     if (existing is null) return Results.NotFound();
 
                     // Employees can only edit their own entries
-                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
-                        existing.EmployeeId != userContext.EmployeeId)
-                        return Results.Forbid();
+                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+                    {
+                        if (existing.EmployeeId != userContext.EmployeeId)
+                            return Results.Forbid();
+
+                        // Billed hours are the invoice's record, not the crew's to
+                        // restate — the same rule the delete path has always had.
+                        if (existing.IsInvoiced)
+                            return Results.Conflict("This entry has been invoiced and can't be changed. Ask the office if it is wrong.");
+                    }
 
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
                         return Results.BadRequest(taskError);
@@ -166,9 +173,10 @@ internal static class TimeEntryEndpoints
                     existing.OvertimeHours = entry.OvertimeHours;
                     existing.DrivingUnits  = entry.DrivingUnits;
                     existing.Notes         = entry.Notes;
-                    existing.IsInvoiced          = entry.IsInvoiced;
-                    existing.InvoicedAt          = entry.InvoicedAt;
-                    existing.PaydayInvoiceNumber = entry.PaydayInvoiceNumber;
+                    // Invoicing state is the server's: it is set by mark-invoiced and
+                    // cleared by resetting the invoice. Taking it from the request let
+                    // an edit that simply omitted the flags silently un-invoice an
+                    // entry, putting billed hours back in the "to invoice" pile.
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
