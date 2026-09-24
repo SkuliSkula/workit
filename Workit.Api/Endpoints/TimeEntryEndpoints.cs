@@ -92,6 +92,8 @@ internal static class TimeEntryEndpoints
                     {
                         entry.CompanyId = userContext.CompanyId;
                         entry.EmployeeId = currentEmployeeId;
+                        if (await JobClosure.IsFinishedAsync(db, userContext.CompanyId, entry.JobId, ct))
+                            return Results.Conflict(JobClosure.FinishedMessage);
                     }
                     else
                     {
@@ -142,12 +144,33 @@ internal static class TimeEntryEndpoints
                     if (existing is null) return Results.NotFound();
 
                     // Employees can only edit their own entries
-                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal) &&
-                        existing.EmployeeId != userContext.EmployeeId)
-                        return Results.Forbid();
+                    if (string.Equals(userContext.Role, WorkitRoles.Employee, StringComparison.Ordinal))
+                    {
+                        if (existing.EmployeeId != userContext.EmployeeId)
+                            return Results.Forbid();
+
+                        // Billed hours are the invoice's record, not the crew's to
+                        // restate — the same rule the delete path has always had.
+                        if (existing.IsInvoiced)
+                            return Results.Conflict("This entry has been invoiced and can't be changed. Ask the office if it is wrong.");
+
+                        // Nor may they move hours onto a job that is already finished.
+                        if (await JobClosure.IsFinishedAsync(db, userContext.CompanyId, entry.JobId, ct))
+                            return Results.Conflict(JobClosure.FinishedMessage);
+                    }
 
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
                         return Results.BadRequest(taskError);
+
+                    // Owners may move an entry to the person who actually worked it;
+                    // an employee's entries stay theirs.
+                    if (httpContext.User.IsOwnerOrAdmin() && entry.EmployeeId != Guid.Empty && entry.EmployeeId != existing.EmployeeId)
+                    {
+                        var employeeExists = await db.Employees.AnyAsync(
+                            e => e.Id == entry.EmployeeId && e.CompanyId == userContext.CompanyId, ct);
+                        if (!employeeExists) return Results.BadRequest("Employee not found in this company.");
+                        existing.EmployeeId = entry.EmployeeId;
+                    }
 
                     existing.JobId         = entry.JobId;
                     existing.TaskId        = entry.TaskId;
@@ -156,9 +179,10 @@ internal static class TimeEntryEndpoints
                     existing.OvertimeHours = entry.OvertimeHours;
                     existing.DrivingUnits  = entry.DrivingUnits;
                     existing.Notes         = entry.Notes;
-                    existing.IsInvoiced          = entry.IsInvoiced;
-                    existing.InvoicedAt          = entry.InvoicedAt;
-                    existing.PaydayInvoiceNumber = entry.PaydayInvoiceNumber;
+                    // Invoicing state is the server's: it is set by mark-invoiced and
+                    // cleared by resetting the invoice. Taking it from the request let
+                    // an edit that simply omitted the flags silently un-invoice an
+                    // entry, putting billed hours back in the "to invoice" pile.
 
                     await db.SaveChangesAsync(ct);
                     return Results.Ok(existing);
