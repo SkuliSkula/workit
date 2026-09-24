@@ -149,6 +149,16 @@ internal static class TimeEntryEndpoints
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
                         return Results.BadRequest(taskError);
 
+                    // Owners may move an entry to the person who actually worked it;
+                    // an employee's entries stay theirs.
+                    if (httpContext.User.IsOwnerOrAdmin() && entry.EmployeeId != Guid.Empty && entry.EmployeeId != existing.EmployeeId)
+                    {
+                        var employeeExists = await db.Employees.AnyAsync(
+                            e => e.Id == entry.EmployeeId && e.CompanyId == userContext.CompanyId, ct);
+                        if (!employeeExists) return Results.BadRequest("Employee not found in this company.");
+                        existing.EmployeeId = entry.EmployeeId;
+                    }
+
                     existing.JobId         = entry.JobId;
                     existing.TaskId        = entry.TaskId;
                     existing.WorkDate      = entry.WorkDate;
