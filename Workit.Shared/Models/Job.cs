@@ -53,3 +53,6 @@ public sealed class Job : ICreatedAudit
     /// <inheritdoc/>
     public string? CreatedByName { get; set; }
 }
+
+/// <summary>Body of PUT /api/jobs/{id}/bring — the crew's own packing list.</summary>
+public sealed record JobBringUpdate(string? ToolsSuggestion, string? MaterialsSuggestion);

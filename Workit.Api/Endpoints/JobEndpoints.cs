@@ -126,16 +126,18 @@ internal static class JobEndpoints
         securedApi.MapPatch("/jobs/{id:guid}/kanban-status", async (WorkitDbContext db, HttpContext httpContext, IAnalyticsService analytics, Guid id, UpdateKanbanStatusRequest req, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
-                    if (!httpContext.User.IsOwnerOrAdmin())
-                    {
-                        return Results.Forbid();
-                    }
-
                     var userContext = httpContext.User.ToUserContext();
                     var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
                     if (existing is null)
                     {
                         return Results.NotFound();
+                    }
+
+                    // The crew hits the reasons to wait — missing parts, no access —
+                    // so whoever is on the job may park it, not just the office.
+                    if (!httpContext.User.IsOwnerOrAdmin() && !IsAssignedTo(existing, userContext))
+                    {
+                        return Results.Forbid();
                     }
 
                     var now = DateTimeOffset.UtcNow;
@@ -166,6 +168,27 @@ internal static class JobEndpoints
                 logger,
                 "updating kanban status"))
             .WithName("UpdateJobKanbanStatus");
+
+        // What to bring is the crew's own list — whoever is on the job keeps it
+        // up to date from site, without touching anything else on the job.
+        securedApi.MapPut("/jobs/{id:guid}/bring", async (WorkitDbContext db, HttpContext httpContext, Guid id, JobBringUpdate body, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var userContext = httpContext.User.ToUserContext();
+                    var existing = await db.Jobs.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == userContext.CompanyId, ct);
+                    if (existing is null) return Results.NotFound();
+
+                    if (!httpContext.User.IsOwnerOrAdmin() && !IsAssignedTo(existing, userContext))
+                        return Results.Forbid();
+
+                    existing.ToolsSuggestion     = (body.ToolsSuggestion ?? string.Empty).Trim();
+                    existing.MaterialsSuggestion = (body.MaterialsSuggestion ?? string.Empty).Trim();
+                    await db.SaveChangesAsync(ct);
+                    return Results.Ok(existing);
+                },
+                logger,
+                "updating what to bring"))
+            .WithName("UpdateJobBring");
 
         securedApi.MapPut("/jobs/{id:guid}", async (WorkitDbContext db, HttpContext httpContext, Guid id, Job job, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
@@ -345,6 +368,10 @@ internal static class JobEndpoints
 
         return known == ids.Count ? ids : null;
     }
+
+    /// <summary>An employee only acts on jobs they are on; owners act on all of them.</summary>
+    private static bool IsAssignedTo(Job job, UserContext user) =>
+        user.EmployeeId is Guid employeeId && job.AssignedEmployeeIds.Contains(employeeId);
 
     private static void TrimSiteDetails(Job job)
     {
