@@ -209,8 +209,23 @@ internal static class MaterialEndpoints
                     if (req.Quantity <= 0)
                         return Results.BadRequest("Quantity must be greater than zero.");
 
-                    if (req.JobId is Guid jobId && await FindUsableJobAsync(db, userContext, jobId, ct) is null)
+                    if (req.JobId is not Guid jobId)
+                        return Results.BadRequest("Material has to be logged on a job.");
+
+                    if (await FindUsableJobAsync(db, userContext, jobId, ct) is null)
                         return Results.BadRequest("You are not assigned to that job.");
+
+                    // Material is fitted during hours, so the hours come first: the
+                    // person the material is logged for must already have time on
+                    // that job that day. Logging the two apart produced days with
+                    // material and nobody on site to have used it.
+                    var usedOn = DateOnly.FromDateTime((req.UsedAt ?? DateTimeOffset.UtcNow).UtcDateTime);
+                    var hasHours = await db.TimeEntries.AnyAsync(
+                        e => e.CompanyId == companyId && e.EmployeeId == employeeId
+                          && e.JobId == jobId && e.WorkDate == usedOn, ct);
+                    if (!hasHours)
+                        return Results.Conflict(
+                            "Log the hours for this job and day first — material is recorded against the time that used it.");
 
                     // Deduct from stock — unless Payday owns it, in which case the invoice
                     // consumes it later and Workit only reports "logged, not invoiced".
@@ -222,7 +237,7 @@ internal static class MaterialEndpoints
                         CompanyId  = companyId,
                         EmployeeId = employeeId,
                         MaterialId = req.MaterialId,
-                        JobId      = req.JobId,
+                        JobId      = jobId,
                         Quantity   = req.Quantity,
                         Notes      = req.Notes ?? string.Empty,
                         UsedAt     = req.UsedAt ?? DateTimeOffset.UtcNow,
