@@ -37,6 +37,14 @@ public sealed class Job : ICreatedAudit
     public BillingType  BillingType   { get; set; } = BillingType.Hourly;
     public JobCategory  Category      { get; set; } = JobCategory.NewInstallation;
     public int          JobNumber     { get; set; }
+    /// <summary>
+    /// True once every hour and every material on the job has been invoiced.
+    /// Derived on read, never stored: a finished job is read-only for the crew
+    /// and the apps stop offering it. See JobClosure.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool              IsFinished        { get; set; }
+
     public KanbanStatus      KanbanStatus      { get; set; } = KanbanStatus.Active;
     public string?           WaitingReason     { get; set; }
     public DateTimeOffset?   KanbanInProgressAt { get; set; }
@@ -53,3 +61,6 @@ public sealed class Job : ICreatedAudit
     /// <inheritdoc/>
     public string? CreatedByName { get; set; }
 }
+
+/// <summary>Body of PUT /api/jobs/{id}/bring — the crew's own packing list.</summary>
+public sealed record JobBringUpdate(string? ToolsSuggestion, string? MaterialsSuggestion);

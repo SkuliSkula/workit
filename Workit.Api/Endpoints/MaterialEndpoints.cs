@@ -196,6 +196,8 @@ internal static class MaterialEndpoints
                     {
                         companyId  = userContext.CompanyId;
                         employeeId = currentEmployeeId;
+                        if (req.JobId is Guid onJob && await JobClosure.IsFinishedAsync(db, companyId, onJob, ct))
+                            return Results.Conflict(JobClosure.FinishedMessage);
                     }
                     else
                     {
