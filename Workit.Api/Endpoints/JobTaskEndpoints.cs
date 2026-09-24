@@ -162,11 +162,14 @@ internal static class JobTaskEndpoints
             var task = await db.JobTasks.FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == user.CompanyId, ct);
             if (task is null) return Results.NotFound();
 
-            // Owners and admins always; an employee only for a task they can see.
+            // Owners and admins always; an employee only for a task they can see,
+            // and never on a job that is finished and invoiced.
             if (!httpContext.User.IsOwnerOrAdmin())
             {
                 var job = await db.Jobs.AsNoTracking().FirstOrDefaultAsync(x => x.Id == task.JobId, ct);
                 if (job is null || !user.CanSeeTask(job, task)) return Results.Forbid();
+                if (await JobClosure.IsFinishedAsync(db, user.CompanyId, task.JobId, ct))
+                    return Results.Conflict(JobClosure.FinishedMessage);
             }
 
             task.Status       = done ? JobTaskStatus.Done : JobTaskStatus.Open;
