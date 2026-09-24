@@ -290,24 +290,24 @@ public static class DemoDataSeeder
         }
         db.TimeEntries.AddRange(timeEntries);
 
-        // ── Material usage scattered across the window ────────────────────────
+        // ── Material usage, always alongside the hours that consumed it ───────
+        // Material is used while working, so every usage hangs off a real time
+        // entry and takes its day, employee and job. Scattering them at random
+        // produced days with material and no hours, and material "used" by
+        // someone who was not on the job — which is not how a day looks.
         var usages = new List<MaterialUsage>();
-        for (var i = 0; i < 60; i++)
+        foreach (var entry in timeEntries.OrderBy(_ => rng.Next()).Take(60))
         {
-            var day = start.AddDays(rng.Next(0, today.DayNumber - start.DayNumber + 1));
-            if (day.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) day = day.AddDays(2);
-            if (day > today) day = today;
-
             var material = materials[rng.Next(materials.Count)];
             usages.Add(new MaterialUsage
             {
                 Id         = Guid.NewGuid(),
                 CompanyId  = company.Id,
                 MaterialId = material.Id,
-                EmployeeId = employees[rng.Next(employees.Count)].Id,
-                JobId      = jobs[rng.Next(jobs.Count)].Id,
+                EmployeeId = entry.EmployeeId,
+                JobId      = entry.JobId,
                 Quantity   = material.Unit == "m." ? rng.Next(5, 40) : rng.Next(1, 10),
-                UsedAt     = UtcAt(day, 14),
+                UsedAt     = UtcAt(entry.WorkDate, 14),
                 Notes      = string.Empty,
             });
         }
