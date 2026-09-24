@@ -14,6 +14,14 @@ public sealed class Material
     /// <summary>Top-level category, e.g. "Rafstrengir"</summary>
     public string Category    { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Payday's tags for the product, comma-separated, mirrored by the sync
+    /// and read-only in Workit. ÓS tags by supplier ("Rönning", "Ískraft"),
+    /// which is a second way to narrow a long material list: the category
+    /// says what a thing is, the tag where it comes from.
+    /// </summary>
+    public string Tags        { get; set; } = string.Empty;
+
     /// <summary>Unit of measure: m., stk., pk., rúll., box</summary>
     public string Unit        { get; set; } = "stk.";
 
