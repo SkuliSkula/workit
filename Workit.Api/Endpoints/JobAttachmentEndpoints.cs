@@ -56,6 +56,8 @@ internal static class JobAttachmentEndpoints
                     var userContext = httpContext.User.ToUserContext();
                     if (await FindUsableJobAsync(db, userContext, jobId, ct) is null)
                         return Results.NotFound();
+                    if (await JobClosure.BlocksAsync(db, httpContext, userContext.CompanyId, jobId, ct))
+                        return Results.Conflict(JobClosure.FinishedMessage);
 
                     if (file is null || file.Length == 0)
                         return Results.BadRequest("No file was provided.");
