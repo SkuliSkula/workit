@@ -9,6 +9,14 @@ public sealed class AbsenceRequest
     public AbsenceStatus Status { get; set; } = AbsenceStatus.Pending;
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
+
+    /// <summary>
+    /// Hours absent on each day of the range. A full day is the company's
+    /// standard day; 4 records half a day, for someone who came in, worked the
+    /// morning and went home ill. Never more than a standard day — you cannot
+    /// be absent from more duty than the day holds.
+    /// </summary>
+    public decimal HoursPerDay { get; set; } = 8m;
     public string Notes { get; set; } = string.Empty;
     public Guid? ReviewedBy { get; set; }
     public DateTime? ReviewedAt { get; set; }

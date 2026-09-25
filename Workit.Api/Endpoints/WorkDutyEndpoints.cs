@@ -12,6 +12,34 @@ internal static class WorkDutyEndpoints
 {
     internal static void MapWorkDutyEndpoints(this WebApplication app)
     {
+        // The apps need the calendar to count an absence period properly: a
+        // four-week holiday is working days, and a public holiday inside it is
+        // not one of them. Range rather than month, since a period spans months.
+        app.MapGet("/api/holidays", (DateOnly from, DateOnly to) =>
+        {
+            if (to < from) return Results.BadRequest("The end date must not be before the start date.");
+            if (to.DayNumber - from.DayNumber > 800) return Results.BadRequest("Ask for a shorter range.");
+
+            var holidays = new List<HolidayInfo>();
+            for (var year = from.Year; year <= to.Year; year++)
+            {
+                for (var month = 1; month <= 12; month++)
+                {
+                    foreach (var holiday in IcelandicHolidays.GetHolidaysInMonth(year, month))
+                    {
+                        if (holiday.Date < from || holiday.Date > to) continue;
+                        holidays.Add(new HolidayInfo
+                        {
+                            Date = holiday.Date.ToString("yyyy-MM-dd"),
+                            Name = holiday.Name,
+                            IsHalfDay = holiday.IsHalfDay,
+                        });
+                    }
+                }
+            }
+            return Results.Ok(holidays.OrderBy(h => h.Date).ToList());
+        }).RequireAuthorization().WithTags("Work Duty").WithName("GetHolidays");
+
         app.MapGet("/api/workduty", async (
             int year,
             int month,
@@ -48,15 +76,35 @@ internal static class WorkDutyEndpoints
             }
 
             decimal hoursWorked = 0;
+            decimal absenceHours = 0;
             if (resolvedEmployeeId is Guid empId)
             {
-                hoursWorked = await db.TimeEntries
+                // Per day, not just the total: absence fills what the day's work
+                // left, so the two together never exceed the day's duty.
+                var workedByDay = await db.TimeEntries
                     .Where(t => t.CompanyId == userContext.CompanyId
                              && t.EmployeeId == empId
                              && t.WorkDate >= startDate
                              && t.WorkDate <= endDate)
-                    .SumAsync(t => t.Hours);
+                    .GroupBy(t => t.WorkDate)
+                    .Select(g => new { Day = g.Key, Hours = g.Sum(t => t.Hours) })
+                    .ToDictionaryAsync(x => x.Day, x => x.Hours);
+
+                hoursWorked = workedByDay.Values.Sum();
+
+                // Approved absence covers the duty it overlaps — a sick day is a
+                // day, not the hours someone might otherwise have logged.
+                var absences = await db.AbsenceRequests
+                    .Where(a => a.CompanyId == userContext.CompanyId
+                             && a.EmployeeId == empId
+                             && a.Status == AbsenceStatus.Approved
+                             && a.StartDate <= endDate
+                             && a.EndDate >= startDate)
+                    .ToListAsync();
+                absenceHours = AbsenceDuty.HoursInMonth(absences, year, month, standardHours, workedByDay);
             }
+
+            var hoursCounted = hoursWorked + absenceHours;
 
             // Count weekdays, holidays
             var daysInMonth = DateTime.DaysInMonth(year, month);
@@ -70,8 +118,8 @@ internal static class WorkDutyEndpoints
             var fullHolidays = holidays.Count(h => !h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
             var halfHolidays = holidays.Count(h => h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
 
-            var remaining = Math.Max(0, dutyHours - hoursWorked);
-            var pct = dutyHours > 0 ? Math.Round(hoursWorked / dutyHours * 100, 1) : 0;
+            var remaining = Math.Max(0, dutyHours - hoursCounted);
+            var pct = dutyHours > 0 ? Math.Round(hoursCounted / dutyHours * 100, 1) : 0;
 
             return Results.Ok(new WorkDutyResponse
             {
@@ -83,6 +131,8 @@ internal static class WorkDutyEndpoints
                 HalfHolidays = halfHolidays,
                 WorkDutyHours = dutyHours,
                 HoursWorked = hoursWorked,
+                AbsenceHours = absenceHours,
+                HoursCounted = hoursCounted,
                 HoursRemaining = remaining,
                 CompletionPercentage = pct,
                 Holidays = holidays.Select(h => new HolidayInfo

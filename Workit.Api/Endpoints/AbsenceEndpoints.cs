@@ -65,6 +65,13 @@ internal static class AbsenceEndpoints
                     if (absence.StartDate > absence.EndDate)
                         return Results.BadRequest("Start date must be before or equal to end date.");
 
+                    // Absence is recorded in hours — a full day, or fewer for
+                    // someone who worked part of it — and never more than a day.
+                    var standardDay = await StandardDayAsync(db, userContext.CompanyId, ct);
+                    if (absence.HoursPerDay <= 0) absence.HoursPerDay = standardDay;
+                    if (absence.HoursPerDay > standardDay)
+                        return Results.BadRequest($"A day of absence cannot be more than {standardDay:0.##} hours.");
+
                     if (string.Equals(userContext.Role, WorkitRoles.Owner, StringComparison.Ordinal)
                         || string.Equals(userContext.Role, WorkitRoles.Admin, StringComparison.Ordinal))
                     {
@@ -148,9 +155,15 @@ internal static class AbsenceEndpoints
                         existing.EmployeeId != userContext.EmployeeId)
                         return Results.Forbid();
 
+                    var standardDay = await StandardDayAsync(db, userContext.CompanyId, ct);
+                    if (absence.HoursPerDay <= 0) absence.HoursPerDay = standardDay;
+                    if (absence.HoursPerDay > standardDay)
+                        return Results.BadRequest($"A day of absence cannot be more than {standardDay:0.##} hours.");
+
                     existing.Type = absence.Type;
                     existing.StartDate = absence.StartDate;
                     existing.EndDate = absence.EndDate;
+                    existing.HoursPerDay = absence.HoursPerDay;
                     existing.Notes = absence.Notes;
 
                     await db.SaveChangesAsync(ct);
@@ -227,5 +240,13 @@ internal static class AbsenceEndpoints
                 logger,
                 "reviewing an absence"))
             .WithName("ReviewAbsence");
+    }
+
+    /// <summary>The company's standard working day — the most one day of absence can be.</summary>
+    private static async Task<decimal> StandardDayAsync(WorkitDbContext db, Guid companyId, CancellationToken ct)
+    {
+        var hours = await db.Companies.Where(c => c.Id == companyId)
+            .Select(c => (decimal?)c.StandardHoursPerDay).FirstOrDefaultAsync(ct);
+        return hours is > 0 ? hours.Value : 8m;
     }
 }
