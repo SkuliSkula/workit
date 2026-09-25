@@ -5,13 +5,18 @@ namespace Workit.Api.Endpoints;
 
 /// <summary>
 /// How much of the month's work duty an absence covers. Being off sick or on
-/// holiday does not leave the month short: each absent working day counts as a
-/// standard day — which is also the cap, so two days off is two days, never the
-/// 16 hours someone might otherwise log.
+/// holiday does not leave the month short.
 ///
-/// The day is worth exactly what the duty calculation says it is worth: a full
-/// day on a normal weekday, half on a half-holiday, and nothing on a weekend or
-/// a full holiday, because there was no duty to be absent from.
+/// Absence is recorded in hours, because a day is not all-or-nothing: someone
+/// can work the morning, go home ill, and register four worked hours and four
+/// sick ones. Two rules keep the sums honest:
+///
+///   • a day of absence never exceeds the duty that day holds — a standard day
+///     on a weekday, half on a half-holiday, nothing on a weekend or full
+///     holiday, since there was no duty to be absent from;
+///   • absence only fills what the hours worked left. Work four and register
+///     four sick and the day counts eight; work eight and register eight sick
+///     and it still counts eight, not sixteen.
 /// </summary>
 internal static class AbsenceDuty
 {
@@ -22,11 +27,16 @@ internal static class AbsenceDuty
     internal static bool CountsTowardDuty(AbsenceType type) => type != AbsenceType.UnpaidLeave;
 
     /// <summary>
-    /// Absence hours inside the month, from approved requests only. Overlapping
-    /// requests never pay twice — a day counts once however many requests cover it.
+    /// Absence hours inside the month, from approved requests only.
+    /// <paramref name="workedByDay"/> is the employee's logged hours per day, so
+    /// absence can fill the rest of the day and no more.
     /// </summary>
     internal static decimal HoursInMonth(
-        IEnumerable<AbsenceRequest> requests, int year, int month, decimal standardHoursPerDay)
+        IEnumerable<AbsenceRequest> requests,
+        int year,
+        int month,
+        decimal standardHoursPerDay,
+        IReadOnlyDictionary<DateOnly, decimal>? workedByDay = null)
     {
         var monthStart = new DateOnly(year, month, 1);
         var monthEnd   = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
@@ -34,7 +44,8 @@ internal static class AbsenceDuty
         var holidays = IcelandicHolidays.GetHolidaysInMonth(year, month)
             .ToDictionary(h => h.Date, h => h.IsHalfDay);
 
-        var countedDays = new Dictionary<DateOnly, decimal>();
+        // The most any one day can contribute, whatever was registered on it.
+        var bestByDay = new Dictionary<DateOnly, decimal>();
 
         foreach (var request in requests)
         {
@@ -46,12 +57,29 @@ internal static class AbsenceDuty
 
             for (var day = from; day <= to; day = day.AddDays(1))
             {
-                var value = DayValue(day, holidays);
-                if (value > 0) countedDays[day] = value;   // a day counts once
+                var dayDuty = DayValue(day, holidays) * standardHoursPerDay;
+                if (dayDuty <= 0) continue;
+
+                var registered = request.HoursPerDay > 0 ? request.HoursPerDay : standardHoursPerDay;
+                var hours = Math.Min(registered, dayDuty);
+
+                // Overlapping requests never pay a day twice: the day is worth
+                // the largest single claim on it, not their sum.
+                bestByDay[day] = bestByDay.TryGetValue(day, out var already) ? Math.Max(already, hours) : hours;
             }
         }
 
-        return countedDays.Values.Sum() * standardHoursPerDay;
+        var total = 0m;
+        foreach (var (day, hours) in bestByDay)
+        {
+            var dayDuty = DayValue(day, holidays) * standardHoursPerDay;
+            var worked  = workedByDay is not null && workedByDay.TryGetValue(day, out var w) ? w : 0m;
+            var room    = dayDuty - worked;
+            if (room <= 0) continue;              // the day's duty is already met by work
+            total += Math.Min(hours, room);
+        }
+
+        return total;
     }
 
     /// <summary>What one day is worth as duty: 1, a half-holiday 0.5, otherwise 0.</summary>

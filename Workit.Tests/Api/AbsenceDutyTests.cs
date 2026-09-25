@@ -16,13 +16,19 @@ public class AbsenceDutyTests
     private static AbsenceRequest Absence(
         DateOnly from, DateOnly to,
         AbsenceType type = AbsenceType.SickLeave,
-        AbsenceStatus status = AbsenceStatus.Approved) => new()
+        AbsenceStatus status = AbsenceStatus.Approved,
+        decimal hoursPerDay = Standard) => new()
     {
-        EmployeeId = Guid.NewGuid(), Type = type, Status = status, StartDate = from, EndDate = to,
+        EmployeeId = Guid.NewGuid(), Type = type, Status = status,
+        StartDate = from, EndDate = to, HoursPerDay = hoursPerDay,
     };
 
     private static decimal Hours(params AbsenceRequest[] requests) =>
         AbsenceDuty.HoursInMonth(requests, 2026, 9, Standard);
+
+    private static decimal HoursWithWork(
+        IReadOnlyDictionary<DateOnly, decimal> worked, params AbsenceRequest[] requests) =>
+        AbsenceDuty.HoursInMonth(requests, 2026, 9, Standard, worked);
 
     [Fact]
     public void Two_sick_days_count_sixteen_hours()
@@ -103,5 +109,71 @@ public class AbsenceDutyTests
             all.Should().Be(IcelandicHolidays.GetWorkDutyHours(year, month, Standard),
                 "absence over a whole month equals that month's duty ({0}/{1})", month, year);
         }
+    }
+
+    // ── Hours are registered, not assumed ────────────────────────────────────
+
+    [Fact]
+    public void Half_a_day_ill_counts_the_hours_registered()
+    {
+        // Came in, worked the morning, went home at midday.
+        Hours(Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7), hoursPerDay: 4m))
+            .Should().Be(4m);
+    }
+
+    [Fact]
+    public void A_day_of_absence_never_exceeds_a_standard_day()
+    {
+        Hours(Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7), hoursPerDay: 12m))
+            .Should().Be(8m);
+    }
+
+    [Fact]
+    public void Worked_four_and_ill_four_makes_a_whole_day()
+    {
+        var worked = new Dictionary<DateOnly, decimal> { [new DateOnly(2026, 9, 7)] = 4m };
+        HoursWithWork(worked, Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7), hoursPerDay: 4m))
+            .Should().Be(4m, "the day counts 4 worked + 4 ill = 8");
+    }
+
+    [Fact]
+    public void Absence_only_fills_what_the_work_left()
+    {
+        // A full day worked and a full day registered ill: the day is still 8.
+        var worked = new Dictionary<DateOnly, decimal> { [new DateOnly(2026, 9, 7)] = 8m };
+        HoursWithWork(worked, Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)))
+            .Should().Be(0m);
+
+        // Six worked leaves room for two.
+        var six = new Dictionary<DateOnly, decimal> { [new DateOnly(2026, 9, 7)] = 6m };
+        HoursWithWork(six, Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)))
+            .Should().Be(2m);
+    }
+
+    [Fact]
+    public void Overtime_on_the_day_never_pushes_absence_below_zero()
+    {
+        var overworked = new Dictionary<DateOnly, decimal> { [new DateOnly(2026, 9, 7)] = 11m };
+        HoursWithWork(overworked, Absence(new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)))
+            .Should().Be(0m);
+    }
+
+    [Fact]
+    public void A_part_day_on_a_half_holiday_is_capped_by_the_half_day()
+    {
+        // 24 December 2026 is a half day and falls on a Thursday.
+        var christmasEve = new DateOnly(2026, 12, 24);
+        AbsenceDuty.HoursInMonth(
+            [Absence(christmasEve, christmasEve, hoursPerDay: 8m)], 2026, 12, Standard)
+            .Should().Be(4m);
+    }
+
+    [Fact]
+    public void Overlapping_requests_take_the_larger_claim_on_a_day_not_the_sum()
+    {
+        var day = new DateOnly(2026, 9, 7);
+        Hours(Absence(day, day, hoursPerDay: 4m),
+              Absence(day, day, AbsenceType.Vacation, hoursPerDay: 6m))
+            .Should().Be(6m);
     }
 }

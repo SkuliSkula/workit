@@ -51,12 +51,18 @@ internal static class WorkDutyEndpoints
             decimal absenceHours = 0;
             if (resolvedEmployeeId is Guid empId)
             {
-                hoursWorked = await db.TimeEntries
+                // Per day, not just the total: absence fills what the day's work
+                // left, so the two together never exceed the day's duty.
+                var workedByDay = await db.TimeEntries
                     .Where(t => t.CompanyId == userContext.CompanyId
                              && t.EmployeeId == empId
                              && t.WorkDate >= startDate
                              && t.WorkDate <= endDate)
-                    .SumAsync(t => t.Hours);
+                    .GroupBy(t => t.WorkDate)
+                    .Select(g => new { Day = g.Key, Hours = g.Sum(t => t.Hours) })
+                    .ToDictionaryAsync(x => x.Day, x => x.Hours);
+
+                hoursWorked = workedByDay.Values.Sum();
 
                 // Approved absence covers the duty it overlaps — a sick day is a
                 // day, not the hours someone might otherwise have logged.
@@ -67,7 +73,7 @@ internal static class WorkDutyEndpoints
                              && a.StartDate <= endDate
                              && a.EndDate >= startDate)
                     .ToListAsync();
-                absenceHours = AbsenceDuty.HoursInMonth(absences, year, month, standardHours);
+                absenceHours = AbsenceDuty.HoursInMonth(absences, year, month, standardHours, workedByDay);
             }
 
             var hoursCounted = hoursWorked + absenceHours;
