@@ -48,6 +48,7 @@ internal static class WorkDutyEndpoints
             }
 
             decimal hoursWorked = 0;
+            decimal absenceHours = 0;
             if (resolvedEmployeeId is Guid empId)
             {
                 hoursWorked = await db.TimeEntries
@@ -56,7 +57,20 @@ internal static class WorkDutyEndpoints
                              && t.WorkDate >= startDate
                              && t.WorkDate <= endDate)
                     .SumAsync(t => t.Hours);
+
+                // Approved absence covers the duty it overlaps — a sick day is a
+                // day, not the hours someone might otherwise have logged.
+                var absences = await db.AbsenceRequests
+                    .Where(a => a.CompanyId == userContext.CompanyId
+                             && a.EmployeeId == empId
+                             && a.Status == AbsenceStatus.Approved
+                             && a.StartDate <= endDate
+                             && a.EndDate >= startDate)
+                    .ToListAsync();
+                absenceHours = AbsenceDuty.HoursInMonth(absences, year, month, standardHours);
             }
+
+            var hoursCounted = hoursWorked + absenceHours;
 
             // Count weekdays, holidays
             var daysInMonth = DateTime.DaysInMonth(year, month);
@@ -70,8 +84,8 @@ internal static class WorkDutyEndpoints
             var fullHolidays = holidays.Count(h => !h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
             var halfHolidays = holidays.Count(h => h.IsHalfDay && h.Date.DayOfWeek != DayOfWeek.Saturday && h.Date.DayOfWeek != DayOfWeek.Sunday);
 
-            var remaining = Math.Max(0, dutyHours - hoursWorked);
-            var pct = dutyHours > 0 ? Math.Round(hoursWorked / dutyHours * 100, 1) : 0;
+            var remaining = Math.Max(0, dutyHours - hoursCounted);
+            var pct = dutyHours > 0 ? Math.Round(hoursCounted / dutyHours * 100, 1) : 0;
 
             return Results.Ok(new WorkDutyResponse
             {
@@ -83,6 +97,8 @@ internal static class WorkDutyEndpoints
                 HalfHolidays = halfHolidays,
                 WorkDutyHours = dutyHours,
                 HoursWorked = hoursWorked,
+                AbsenceHours = absenceHours,
+                HoursCounted = hoursCounted,
                 HoursRemaining = remaining,
                 CompletionPercentage = pct,
                 Holidays = holidays.Select(h => new HolidayInfo
