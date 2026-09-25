@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Workit.Api.Data;
 using Workit.Shared.Models;
 using Workit.Shared.Utilities;
 
@@ -81,6 +83,62 @@ internal static class AbsenceDuty
 
         return total;
     }
+
+    /// <summary>
+    /// Refuses hours that would overrun a day already covered by absence. Work
+    /// four and go home ill for four and the day is full but fine; eight of each
+    /// is someone registering the same day twice. Returns the message to show,
+    /// or null when the day still has room.
+    /// </summary>
+    internal static async Task<string?> DayOverflowAsync(
+        WorkitDbContext db, Guid companyId, Guid employeeId, DateOnly day, decimal hours, Guid? ignoreEntryId, CancellationToken ct)
+    {
+        var absences = await db.AbsenceRequests
+            .Where(a => a.CompanyId == companyId && a.EmployeeId == employeeId
+                     && a.Status == AbsenceStatus.Approved
+                     && a.StartDate <= day && a.EndDate >= day)
+            .ToListAsync(ct);
+        if (absences.Count == 0) return null;
+
+        var standardDay = await db.Companies.Where(c => c.Id == companyId)
+            .Select(c => (decimal?)c.StandardHoursPerDay).FirstOrDefaultAsync(ct) ?? 8m;
+        if (standardDay <= 0) standardDay = 8m;
+
+        var holidays = IcelandicHolidays.GetHolidaysInMonth(day.Year, day.Month)
+            .ToDictionary(h => h.Date, h => h.IsHalfDay);
+        var dayDuty = DayValue(day, holidays) * standardDay;
+        if (dayDuty <= 0) return null;   // a weekend or holiday has no duty to overrun
+
+        var counted = absences
+            .Where(a => CountsTowardDuty(a.Type))
+            .Select(a => Math.Min(a.HoursPerDay > 0 ? a.HoursPerDay : standardDay, dayDuty))
+            .DefaultIfEmpty(0m)
+            .Max();
+        if (counted <= 0) return null;
+
+        var alreadyWorked = await db.TimeEntries
+            .Where(t => t.CompanyId == companyId && t.EmployeeId == employeeId && t.WorkDate == day
+                     && (ignoreEntryId == null || t.Id != ignoreEntryId))
+            .SumAsync(t => t.Hours, ct);
+
+        var room = dayDuty - counted - alreadyWorked;
+        if (hours <= room) return null;
+
+        var type = absences.First(a => CountsTowardDuty(a.Type)).Type;
+        return room <= 0
+            ? $"You already have {counted:0.##} h of {Describe(type)} registered on {day:d MMM yyyy} — that day is full."
+            : $"You already have {counted:0.##} h of {Describe(type)} registered on {day:d MMM yyyy}, so only {room:0.##} h more fit that day.";
+    }
+
+    private static string Describe(AbsenceType type) => type switch
+    {
+        AbsenceType.SickLeave      => "sick leave",
+        AbsenceType.SickChildLeave => "sick child leave",
+        AbsenceType.Vacation       => "holiday",
+        AbsenceType.ParentalLeave  => "parental leave",
+        AbsenceType.WorkInjury     => "work injury leave",
+        _                          => "absence",
+    };
 
     /// <summary>What one day is worth as duty: 1, a half-holiday 0.5, otherwise 0.</summary>
     private static decimal DayValue(DateOnly day, IReadOnlyDictionary<DateOnly, bool> holidays)

@@ -176,4 +176,20 @@ public class AbsenceDutyTests
               Absence(day, day, AbsenceType.Vacation, hoursPerDay: 6m))
             .Should().Be(6m);
     }
+
+    // ── Describing the clash when hours meet absence ─────────────────────────
+
+    [Fact]
+    public void A_half_day_of_absence_still_leaves_room_for_the_hours_worked()
+    {
+        // The rule the endpoint applies: room = the day's duty, less absence,
+        // less what is already logged.
+        const decimal dayDuty = 8m;
+        var absence = 4m;
+        var alreadyWorked = 0m;
+        (dayDuty - absence - alreadyWorked).Should().Be(4m, "half a day off leaves half a day to work");
+
+        alreadyWorked = 4m;
+        (dayDuty - absence - alreadyWorked).Should().Be(0m, "and once it is worked the day is full");
+    }
 }

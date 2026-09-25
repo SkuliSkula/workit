@@ -12,6 +12,34 @@ internal static class WorkDutyEndpoints
 {
     internal static void MapWorkDutyEndpoints(this WebApplication app)
     {
+        // The apps need the calendar to count an absence period properly: a
+        // four-week holiday is working days, and a public holiday inside it is
+        // not one of them. Range rather than month, since a period spans months.
+        app.MapGet("/api/holidays", (DateOnly from, DateOnly to) =>
+        {
+            if (to < from) return Results.BadRequest("The end date must not be before the start date.");
+            if (to.DayNumber - from.DayNumber > 800) return Results.BadRequest("Ask for a shorter range.");
+
+            var holidays = new List<HolidayInfo>();
+            for (var year = from.Year; year <= to.Year; year++)
+            {
+                for (var month = 1; month <= 12; month++)
+                {
+                    foreach (var holiday in IcelandicHolidays.GetHolidaysInMonth(year, month))
+                    {
+                        if (holiday.Date < from || holiday.Date > to) continue;
+                        holidays.Add(new HolidayInfo
+                        {
+                            Date = holiday.Date.ToString("yyyy-MM-dd"),
+                            Name = holiday.Name,
+                            IsHalfDay = holiday.IsHalfDay,
+                        });
+                    }
+                }
+            }
+            return Results.Ok(holidays.OrderBy(h => h.Date).ToList());
+        }).RequireAuthorization().WithTags("Work Duty").WithName("GetHolidays");
+
         app.MapGet("/api/workduty", async (
             int year,
             int month,

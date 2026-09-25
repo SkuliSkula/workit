@@ -107,6 +107,10 @@ internal static class TimeEntryEndpoints
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
                         return Results.BadRequest(taskError);
 
+                    // A day already covered by absence has only so much room left.
+                    if (await AbsenceDuty.DayOverflowAsync(db, entry.CompanyId, entry.EmployeeId, entry.WorkDate, entry.Hours, null, ct) is string full)
+                        return Results.Conflict(full);
+
                     await entry.StampCreatedAsync(db, httpContext, userContext, ct);
                     db.TimeEntries.Add(entry);
 
@@ -161,6 +165,10 @@ internal static class TimeEntryEndpoints
 
                     if (await JobTaskEndpoints.ValidateTaskForEntryAsync(db, userContext.CompanyId, entry.JobId, entry.TaskId, ct) is string taskError)
                         return Results.BadRequest(taskError);
+
+                    // The entry being edited does not count against its own day.
+                    if (await AbsenceDuty.DayOverflowAsync(db, userContext.CompanyId, existing.EmployeeId, entry.WorkDate, entry.Hours, existing.Id, ct) is string full)
+                        return Results.Conflict(full);
 
                     // Owners may move an entry to the person who actually worked it;
                     // an employee's entries stay theirs.
