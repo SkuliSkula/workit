@@ -127,7 +127,8 @@ internal static class ExpenseEndpoints
                         line.CompanyId = companyId;
                         if (line.MarkupFactor <= 0) line.MarkupFactor = 1.5m;
                         if (line.SalePriceExcludingVat <= 0)
-                            line.SalePriceExcludingVat = Math.Round((line.UnitPriceExcludingVat ?? 0m) * line.MarkupFactor, 0, MidpointRounding.AwayFromZero);
+                            line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(
+                                line.UnitPriceExcludingVat, line.DiscountPercentage, line.MarkupFactor);
                     }
 
                     db.Expenses.Add(expense);

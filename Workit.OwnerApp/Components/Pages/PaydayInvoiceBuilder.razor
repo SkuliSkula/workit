@@ -1102,7 +1102,10 @@
                         Quantity = remaining,
                         UnitPriceExcludingVat = Math.Round(el.SalePriceExcludingVat, 0, MidpointRounding.AwayFromZero),
                         VatPercentage = el.VatPercentage,
-                        DiscountPercentage = el.DiscountPercentage ?? 0m,
+                        // The expense's discount is the vendor's to us, already inside
+                        // the sale price. Carrying it onto the customer's line showed our
+                        // purchase terms and, once anyone changed it, overcharged them.
+                        DiscountPercentage = 0m,
                         LineType = "expense",
                         JobCode = code,
                         ExpenseLineId = el.Id,

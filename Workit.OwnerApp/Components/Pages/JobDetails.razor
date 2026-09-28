@@ -223,8 +223,20 @@ else if (job is not null)
                     <TemplateColumn Title="Qty" Align="Align.End">
                         <FluentLabel>@context.Line.Quantity.ToString("0.##")</FluentLabel>
                     </TemplateColumn>
+                    @* What we actually paid, after the vendor's discount — the list
+                       price and the discount stay in the tooltip. *@
                     <TemplateColumn Title="Cost (ex VAT)" Align="Align.End">
-                        <FluentLabel>@((context.Line.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
+                        @if ((context.Line.DiscountPercentage ?? 0) > 0)
+                        {
+                            <FluentLabel title="@($"List {(context.Line.UnitPriceExcludingVat ?? 0):N0} less {context.Line.DiscountPercentage:0.##} % vendor discount")">
+                                @context.Line.NetUnitCostExcludingVat.ToString("N0")
+                                <span style="font-size:0.72rem; color:#6b7280;">−@context.Line.DiscountPercentage?.ToString("0.##")%</span>
+                            </FluentLabel>
+                        }
+                        else
+                        {
+                            <FluentLabel>@((context.Line.UnitPriceExcludingVat ?? 0).ToString("N0"))</FluentLabel>
+                        }
                     </TemplateColumn>
                     <TemplateColumn Title="×" Align="Align.End">
                         <FluentLabel style="color:#6b7280;">@context.Line.MarkupFactor.ToString("0.##")</FluentLabel>
