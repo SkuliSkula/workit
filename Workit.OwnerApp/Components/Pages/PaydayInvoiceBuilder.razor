@@ -330,7 +330,7 @@
             {
                 <div style="display:flex; align-items:center; gap:0.5rem;">
                     <FluentLabel Style="font-size:0.85rem;">Overtime multiplier:</FluentLabel>
-                    <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1m" Style="width:80px;" />
+                    <FluentNumberField TValue="decimal" @bind-Value="overtimeMultiplier" Min="1" Max="5" Step="0.1" Style="width:80px;" />
                 </div>
                 <FluentButton Appearance="Appearance.Accent" @onclick="RegenerateOvertimeLines" Size="ButtonSize.Small">
                     Recalculate overtime
@@ -346,7 +346,7 @@
             {
                 <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto;">
                     <FluentLabel Style="font-size:0.85rem;">Discount on all lines:</FluentLabel>
-                    <FluentNumberField TValue="decimal" @bind-Value="bulkDiscount" Min="0" Max="100" Step="1m" Style="width:80px;" />
+                    <FluentNumberField TValue="decimal" @bind-Value="bulkDiscount" Min="0" Max="100" Step="1" Style="width:80px;" />
                     <span style="font-size:0.85rem;">%</span>
                     <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="ApplyDiscountToAllLines">
                         Apply to all
@@ -378,7 +378,7 @@
                     <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="0"
                                        Max="@(line.LineType == "expense" ? line.MaxQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture) : null)"
                                        title="@(line.LineType == "expense" ? $"{line.MaxQuantity:0.##} left to invoice" : null)"
-                                       Step="0.5m" Style="width:100%" />
+                                       Step="0.5" Style="width:100%" />
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Price ex VAT</FluentLabel>
