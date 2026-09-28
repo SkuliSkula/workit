@@ -339,13 +339,30 @@
             <FluentButton Appearance="Appearance.Accent" @onclick="@(() => invoiceLines.Add(new InvoiceLineForm()))" Size="ButtonSize.Small">
                 + Add line
             </FluentButton>
+
+            @* One discount across the whole invoice — sets every line, which can
+               still be adjusted one by one afterwards. *@
+            @if (invoiceLines.Count > 0)
+            {
+                <div style="display:flex; align-items:center; gap:0.5rem; margin-left:auto;">
+                    <FluentLabel Style="font-size:0.85rem;">Discount on all lines:</FluentLabel>
+                    <FluentNumberField TValue="decimal" @bind-Value="bulkDiscount" Min="0" Max="100" Step="1m" Style="width:80px;" />
+                    <span style="font-size:0.85rem;">%</span>
+                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="ApplyDiscountToAllLines">
+                        Apply to all
+                    </FluentButton>
+                </div>
+            }
         </div>
 
         @for (var i = 0; i < invoiceLines.Count; i++)
         {
             var idx = i;
             var line = invoiceLines[idx];
-            <div style="display:grid; grid-template-columns: 2.5fr 0.7fr 1.2fr 0.8fr 0.8fr auto; gap:0.5rem; align-items:end; margin-top:0.5rem; padding:0.5rem; background:var(--neutral-fill-secondary-rest); border-radius:4px;">
+            @* Top-aligned: labels share a baseline and inputs sit under them, so a
+               hint beneath one field (e.g. "no Payday product") hangs below
+               instead of lifting that input out of line with the rest. *@
+            <div class="invoice-line-row">
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Description</FluentLabel>
                     <FluentTextField @bind-Value="line.Description" Style="width:100%" title="@(line.Sku is { Length: > 0 } ? $"Payday product {line.Sku}" : null)" />
@@ -356,13 +373,12 @@
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Qty</FluentLabel>
+                    @* An expense can't be billed beyond what is left of it — the cap
+                       stays, the figure moves to the tooltip. *@
                     <FluentNumberField TValue="decimal" @bind-Value="line.Quantity" Min="0"
                                        Max="@(line.LineType == "expense" ? line.MaxQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture) : null)"
+                                       title="@(line.LineType == "expense" ? $"{line.MaxQuantity:0.##} left to invoice" : null)"
                                        Step="0.5m" Style="width:100%" />
-                    @if (line.LineType == "expense")
-                    {
-                        <FluentLabel Style="font-size:0.68rem; color:#6b7280;">of @line.MaxQuantity.ToString("0.##") left</FluentLabel>
-                    }
                 </div>
                 <div>
                     <FluentLabel Style="font-size:0.75rem;">Price ex VAT</FluentLabel>
@@ -384,6 +400,7 @@
                     <FluentNumberField TValue="decimal" @bind-Value="line.DiscountPercentage" Min="0" Max="100" Style="width:100%" />
                 </div>
                 <div>
+                    <FluentLabel Style="font-size:0.75rem; visibility:hidden;" aria-hidden="true">&nbsp;</FluentLabel>
                     <FluentButton Appearance="Appearance.Stealth"
                                   @onclick="@(() => invoiceLines.RemoveAt(idx))"
                                   title="Remove line">✕</FluentButton>
@@ -592,6 +609,17 @@
     // ── Step 3 state ─────────────────────────────────────────────────────────
     private List<InvoiceLineForm> invoiceLines = [];
     private decimal overtimeMultiplier = 1.8m;
+    private decimal bulkDiscount;
+
+    /// <summary>
+    /// Sets the same discount on every line. Lines stay editable afterwards, and a
+    /// line added later starts at no discount until this is applied again.
+    /// </summary>
+    private void ApplyDiscountToAllLines()
+    {
+        var discount = Math.Clamp(bulkDiscount, 0m, 100m);
+        foreach (var line in invoiceLines) line.DiscountPercentage = discount;
+    }
 
     // Payday product cache: the three labor roles plus every product by Payday id (for material links).
     private List<PaydayProductCache> paydayProducts = [];
