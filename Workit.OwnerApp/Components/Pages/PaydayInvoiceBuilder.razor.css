@@ -9,3 +9,32 @@
 .task-scope-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-scope-done { background: #d1fae5; color: #065f46; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
 .task-scope-note { margin-top: 0.4rem; color: #92400e; font-size: 0.8rem; }
+
+/* One invoice line. Top-aligned rather than bottom-aligned: every label starts
+   on the same line and every input directly beneath it, so a hint under one
+   field hangs below the row instead of pushing that input up out of line. */
+.invoice-line-row {
+    display: grid;
+    grid-template-columns: 2.5fr 0.7fr 1.2fr 0.8fr 0.8fr auto;
+    gap: 0.5rem;
+    align-items: start;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: var(--neutral-fill-secondary-rest);
+    border-radius: 4px;
+}
+
+.invoice-line-row > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+/* The select draws a touch taller than the text and number fields; match them
+   so the row reads as one straight line. */
+.invoice-line-row ::deep fluent-select,
+.invoice-line-row ::deep fluent-text-field,
+.invoice-line-row ::deep fluent-number-field {
+    height: 32px;
+}
