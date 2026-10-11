@@ -10,6 +10,7 @@
 @inject ICompanyApi CompanyApi
 @inject IPaydayCustomersApi PaydayCustomersApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
+@inject IInvoiceReconcileApi ReconcileApi
 @inject IExpensesApi ExpensesApi
 @inject IPaydayProductsCacheApi PaydayProductsApi
 @inject NavigationManager Navigation
@@ -753,6 +754,10 @@
         dateFrom = firstOfMonth.AddMonths(-1);
         dateTo = firstOfMonth.AddDays(-1);
 
+        // Hand back anything held by a draft that was deleted or cancelled in
+        // Payday, so those hours and materials show up to bill again below.
+        var reconcileTask = ReconcileApi.ReconcileAsync();
+
         // Load all base data in parallel
         var customersTask = CustomersApi.GetCustomersAsync();
         var jobsTask = JobsApi.GetJobsAsync();
@@ -761,7 +766,7 @@
         var companyTask = CompanyApi.GetCompanyAsync();
         var productsTask = PaydayProductsApi.GetProductsAsync(includeArchived: true);
 
-        await Task.WhenAll(customersTask, jobsTask, employeesTask, materialsTask, companyTask, productsTask);
+        await Task.WhenAll(customersTask, jobsTask, employeesTask, materialsTask, companyTask, productsTask, reconcileTask);
         var pr = await productsTask;
         if (pr.IsSuccess) paydayProducts = pr.Value ?? [];
 
@@ -1257,20 +1262,25 @@
             {
                 createdInvoice = result.Value;
 
-                // Mark time entries and material usages as invoiced with the Payday invoice number
+                // Mark time entries and material usages as invoiced. A draft has no
+                // number yet, so the id is what ties them to it — and what lets them
+                // be released if the draft is deleted or cancelled.
                 var invoiceNumber = createdInvoice.Number;
+                var invoiceId     = createdInvoice.Id;
                 var markTasks = new List<Task>();
                 if (timeEntryIdsToMark.Count > 0)
                     markTasks.Add(TimeEntriesApi.MarkTimeEntriesInvoicedAsync(new MarkInvoicedRequest
                     {
                         Ids = timeEntryIdsToMark,
-                        PaydayInvoiceNumber = invoiceNumber
+                        PaydayInvoiceNumber = invoiceNumber,
+                        PaydayInvoiceId = invoiceId
                     }));
                 if (materialUsageIdsToMark.Count > 0)
                     markTasks.Add(MaterialsApi.MarkMaterialUsageInvoicedAsync(new MarkInvoicedRequest
                     {
                         Ids = materialUsageIdsToMark,
-                        PaydayInvoiceNumber = invoiceNumber
+                        PaydayInvoiceNumber = invoiceNumber,
+                        PaydayInvoiceId = invoiceId
                     }));
 
                 // Record expense-line billings (partial or full) against this invoice
@@ -1289,6 +1299,7 @@
                     markTasks.Add(ExpensesApi.BillLinesAsync(new BillExpenseLinesRequest
                     {
                         PaydayInvoiceNumber = invoiceNumber,
+                        PaydayInvoiceId = invoiceId,
                         Lines = billingEntries
                     }));
 

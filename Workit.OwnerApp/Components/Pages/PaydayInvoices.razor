@@ -1,6 +1,7 @@
 @page "/payday/invoices"
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @inject IPaydayInvoicesApi InvoicesApi
+@inject IInvoiceReconcileApi ReconcileApi
 @inject BusyService Busy
 @inject IPaydayCustomersApi CustomersApi
 @inject IJSRuntime JS
@@ -566,7 +567,14 @@
     {
         var customersTask = CustomersApi.GetAllAsync(page: 1, perPage: 200);
         var invoicesTask  = FetchPageAsync(page: 1, append: false);
-        await Task.WhenAll(customersTask, invoicesTask);
+        // A draft deleted or cancelled inside Payday still holds its hours here
+        // until something notices — this does, every time the page opens.
+        var reconcileTask = ReconcileApi.ReconcileAsync();
+        await Task.WhenAll(customersTask, invoicesTask, reconcileTask);
+
+        if ((await reconcileTask) is { IsSuccess: true, Value: { InvoicesReleased: > 0 } freed })
+            actionResult = $"✓ {freed.InvoicesReleased} invoice{(freed.InvoicesReleased == 1 ? "" : "s")} no longer in Payday — "
+                         + $"{freed.RecordsReleased} hour, material and expense line{(freed.RecordsReleased == 1 ? " is" : "s are")} free to bill again.";
 
         var cr = await customersTask;
         if (cr.IsSuccess)

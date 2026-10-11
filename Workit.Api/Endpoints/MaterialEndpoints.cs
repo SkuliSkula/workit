@@ -305,6 +305,7 @@ internal static class MaterialEndpoints
                         u.IsInvoiced = true;
                         u.InvoicedAt = now;
                         u.PaydayInvoiceNumber = request.PaydayInvoiceNumber;
+                        u.PaydayInvoiceId     = request.PaydayInvoiceId;
                     }
 
                     await db.SaveChangesAsync(ct);
@@ -333,6 +334,7 @@ internal static class MaterialEndpoints
                         u.IsInvoiced = false;
                         u.InvoicedAt = null;
                         u.PaydayInvoiceNumber = null;
+                        u.PaydayInvoiceId     = null;
                     }
 
                     await db.SaveChangesAsync(ct);

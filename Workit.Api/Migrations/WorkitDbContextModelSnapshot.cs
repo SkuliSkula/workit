@@ -583,6 +583,9 @@ namespace Workit.Api.Migrations
                     b.Property<Guid?>("JobId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PaydayInvoiceId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("PaydayInvoiceNumber")
                         .HasColumnType("integer");
 
@@ -1180,6 +1183,9 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PaydayInvoiceId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("PaydayInvoiceNumber")
                         .HasColumnType("integer");
 
@@ -1454,6 +1460,9 @@ namespace Workit.Api.Migrations
 
                     b.Property<decimal>("OvertimeHours")
                         .HasColumnType("numeric");
+
+                    b.Property<Guid?>("PaydayInvoiceId")
+                        .HasColumnType("uuid");
 
                     b.Property<int?>("PaydayInvoiceNumber")
                         .HasColumnType("integer");

@@ -175,6 +175,7 @@ internal static class ExpenseEndpoints
                             SalePriceExcludingVat = entry.SalePriceExcludingVat,
                             VatPercentage         = entry.VatPercentage,
                             PaydayInvoiceNumber   = request.PaydayInvoiceNumber,
+                            PaydayInvoiceId       = request.PaydayInvoiceId,
                             InvoiceLineId         = entry.InvoiceLineId,
                             BilledAt              = DateTimeOffset.UtcNow
                         });

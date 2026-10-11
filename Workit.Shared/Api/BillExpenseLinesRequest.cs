@@ -7,6 +7,8 @@ namespace Workit.Shared.Api;
 public sealed class BillExpenseLinesRequest
 {
     public int? PaydayInvoiceNumber { get; set; }
+    /// <summary>The Payday invoice id — set even for a draft, which has no number yet.</summary>
+    public Guid? PaydayInvoiceId { get; set; }
     public List<ExpenseLineBillingEntry> Lines { get; set; } = [];
 }
 

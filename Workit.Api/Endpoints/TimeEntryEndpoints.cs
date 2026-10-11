@@ -245,6 +245,7 @@ internal static class TimeEntryEndpoints
                         entry.IsInvoiced = true;
                         entry.InvoicedAt = now;
                         entry.PaydayInvoiceNumber = request.PaydayInvoiceNumber;
+                        entry.PaydayInvoiceId     = request.PaydayInvoiceId;
                     }
 
                     await db.SaveChangesAsync(ct);
@@ -299,6 +300,7 @@ internal static class TimeEntryEndpoints
                         entry.IsInvoiced = false;
                         entry.InvoicedAt = null;
                         entry.PaydayInvoiceNumber = null;
+                        entry.PaydayInvoiceId     = null;
                     }
 
                     await db.SaveChangesAsync(ct);
