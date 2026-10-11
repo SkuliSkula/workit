@@ -24,6 +24,13 @@ public sealed class ExpenseLineBilling
 
     /// <summary>The Payday invoice number this billing was placed on — for traceback.</summary>
     public int? PaydayInvoiceNumber { get; set; }
+    /// <summary>
+    /// The Payday invoice this was put on, by id. A draft has an id from the moment
+    /// it is created but no number until it is issued, so the number alone left a
+    /// draft's records pointing at nothing — and nothing could release them when
+    /// the draft was deleted or cancelled.
+    /// </summary>
+    public Guid? PaydayInvoiceId { get; set; }
 
     /// <summary>The corresponding Workit invoice line id, when available.</summary>
     public Guid? InvoiceLineId { get; set; }

@@ -24,6 +24,13 @@ public sealed class MaterialUsage : ICreatedAudit
 
     /// <summary>The Payday invoice number this usage was billed on.</summary>
     public int? PaydayInvoiceNumber { get; set; }
+    /// <summary>
+    /// The Payday invoice this was put on, by id. A draft has an id from the moment
+    /// it is created but no number until it is issued, so the number alone left a
+    /// draft's records pointing at nothing — and nothing could release them when
+    /// the draft was deleted or cancelled.
+    /// </summary>
+    public Guid? PaydayInvoiceId { get; set; }
 
     /// <summary>Where this record came from. Defaults to Workit for manually created records.</summary>
     public DataSource Source { get; set; } = DataSource.Workit;

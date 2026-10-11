@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Payday;
 using Workit.Api.Services;
 using Workit.Shared.Api;
 using Workit.Shared.Payday;
@@ -62,8 +63,38 @@ internal static class PaydayEndpoints
             ToResult(await api.GetAllAsync(page, perPage, include, dateFrom, dateTo, excludeStatus, customerId, query, order, orderBy)));
         payday.MapGet("/invoices/{id}",            async (IPaydayInvoicesApi api, string id, string? include = "lines,payments") => ToResult(await api.GetByIdAsync(id, include)));
         payday.MapPost("/invoices",                async (IPaydayInvoicesApi api, CreateInvoiceRequest body) => ToResult(await api.CreateAsync(body)));
-        payday.MapPut("/invoices/{id}",            async (IPaydayInvoicesApi api, string id, UpdateInvoiceRequest body) => ToResult(await api.UpdateAsync(id, body)));
-        payday.MapDelete("/invoices/{id}",         async (IPaydayInvoicesApi api, string id) => ToResult(await api.DeleteAsync(id)));
+        // Cancelling an invoice, or issuing a draft, changes what Workit's records
+        // should say: a cancelled invoice bills nothing, so its hours, materials and
+        // expense quantities come back; an issued one now has a number to show.
+        payday.MapPut("/invoices/{id}", async (IPaydayInvoicesApi api, WorkitDbContext db, HttpContext http, string id, UpdateInvoiceRequest body, CancellationToken ct) =>
+        {
+            var result = await api.UpdateAsync(id, body);
+            if (result.IsSuccess && Guid.TryParse(id, out var invoiceId))
+            {
+                var companyId = http.User.ToUserContext().CompanyId;
+                if (InvoiceRelease.ReleasesRecords(body.Status) || InvoiceRelease.ReleasesRecords(result.Value?.Status))
+                    await InvoiceRelease.ReleaseAsync(db, companyId, invoiceId, ct);
+                else if (result.Value?.Number is int number)
+                    await InvoiceRelease.BackfillNumberAsync(db, companyId, invoiceId, number, ct);
+            }
+            return ToResult(result);
+        });
+
+        // Deleting a draft from Workit hands back everything it held. Only after
+        // Payday confirms the delete — a draft that is still there keeps its records.
+        payday.MapDelete("/invoices/{id}", async (IPaydayInvoicesApi api, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.DeleteAsync(id);
+            if (result.IsSuccess && Guid.TryParse(id, out var invoiceId))
+                await InvoiceRelease.ReleaseAsync(db, http.User.ToUserContext().CompanyId, invoiceId, ct);
+            return ToResult(result);
+        });
+
+        // Catches drafts deleted or cancelled inside Payday itself. Run when the
+        // invoice pages open; it asks Payday about each invoice Workit still has
+        // records on, and releases only on a definite "gone" or "cancelled".
+        payday.MapPost("/invoices/reconcile", async (IPaydayInvoicesApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await InvoiceRelease.ReconcileAsync(db, api, http.User.ToUserContext().CompanyId, ct)));
         payday.MapGet("/invoices/{id}/pdf",        async (IPaydayInvoicesApi api, string id) => ToFileResult(await api.GetPdfAsync(id), "application/pdf"));
         payday.MapGet("/invoices/{id}/attachment", async (IPaydayInvoicesApi api, string id) => ToFileResult(await api.GetAttachmentAsync(id), "application/octet-stream"));
 

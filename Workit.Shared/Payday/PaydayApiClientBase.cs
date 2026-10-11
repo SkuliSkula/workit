@@ -28,7 +28,7 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             using var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
-                return ApiResult<T>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+                return ApiResult<T>.Failure(await ReadErrorAsync(response, defaultErrorMessage), (int)response.StatusCode);
 
             var json = await response.Content.ReadAsStringAsync();
             try
@@ -57,7 +57,7 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             using var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
-                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage), (int)response.StatusCode);
 
             var json = await response.Content.ReadAsStringAsync();
             try
@@ -86,7 +86,7 @@ public abstract class PaydayApiClientBase(IHttpClientFactory httpClientFactory, 
             using var response = await client.SendAsync(request);
 
             if (!response.IsSuccessStatusCode)
-                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage));
+                return ApiResult<TResponse>.Failure(await ReadErrorAsync(response, defaultErrorMessage), (int)response.StatusCode);
 
             var json = await response.Content.ReadAsStringAsync();
             try
