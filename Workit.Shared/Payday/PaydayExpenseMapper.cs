@@ -9,8 +9,9 @@ public static class PaydayExpenseMapper
 
     /// <summary>
     /// Maps a Payday expense into a Workit <see cref="Expense"/> (Source = Payday), deriving a
-    /// sale price per line from cost × markup. CompanyId is set on the server for the API path;
-    /// pass it here for direct DB seeding.
+    /// sale price per line from what was actually paid — the vendor's list price less their
+    /// discount — marked up. CompanyId is set on the server for the API path; pass it here for
+    /// direct DB seeding.
     /// </summary>
     public static Expense ToWorkitExpense(this PaydayExpense p, Guid? jobId, Guid companyId = default)
     {
@@ -42,6 +43,7 @@ public static class PaydayExpenseMapper
 
         expense.Lines = (p.Lines ?? []).Select(l =>
         {
+            // The list price, before the vendor's discount — see ExpenseLine.
             var cost = l.UnitPriceExcludingVat ?? 0m;
             return new ExpenseLine
             {
@@ -53,7 +55,10 @@ public static class PaydayExpenseMapper
                 UnitPriceExcludingVat = cost,
                 UnitPriceIncludingVat = l.UnitPriceIncludingVat,
                 MarkupFactor          = DefaultMarkupFactor,
-                SalePriceExcludingVat = Math.Round(cost * DefaultMarkupFactor, 0, MidpointRounding.AwayFromZero),
+                // Marking up the list price and leaving the discount on the line was
+                // the #70 bug; this mapper did it a second time, for every expense
+                // auto-linked by job code and every one imported from the console.
+                SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(cost, l.DiscountPercentage, DefaultMarkupFactor),
                 VatPercentage         = l.VatPercentage,
                 DiscountPercentage    = l.DiscountPercentage,
                 AccountId             = l.AccountId,
