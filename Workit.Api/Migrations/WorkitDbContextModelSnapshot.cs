@@ -1249,6 +1249,56 @@ namespace Workit.Api.Migrations
                     b.ToTable("PasswordResetTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Workit.Shared.Models.PaydayEmployeeCache", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Address")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Mobile")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("PaydayId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Ssn")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Zip")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "PaydayId")
+                        .IsUnique();
+
+                    b.ToTable("PaydayEmployees", (string)null);
+                });
+
             modelBuilder.Entity("Workit.Shared.Models.PaydayProductCache", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1317,6 +1367,34 @@ namespace Workit.Api.Migrations
                     b.HasIndex("CompanyId", "Sku");
 
                     b.ToTable("PaydayProducts", (string)null);
+                });
+
+            modelBuilder.Entity("Workit.Shared.Models.PaydaySnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Json")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("PaydaySnapshots", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.PayrollExport", b =>
