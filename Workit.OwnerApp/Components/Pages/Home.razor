@@ -8,8 +8,12 @@
 @inject IEmployeesApi EmployeesApi
 @inject IJobsApi JobsApi
 @inject ITimeEntriesApi TimeEntriesApi
+@inject IMaterialsApi MaterialsApi
+@inject IAbsenceApi AbsenceApi
+@inject IPayrollApi PayrollApi
 @inject IAuthApi AuthApi
 @inject IPaydayInvoicesApi PaydayInvoicesApi
+@using Workit.Shared.Utilities
 
 <PageTitle>Home</PageTitle>
 
@@ -17,7 +21,7 @@
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Welcome, Admin</FluentLabel>
-        <p>Select a company to view its dashboard, or go to the Admin page to register a new one.</p>
+        <p>Select a company to open it, or go to the Admin page to register a new one.</p>
         <div class="dashboard-actions" style="margin-bottom:1rem;">
             <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/admin"))">Manage Companies</FluentButton>
             <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
@@ -47,7 +51,7 @@
 else if (!string.IsNullOrWhiteSpace(loadError))
 {
     <FluentCard Class="dashboard-shell">
-        <FluentLabel Typo="Typography.PaneHeader">Dashboard unavailable</FluentLabel>
+        <FluentLabel Typo="Typography.PaneHeader">Home unavailable</FluentLabel>
         <p>@loadError</p>
         <div class="dashboard-actions">
             <FluentButton Appearance="Appearance.Accent" @onclick="RetryOrLoginAsync">Retry</FluentButton>
@@ -58,14 +62,14 @@ else if (!string.IsNullOrWhiteSpace(loadError))
 else if (isLoading)
 {
     <FluentCard Class="dashboard-shell">
-        <FluentLabel Typo="Typography.PaneHeader">Loading monthly dashboard...</FluentLabel>
+        <FluentLabel Typo="Typography.PaneHeader">Getting today ready…</FluentLabel>
     </FluentCard>
 }
 else if (!isOwnerSession)
 {
     <FluentCard Class="dashboard-shell">
         <FluentLabel Typo="Typography.PaneHeader">Access restricted</FluentLabel>
-        <p>The monthly dashboard is available for owner accounts.</p>
+        <p>The owner home page is available for owner accounts.</p>
         <div class="dashboard-actions">
             <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
         </div>
@@ -73,7 +77,7 @@ else if (!isOwnerSession)
 }
 else
 {
-    <section class="dashboard">
+    <section class="dashboard today">
         @if (isAdminSession)
         {
             <FluentCard Class="dashboard-shell" Style="background:#eff6ff; border:1px solid #93c5fd;">
@@ -88,318 +92,277 @@ else
                 </div>
             </FluentCard>
         }
-        <FluentCard Class="dashboard-shell dashboard-hero">
-            <div class="hero-copy">
-                <span class="eyebrow">Monthly view</span>
-                <h1>@(company?.Name ?? "Owner Dashboard")</h1>
-                <p>
-                    Review labor this month with fast rollups by customer, job, and employee.
-                    The most useful default is a ranked operations board: total hours at the top, then who consumed the hours underneath.
-                </p>
+
+        @* ── Today ── *@
+        <FluentCard Class="dashboard-shell today-hero">
+            <div class="today-hero-copy">
+                <span class="eyebrow">@today.ToDateTime(TimeOnly.MinValue).ToString("dddd d MMMM")</span>
+                <h1>@Greeting@(string.IsNullOrEmpty(FirstName) ? "" : $", {FirstName}")</h1>
+                <p>@HeroLine</p>
             </div>
-
-            <div class="hero-controls">
-                <div class="month-toolbar">
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="PreviousMonthAsync">Previous</FluentButton>
-                    <input class="month-picker" type="month" value="@selectedMonthValue" @onchange="OnMonthChangedAsync" />
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="NextMonthAsync">Next</FluentButton>
-                </div>
-
-                <div class="hero-meta">
-                    <div>
-                        <span class="meta-label">Period</span>
-                        <strong>@monthTitle</strong>
-                    </div>
-                    <div>
-                        <span class="meta-label">Worked days</span>
-                        <strong>@dailyLoads.Count(x => x.Hours > 0m)</strong>
-                    </div>
-                    <div>
-                        <span class="meta-label">Entries</span>
-                        <strong>@timeEntries.Count</strong>
-                    </div>
-                </div>
-
-                <div class="dashboard-actions">
-                    @if (userCompanies.Count > 1)
-                    {
-                        <FluentButton Appearance="Appearance.Accent" @onclick="OpenSwitchCompanyDialog">
-                            <FluentIcon Value="new Size24.ArrowSwap()" /> Switch Company
-                        </FluentButton>
-                    }
-                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Manage Jobs</FluentButton>
-                    <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/employees"))">Manage Employees</FluentButton>
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="LogoutAsync">Logout</FluentButton>
-                </div>
+            <div class="today-actions">
+                @if (userCompanies.Count > 1)
+                {
+                    <FluentButton Appearance="Appearance.Stealth" @onclick="OpenSwitchCompanyDialog">
+                        <FluentIcon Value="new Size24.ArrowSwap()" /> Switch company
+                    </FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Jobs</FluentButton>
+                @if (company?.HasPaydayCredentials == true)
+                {
+                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/payday/invoice-builder"))">Invoice builder</FluentButton>
+                }
+                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/dashboard"))">Monthly dashboard</FluentButton>
             </div>
         </FluentCard>
 
-        <section class="dashboard-kpis">
-            <FluentCard Class="kpi-card">
-                <span class="kpi-label">Total Hours</span>
-                <strong>@totalHours.ToString("0.##")</strong>
-                <span class="kpi-foot">@averageHoursPerWorkedDay.ToString("0.##") avg per worked day</span>
-            </FluentCard>
-
-            <FluentCard Class="kpi-card kpi-card--overtime">
-                <span class="kpi-label">Overtime Hours</span>
-                <strong>@totalOvertimeHours.ToString("0.##")</strong>
-                <span class="kpi-foot">@overtimeRatioLabel of total hours</span>
-            </FluentCard>
-
-            <FluentCard Class="kpi-card kpi-card--invoice" title="Hours on time entries not yet marked as invoiced this month">
-                <span class="kpi-label">To Invoice</span>
-                <strong>@uninvoicedHours.ToString("0.##")<span class="kpi-unit"> h</span></strong>
-                <span class="kpi-foot">@invoicedHours.ToString("0.##") h invoiced · @invoicedRatioLabel of the month</span>
-                <div class="invoice-progress" aria-hidden="true">
-                    <div class="invoice-progress-fill" style="@($"width:{invoicedPercent:0.##}%")"></div>
-                </div>
-                @* Money side, from Payday: what has been invoiced but not yet paid. *@
-                @if (paydayOutstanding is decimal outstanding)
-                {
-                    <span class="kpi-foot" style="margin-top:0.35rem;">
-                        <a href="/payday/invoices" style="color:inherit;">@outstanding.ToString("N0") kr. outstanding in Payday</a>
-                        @(paydayOpenCount > 0 ? $" · {paydayOpenCount} open" : "")
-                    </span>
-                }
-            </FluentCard>
-
-            <FluentCard Class="kpi-card">
-                <span class="kpi-label">Customers Active</span>
-                <strong>@customerSummaries.Count</strong>
-                <span class="kpi-foot">@TopName(customerSummaries, "No customer activity")</span>
-            </FluentCard>
-
-            <FluentCard Class="kpi-card">
-                <span class="kpi-label">Jobs Running</span>
-                <strong>@jobSummaries.Count</strong>
-                <span class="kpi-foot">@TopName(jobSummaries, "No jobs logged")</span>
-            </FluentCard>
-
-            <FluentCard Class="kpi-card">
-                <span class="kpi-label">Employees Logged</span>
-                <strong>@employeeSummaries.Count</strong>
-                <span class="kpi-foot">@TopName(employeeSummaries, "No employee activity")</span>
-            </FluentCard>
+        <section class="today-kpis">
+            <a class="today-kpi" href="/timeentries">
+                <span class="kpi-label">Hours today</span>
+                <strong>@HoursOn(today).ToString("0.##")</strong>
+                <span class="kpi-foot">@CrewOn(today) @(CrewOn(today) == 1 ? "person" : "people") logged</span>
+            </a>
+            <a class="today-kpi" href="/timeentries">
+                <span class="kpi-label">This week</span>
+                <strong>@HoursThisWeek.ToString("0.##")</strong>
+                <span class="kpi-foot">@HoursLastWeekSoFar.ToString("0.##") h by this day last week</span>
+            </a>
+            <a class="today-kpi" href="@(company?.HasPaydayCredentials == true ? "/payday/invoice-builder" : "/timeentries")">
+                <span class="kpi-label">Ready to invoice</span>
+                <strong>@UninvoicedHours.ToString("0.##")<span class="kpi-unit"> h</span></strong>
+                <span class="kpi-foot">on @toInvoice.Count @(toInvoice.Count == 1 ? "job" : "jobs")@(UninvoicedMaterialLines > 0 ? $" · {UninvoicedMaterialLines} material lines" : "")</span>
+            </a>
+            @if (paydayOutstanding is decimal outstanding)
+            {
+                <a class="today-kpi" href="/payday/invoices">
+                    <span class="kpi-label">Outstanding</span>
+                    <strong>@outstanding.ToString("N0")<span class="kpi-unit"> kr.</span></strong>
+                    <span class="kpi-foot">@paydayOpenCount open @(paydayOpenCount == 1 ? "invoice" : "invoices")@(overdue.Count > 0 ? $" · {overdue.Count} overdue" : "")</span>
+                </a>
+            }
         </section>
 
-        <FluentCard Class="dashboard-shell">
-            <div class="section-head">
-                <div>
-                    <span class="eyebrow">Drill down</span>
-                    <h2>Filter the month</h2>
-                </div>
-                @if (HasActiveFilters)
-                {
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="ClearFilters">Clear filters</FluentButton>
-                }
-            </div>
-
-            <div class="filter-grid">
-                <label class="filter-field">
-                    <span>Customer</span>
-                    <select class="filter-select" value="@selectedCustomerId" @onchange="OnCustomerFilterChanged">
-                        <option value="">All customers</option>
-                        @foreach (var customer in AvailableCustomers)
-                        {
-                            <option value="@customer.Id">@customer.Name</option>
-                        }
-                    </select>
-                </label>
-
-                <label class="filter-field">
-                    <span>Job</span>
-                    <select class="filter-select" value="@selectedJobId" @onchange="OnJobFilterChanged">
-                        <option value="">All jobs</option>
-                        @foreach (var job in AvailableJobs)
-                        {
-                            <option value="@job.Id">@job.Code - @job.Name</option>
-                        }
-                    </select>
-                </label>
-
-                <label class="filter-field">
-                    <span>Employee</span>
-                    <select class="filter-select" value="@selectedEmployeeId" @onchange="OnEmployeeFilterChanged">
-                        <option value="">All employees</option>
-                        @foreach (var employee in AvailableEmployees)
-                        {
-                            <option value="@employee.Id">@employee.DisplayName</option>
-                        }
-                    </select>
-                </label>
-            </div>
-
-            @if (HasActiveFilters)
-            {
-                <div class="active-filters">
-                    @if (SelectedCustomer is not null)
-                    {
-                        <button type="button" class="filter-chip" @onclick="@(() => ToggleCustomerFilter(null))">
-                            Customer: @SelectedCustomer.Name
-                        </button>
-                    }
-                    @if (SelectedJob is not null)
-                    {
-                        <button type="button" class="filter-chip" @onclick="@(() => ToggleJobFilter(null))">
-                            Job: @SelectedJob.Code - @SelectedJob.Name
-                        </button>
-                    }
-                    @if (SelectedEmployee is not null)
-                    {
-                        <button type="button" class="filter-chip" @onclick="@(() => ToggleEmployeeFilter(null))">
-                            Employee: @SelectedEmployee.DisplayName
-                        </button>
-                    }
-                </div>
-            }
-        </FluentCard>
-
-        <FluentCard Class="dashboard-shell">
-            <div class="section-head">
-                <div>
-                    <span class="eyebrow">Daily load</span>
-                    <h2>Hours across @monthTitle</h2>
-                </div>
-                <p class="section-note">A quick monthly scan to spot thin days, spikes, and uneven staffing.</p>
-            </div>
-
-            <div class="day-strip">
-                @foreach (var day in dailyLoads)
-                {
-                    <div class="day-cell @(day.Hours > 0m ? "day-cell--active" : "day-cell--empty")">
-                        <span class="day-number">@day.Day</span>
-                        <span class="day-hours">@(day.Hours > 0m ? day.Hours.ToString("0.#") : "–")</span>
-                    </div>
-                }
-            </div>
-        </FluentCard>
-
-        <section class="dashboard-panels">
+        <div class="today-grid">
+            @* ── Needs you ── *@
             <FluentCard Class="dashboard-shell">
                 <div class="section-head">
                     <div>
-                        <span class="eyebrow">By customer</span>
-                        <h2>Customer load</h2>
+                        <span class="eyebrow">Needs you</span>
+                        <h2>@(ActionCount == 0 ? "All clear" : $"{ActionCount} {(ActionCount == 1 ? "thing" : "things")} to act on")</h2>
                     </div>
                 </div>
-                @if (customerSummaries.Count == 0)
+
+                @if (ActionCount == 0)
                 {
-                    <p>No customer hours were logged this month.</p>
+                    <p class="today-empty">Nothing is waiting on you — no requests to answer, nothing overdue, every crew member logged their day.</p>
                 }
-                else
+
+                @if (pendingAbsences.Count > 0)
                 {
-                    @foreach (var item in customerSummaries.Take(6))
-                    {
-                        <button type="button" class="summary-row summary-button @(IsSelectedCustomer(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => ToggleCustomerFilter(item.Id))">
-                            <div class="summary-copy">
-                                <strong>@item.Name</strong>
-                                <span>@item.EntryCount entries@(item.UninvoicedHours > 0m ? $" · {item.UninvoicedHours:0.##} h to invoice" : " · all invoiced")</span>
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--blue"></span>
+                            <strong>Absence @(pendingAbsences.Count == 1 ? "request" : "requests") to answer</strong>
+                            <a class="act-link" href="/absence">Absence →</a>
+                        </div>
+                        @foreach (var a in pendingAbsences)
+                        {
+                            <div class="act-row">
+                                <div class="act-main">
+                                    <span class="act-title">@EmployeeName(a.EmployeeId) · @AbsenceLabel(a.Type)</span>
+                                    <span class="act-sub">@DateRange(a.StartDate, a.EndDate)@(a.HoursPerDay != 8m ? $" · {a.HoursPerDay:0.##} h/day" : "")@(string.IsNullOrWhiteSpace(a.Notes) ? "" : $" · “{a.Notes}”")</span>
+                                </div>
+                                <div class="act-buttons">
+                                    <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" Disabled="@(reviewingId == a.Id)" @onclick="@(() => ReviewAsync(a, AbsenceStatus.Approved))">Approve</FluentButton>
+                                    <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" Disabled="@(reviewingId == a.Id)" @onclick="@(() => ReviewAsync(a, AbsenceStatus.Denied))">Deny</FluentButton>
+                                </div>
                             </div>
-                            <div class="summary-bar-wrap">
-                                <div class="summary-bar" style="@($"width:{item.WidthPercent:0.##}%")"></div>
-                                <div class="summary-bar summary-bar--open" style="@($"left:{item.InvoicedWidthPercent:0.##}%; width:{item.WidthPercent - item.InvoicedWidthPercent:0.##}%")"></div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(reviewError))
+                        {
+                            <p class="act-error">@reviewError</p>
+                        }
+                    </div>
+                }
+
+                @if (missingHours.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--amber"></span>
+                            <strong>No hours logged for @DayName(lastWorkday)</strong>
+                            <a class="act-link" href="/timeentries">Time entries →</a>
+                        </div>
+                        <div class="act-row">
+                            <div class="act-main">
+                                <span class="act-title">@string.Join(", ", missingHours.Select(e => e.DisplayName))</span>
+                                <span class="act-sub">Logged hours in the last 30 days, nothing on @lastWorkday.ToString("d MMM") and no approved absence.</span>
                             </div>
-                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
-                        </button>
-                    }
+                        </div>
+                    </div>
+                }
+
+                @if (overdue.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--red"></span>
+                            <strong>Overdue @(overdue.Count == 1 ? "invoice" : "invoices")</strong>
+                            <a class="act-link" href="/payday/invoices">Invoices →</a>
+                        </div>
+                        @foreach (var i in overdue.Take(5))
+                        {
+                            <div class="act-row">
+                                <div class="act-main">
+                                    <span class="act-title">#@i.Number · @(i.Customer?.Name ?? "—")</span>
+                                    <span class="act-sub">Due @i.DueDate?.ToString("d MMM") · @DaysOverdue(i) days overdue</span>
+                                </div>
+                                <span class="act-amount">@i.AmountIncludingVat.ToString("N0") kr.</span>
+                            </div>
+                        }
+                        @if (overdue.Count > 5) { <p class="act-more">and @(overdue.Count - 5) more</p> }
+                    </div>
+                }
+
+                @if (drafts.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--slate"></span>
+                            <strong>@(drafts.Count == 1 ? "Draft" : "Drafts") not issued yet</strong>
+                            <a class="act-link" href="/payday/invoices">Invoices →</a>
+                        </div>
+                        @foreach (var d in drafts.Take(5))
+                        {
+                            <div class="act-row">
+                                <div class="act-main">
+                                    <span class="act-title">@(d.Customer?.Name ?? "—")</span>
+                                    <span class="act-sub">@(string.IsNullOrWhiteSpace(d.Description) ? "Draft" : d.Description) · made @d.Created?.ToString("d MMM")</span>
+                                </div>
+                                <span class="act-amount">@d.AmountIncludingVat.ToString("N0") kr.</span>
+                            </div>
+                        }
+                        @if (drafts.Count > 5) { <p class="act-more">and @(drafts.Count - 5) more</p> }
+                    </div>
+                }
+
+                @if (payrollDue is DateOnly payrollMonth)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--blue"></span>
+                            <strong>@payrollMonth.ToDateTime(TimeOnly.MinValue).ToString("MMMM") payroll not sent to Payday</strong>
+                            <a class="act-link" href="/payday/payroll">Payroll →</a>
+                        </div>
+                        <div class="act-row">
+                            <div class="act-main">
+                                <span class="act-sub">@HoursIn(payrollMonth).ToString("0.##") h logged that month by @CrewIn(payrollMonth) @(CrewIn(payrollMonth) == 1 ? "person" : "people").</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (toInvoice.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--green"></span>
+                            <strong>Work ready to invoice</strong>
+                            @if (company?.HasPaydayCredentials == true)
+                            {
+                                <a class="act-link" href="/payday/invoice-builder">Invoice builder →</a>
+                            }
+                        </div>
+                        @foreach (var row in toInvoice.Take(5))
+                        {
+                            <a class="act-row act-row--link" href="/jobs/@row.Job.Id">
+                                <div class="act-main">
+                                    <span class="act-title">@row.Job.Code · @row.Job.Name</span>
+                                    <span class="act-sub">@CustomerName(row.Job.CustomerId) · since @row.Oldest.ToString("d MMM")@(row.MaterialLines > 0 ? $" · {row.MaterialLines} material lines" : "")</span>
+                                </div>
+                                <span class="act-amount">@row.Hours.ToString("0.##") h</span>
+                            </a>
+                        }
+                        @if (toInvoice.Count > 5) { <p class="act-more">and @(toInvoice.Count - 5) more jobs</p> }
+                    </div>
+                }
+
+                @if (waitingJobs.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--amber"></span>
+                            <strong>@(waitingJobs.Count == 1 ? "Job" : "Jobs") on hold</strong>
+                            <a class="act-link" href="/kanban">Kanban →</a>
+                        </div>
+                        @foreach (var j in waitingJobs)
+                        {
+                            <a class="act-row act-row--link" href="/jobs/@j.Id">
+                                <div class="act-main">
+                                    <span class="act-title">@j.Code · @j.Name</span>
+                                    <span class="act-sub">@(string.IsNullOrWhiteSpace(j.WaitingReason) ? "On hold" : j.WaitingReason)@(j.KanbanWaitingAt is DateTimeOffset since ? $" · {(int)(DateTimeOffset.UtcNow - since).TotalDays} days" : "")</span>
+                                </div>
+                            </a>
+                        }
+                    </div>
+                }
+
+                @if (unassignedJobs.Count > 0)
+                {
+                    <div class="act">
+                        <div class="act-head">
+                            <span class="act-dot act-dot--slate"></span>
+                            <strong>@(unassignedJobs.Count == 1 ? "Job" : "Jobs") nobody is assigned to</strong>
+                            <a class="act-link" href="/jobs">Jobs →</a>
+                        </div>
+                        @foreach (var j in unassignedJobs.Take(5))
+                        {
+                            <a class="act-row act-row--link" href="/jobs/@j.Id">
+                                <div class="act-main">
+                                    <span class="act-title">@j.Code · @j.Name</span>
+                                    <span class="act-sub">The crew can't see it in their apps until someone is assigned.</span>
+                                </div>
+                            </a>
+                        }
+                        @if (unassignedJobs.Count > 5) { <p class="act-more">and @(unassignedJobs.Count - 5) more</p> }
+                    </div>
                 }
             </FluentCard>
 
+            @* ── Latest work ── *@
             <FluentCard Class="dashboard-shell">
                 <div class="section-head">
                     <div>
-                        <span class="eyebrow">By job</span>
-                        <h2>Job load</h2>
+                        <span class="eyebrow">Latest work</span>
+                        <h2>From the crew</h2>
                     </div>
+                    <a class="act-link" href="/timeentries">All time entries →</a>
                 </div>
-                @if (jobSummaries.Count == 0)
+
+                @if (feed.Count == 0)
                 {
-                    <p>No job hours were logged this month.</p>
+                    <p class="today-empty">Nothing logged in the last 7 days.</p>
                 }
-                else
+                @foreach (var day in feed.GroupBy(f => f.Date))
                 {
-                    @foreach (var item in jobSummaries.Take(8))
+                    <div class="feed-day">
+                        <span class="feed-day-name">@DayName(day.Key)</span>
+                        <span class="feed-day-total">@day.Where(f => f.Hours is not null).Sum(f => f.Hours ?? 0).ToString("0.##") h</span>
+                    </div>
+                    @foreach (var item in day)
                     {
-                        <button type="button" class="summary-row summary-button @(IsSelectedJob(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => ToggleJobFilter(item.Id))">
-                            <div class="summary-copy">
-                                <strong>@item.Name</strong>
-                                <span>@item.EntryCount entries@(item.UninvoicedHours > 0m ? $" · {item.UninvoicedHours:0.##} h to invoice" : " · all invoiced")</span>
-                            </div>
-                            <div class="summary-bar-wrap">
-                                <div class="summary-bar coral" style="@($"width:{item.WidthPercent:0.##}%")"></div>
-                                @* The part of the bar still waiting to be invoiced, lighter, on the right. *@
-                                <div class="summary-bar summary-bar--open" style="@($"left:{item.InvoicedWidthPercent:0.##}%; width:{item.WidthPercent - item.InvoicedWidthPercent:0.##}%")"></div>
-                            </div>
-                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
-                        </button>
+                        <a class="feed-row" href="@(item.JobId is Guid jobId ? $"/jobs/{jobId}" : "/timeentries")">
+                            <span class="feed-who">@item.Who</span>
+                            <span class="feed-what">
+                                <span class="feed-job">@item.Job</span>
+                                @if (!string.IsNullOrWhiteSpace(item.Note)) { <span class="feed-note">@item.Note</span> }
+                            </span>
+                            <span class="feed-amount @(item.Hours is null ? "feed-amount--material" : "")">@item.Amount</span>
+                        </a>
                     }
                 }
             </FluentCard>
-
-            <FluentCard Class="dashboard-shell">
-                <div class="section-head">
-                    <div>
-                        <span class="eyebrow">By employee</span>
-                        <h2>Team load</h2>
-                    </div>
-                </div>
-                @if (employeeSummaries.Count == 0)
-                {
-                    <p>No employee hours were logged this month.</p>
-                }
-                else
-                {
-                    @foreach (var item in employeeSummaries.Take(8))
-                    {
-                        <button type="button" class="summary-row summary-button @(IsSelectedEmployee(item.Id) ? "is-selected" : string.Empty)" @onclick="@(() => ToggleEmployeeFilter(item.Id))">
-                            <div class="summary-copy">
-                                <strong>@item.Name</strong>
-                                <span>@item.EntryCount entries</span>
-                            </div>
-                            <div class="summary-bar-wrap">
-                                <div class="summary-bar gold" style="@($"width:{item.WidthPercent:0.##}%")"></div>
-                            </div>
-                            <div class="summary-value">@item.Hours.ToString("0.##") h</div>
-                        </button>
-                    }
-                }
-            </FluentCard>
-        </section>
-
-        <FluentCard Class="dashboard-shell">
-            <div class="section-head">
-                <div>
-                    <span class="eyebrow">Latest entries</span>
-                    <h2>Recent activity</h2>
-                </div>
-                <p class="section-note">Most recent submissions inside the selected month.</p>
-            </div>
-
-            @if (recentEntries.Count == 0)
-            {
-                <p>No hours have been logged for this month yet.</p>
-            }
-            else
-            {
-                <div class="entry-table">
-                    <div class="entry-table-head">Date</div>
-                    <div class="entry-table-head">Employee</div>
-                    <div class="entry-table-head">Job</div>
-                    <div class="entry-table-head">Customer</div>
-                    <div class="entry-table-head right">Hours</div>
-
-                    @foreach (var entry in recentEntries)
-                    {
-                        <div>@entry.WorkDate.ToString("yyyy-MM-dd")</div>
-                        <div>@entry.EmployeeName</div>
-                        <div>@entry.JobName</div>
-                        <div>@entry.CustomerName</div>
-                        <div class="right">@entry.Hours.ToString("0.##")</div>
-                    }
-                </div>
-            }
-        </FluentCard>
+        </div>
     </section>
 }
 
@@ -454,9 +417,6 @@ else
 @code {
     private LoginResponse? session;
     private Company? company;
-    /// <summary>Unpaid total of the company's SENT invoices in Payday; null when not connected or unavailable.</summary>
-    private decimal? paydayOutstanding;
-    private int paydayOpenCount;
     private bool isLoading = true;
     private string? loadError;
 
@@ -467,81 +427,116 @@ else
     private bool isSwitching;
     private Guid? switchingToCompanyId;
     private string? switchError;
-    private DateOnly selectedMonth = DateOnly.FromDateTime(DateTime.Today);
-    private List<Customer> customers = [];
-    private List<Employee> employees = [];
-    private List<Job> jobs = [];
-    private List<TimeEntry> timeEntries = [];
-    private List<AggregateRow> customerSummaries = [];
-    private List<AggregateRow> jobSummaries = [];
-    private List<AggregateRow> employeeSummaries = [];
-    private List<DayLoad> dailyLoads = [];
-    private List<RecentEntryRow> recentEntries = [];
-    private decimal totalHours;
-    private decimal totalOvertimeHours;
-    private decimal invoicedHours;
-    private decimal uninvoicedHours;
-    private decimal invoicedPercent => totalHours == 0m ? 0m : decimal.Round(invoicedHours / totalHours * 100m, 1);
-    private string invoicedRatioLabel => totalHours == 0m ? "0%" : $"{invoicedPercent:0.#}%";
-    private decimal averageHoursPerWorkedDay;
-
-    private string overtimeRatioLabel => totalHours == 0m
-        ? "no hours logged"
-        : $"{(totalOvertimeHours / totalHours * 100m):0.#}%";
-    private Guid? selectedCustomerId;
-    private Guid? selectedJobId;
-    private Guid? selectedEmployeeId;
 
     private bool isOwnerSession => string.Equals(session?.Role, WorkitRoles.Owner, StringComparison.Ordinal)
                                   || string.Equals(session?.Role, WorkitRoles.Admin, StringComparison.Ordinal);
     private bool isAdminSession => string.Equals(session?.Role, WorkitRoles.Admin, StringComparison.Ordinal);
-    private string selectedMonthValue => $"{selectedMonth.Year:D4}-{selectedMonth.Month:D2}";
-    private string monthTitle => selectedMonth.ToDateTime(TimeOnly.MinValue).ToString("MMMM yyyy");
-    private bool HasActiveFilters => selectedCustomerId is not null || selectedJobId is not null || selectedEmployeeId is not null;
-    private Customer? SelectedCustomer => customers.FirstOrDefault(x => x.Id == selectedCustomerId);
-    private Job? SelectedJob => jobs.FirstOrDefault(x => x.Id == selectedJobId);
-    private Employee? SelectedEmployee => employees.FirstOrDefault(x => x.Id == selectedEmployeeId);
-    private IReadOnlyList<Customer> AvailableCustomers => customers
-        .Where(x => timeEntries.Any(entry => JobMatchesCustomer(entry.JobId, x.Id) && EntryMatchesSelectedJobAndEmployee(entry)))
-        .OrderBy(x => x.Name)
-        .ToList();
-    private IReadOnlyList<Job> AvailableJobs => jobs
-        .Where(x => EntryMatchesSelectedCustomerForJob(x) && timeEntries.Any(entry => entry.JobId == x.Id && EntryMatchesSelectedEmployee(entry)))
-        .OrderBy(x => x.Code)
-        .ThenBy(x => x.Name)
-        .ToList();
-    private IReadOnlyList<Employee> AvailableEmployees => employees
-        .Where(x => timeEntries.Any(entry => entry.EmployeeId == x.Id && EntryMatchesSelectedCustomerAndJob(entry)))
-        .OrderBy(x => x.DisplayName)
-        .ToList();
 
-    private async Task LoadPaydayOutstandingAsync()
+    // ── What the page is built from ──────────────────────────────────────────
+    private readonly DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly lastWorkday;
+    private List<Customer> customers = [];
+    private List<Employee> employees = [];
+    private List<Job> jobs = [];
+    private List<TimeEntry> entries = [];
+    private List<MaterialUsage> usages = [];
+    private Dictionary<Guid, string> materialNames = [];
+
+    // ── Needs you ────────────────────────────────────────────────────────────
+    private List<AbsenceRequest> pendingAbsences = [];
+    private List<Employee> missingHours = [];
+    private List<PaydayInvoice> overdue = [];
+    private List<PaydayInvoice> drafts = [];
+    private DateOnly? payrollDue;
+    private List<InvoiceRow> toInvoice = [];
+    private List<Job> waitingJobs = [];
+    private List<Job> unassignedJobs = [];
+    private decimal? paydayOutstanding;
+    private int paydayOpenCount;
+    private Guid? reviewingId;
+    private string? reviewError;
+
+    private List<FeedItem> feed = [];
+
+    /// <summary>Things the owner can act on; work ready to invoice counts once, however many jobs.</summary>
+    private int ActionCount =>
+        pendingAbsences.Count + (missingHours.Count > 0 ? 1 : 0) + overdue.Count + drafts.Count
+        + (payrollDue is null ? 0 : 1) + (toInvoice.Count > 0 ? 1 : 0) + waitingJobs.Count + unassignedJobs.Count;
+
+    private string Greeting => DateTime.Now.Hour switch { < 12 => "Good morning", < 18 => "Good afternoon", _ => "Good evening" };
+    /// <summary>The owner's own employee record names them; the company's owner field otherwise.</summary>
+    private string FirstName =>
+        ((employees.FirstOrDefault(e => e.Id == session?.EmployeeId)?.DisplayName ?? company?.Owner ?? "")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()) ?? "";
+    private string HeroLine
     {
-        var result = await PaydayInvoicesApi.GetAllAsync(page: 1, perPage: 1, include: null, excludeStatus: "DRAFT,CANCELLED,PAID");
-        if (result.IsSuccess && result.Value?.Summary is { } summary)
+        get
         {
-            paydayOutstanding = summary.UnpaidAmount;
-            paydayOpenCount   = summary.TotalCount;
-            await InvokeAsync(StateHasChanged);
+            var crew = CrewOn(today);
+            var hours = HoursOn(today);
+            return crew == 0
+                ? $"No hours logged yet today. {DayName(lastWorkday)} the crew logged {HoursOn(lastWorkday):0.##} h."
+                : $"{crew} {(crew == 1 ? "person has" : "people have")} logged {hours:0.##} h today.";
         }
     }
+
+    private decimal HoursOn(DateOnly day) => entries.Where(e => e.WorkDate == day).Sum(e => e.Hours + e.OvertimeHours);
+    private int CrewOn(DateOnly day) => entries.Where(e => e.WorkDate == day).Select(e => e.EmployeeId).Distinct().Count();
+    private DateOnly WeekStart(DateOnly day) => day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
+    private decimal HoursThisWeek => entries.Where(e => e.WorkDate >= WeekStart(today) && e.WorkDate <= today).Sum(e => e.Hours + e.OvertimeHours);
+    private decimal HoursLastWeekSoFar
+    {
+        get
+        {
+            var start = WeekStart(today).AddDays(-7);
+            var end = today.AddDays(-7);
+            return entries.Where(e => e.WorkDate >= start && e.WorkDate <= end).Sum(e => e.Hours + e.OvertimeHours);
+        }
+    }
+    private decimal UninvoicedHours => toInvoice.Sum(r => r.Hours);
+    private int UninvoicedMaterialLines => toInvoice.Sum(r => r.MaterialLines);
+    private decimal HoursIn(DateOnly month) => entries.Where(e => e.WorkDate.Year == month.Year && e.WorkDate.Month == month.Month).Sum(e => e.Hours + e.OvertimeHours);
+    private int CrewIn(DateOnly month) => entries.Where(e => e.WorkDate.Year == month.Year && e.WorkDate.Month == month.Month).Select(e => e.EmployeeId).Distinct().Count();
+
+    private string EmployeeName(Guid id) => employees.FirstOrDefault(e => e.Id == id)?.DisplayName ?? "Someone";
+    private string CustomerName(Guid id) => customers.FirstOrDefault(c => c.Id == id)?.Name ?? "—";
+    private int DaysOverdue(PaydayInvoice i) => i.DueDate is DateTime due ? Math.Max(0, today.DayNumber - DateOnly.FromDateTime(due).DayNumber) : 0;
+
+    private string DayName(DateOnly day) =>
+        day == today ? "Today" :
+        day == today.AddDays(-1) ? "Yesterday" :
+        day.ToDateTime(TimeOnly.MinValue).ToString("dddd d MMM");
+
+    private static string DateRange(DateOnly from, DateOnly to) =>
+        from == to ? from.ToString("d MMM") : $"{from:d MMM} – {to:d MMM} ({to.DayNumber - from.DayNumber + 1} days)";
+
+    private static string AbsenceLabel(AbsenceType type) => type switch
+    {
+        AbsenceType.Vacation       => "Vacation",
+        AbsenceType.SickLeave      => "Sick leave",
+        AbsenceType.ParentalLeave  => "Parental leave",
+        AbsenceType.PersonalLeave  => "Personal leave",
+        AbsenceType.Bereavement    => "Bereavement",
+        AbsenceType.UnpaidLeave    => "Unpaid leave",
+        AbsenceType.PublicHoliday  => "Public holiday",
+        AbsenceType.WorkInjury     => "Work injury",
+        AbsenceType.UnionLeave     => "Union leave",
+        AbsenceType.StudyLeave     => "Study leave",
+        AbsenceType.SickChildLeave => "Sick child",
+        _                          => type.ToString(),
+    };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-        {
-            return;
-        }
-
-        await LoadDashboardAsync();
+        if (!firstRender) return;
+        await LoadAsync();
         StateHasChanged();
     }
 
-    private async Task LoadDashboardAsync()
+    private async Task LoadAsync()
     {
         isLoading = true;
         loadError = null;
-
         try
         {
             session = await AuthSession.GetSessionAsync();
@@ -550,90 +545,72 @@ else
                 Navigation.NavigateTo("/login", forceLoad: true);
                 return;
             }
+            if (!isOwnerSession) return;
 
-            if (!isOwnerSession)
-            {
-                ResetDashboard();
-                return;
-            }
-
-            // Admin without a real company — show pick-company landing
             if (isAdminSession)
             {
-                var adminCompaniesResult = await AuthApi.GetUserCompaniesAsync();
-                userCompanies = adminCompaniesResult.IsSuccess && adminCompaniesResult.Value is not null
-                    ? adminCompaniesResult.Value
-                    : [];
+                var adminCompanies = await AuthApi.GetUserCompaniesAsync();
+                userCompanies = adminCompanies.IsSuccess && adminCompanies.Value is not null ? adminCompanies.Value : [];
             }
 
             var companyResult = await CompanyApi.GetCompanyAsync();
             if (!companyResult.IsSuccess || companyResult.Value is null)
             {
-                if (isAdminSession)
-                {
-                    // Admin hasn't entered a company yet — show landing instead of error
-                    adminNeedsCompany = true;
-                    ResetDashboard();
-                    return;
-                }
-
+                if (isAdminSession) { adminNeedsCompany = true; return; }
                 if (IsUnauthorized(companyResult.ErrorMessage))
                 {
                     await AuthSession.LogoutAsync();
                     Navigation.NavigateTo("/login", forceLoad: true);
                     return;
                 }
-
                 loadError = companyResult.ErrorMessage ?? "The company profile could not be loaded right now.";
-                ResetDashboard();
                 return;
             }
-
             company = companyResult.Value;
 
-            // Load all companies this user has access to
             var companiesResult = await AuthApi.GetUserCompaniesAsync();
-            userCompanies = companiesResult.IsSuccess && companiesResult.Value is not null
-                ? companiesResult.Value
-                : [company];
+            userCompanies = companiesResult.IsSuccess && companiesResult.Value is not null ? companiesResult.Value : [company];
 
-            // Fire-and-forget style: the tile fills in when Payday answers; the
-            // rest of the dashboard never waits on it.
-            paydayOutstanding = null; paydayOpenCount = 0;
-            if (company.HasPaydayCredentials)
-                _ = LoadPaydayOutstandingAsync();
+            lastWorkday = PreviousWorkday(today);
 
-            var customersResult = await CustomersApi.GetCustomersAsync();
-            var employeesResult = await EmployeesApi.GetEmployeesAsync();
-            var jobsResult = await JobsApi.GetJobsAsync();
-            var timeEntriesResult = await TimeEntriesApi.GetTimeEntriesAsync(GetMonthStart(), GetMonthEnd());
+            // Everything at once; Payday's half (stored in Workit) only for a connected company.
+            var customersTask = CustomersApi.GetCustomersAsync();
+            var employeesTask = EmployeesApi.GetEmployeesAsync();
+            var jobsTask      = JobsApi.GetJobsAsync();
+            var entriesTask   = TimeEntriesApi.GetTimeEntriesAsync();
+            var usagesTask    = MaterialsApi.GetMaterialUsageAsync();
+            var materialsTask = MaterialsApi.GetMaterialsAsync();
+            var pendingTask   = AbsenceApi.GetAbsencesAsync(status: AbsenceStatus.Pending);
+            var awayTask      = AbsenceApi.GetAbsencesAsync(from: lastWorkday, to: lastWorkday, status: AbsenceStatus.Approved);
+            await Task.WhenAll(customersTask, employeesTask, jobsTask, entriesTask, usagesTask, materialsTask, pendingTask, awayTask);
 
-            if (!customersResult.IsSuccess || !employeesResult.IsSuccess || !jobsResult.IsSuccess || !timeEntriesResult.IsSuccess)
+            var error = (await jobsTask).ErrorMessage ?? (await entriesTask).ErrorMessage ?? (await employeesTask).ErrorMessage;
+            if (!(await jobsTask).IsSuccess || !(await entriesTask).IsSuccess || !(await employeesTask).IsSuccess)
             {
-                var firstError = customersResult.ErrorMessage
-                    ?? employeesResult.ErrorMessage
-                    ?? jobsResult.ErrorMessage
-                    ?? timeEntriesResult.ErrorMessage
-                    ?? "Dashboard data could not be loaded.";
-
-                if (IsUnauthorized(firstError))
+                if (IsUnauthorized(error))
                 {
                     await AuthSession.LogoutAsync();
                     Navigation.NavigateTo("/login", forceLoad: true);
                     return;
                 }
-
-                loadError = firstError;
-                ResetDashboard();
+                loadError = error ?? "Today's overview could not be loaded.";
                 return;
             }
 
-            customers = customersResult.Value ?? [];
-            employees = employeesResult.Value ?? [];
-            jobs = jobsResult.Value ?? [];
-            timeEntries = timeEntriesResult.Value ?? [];
+            customers = (await customersTask).Value ?? [];
+            employees = (await employeesTask).Value ?? [];
+            jobs      = (await jobsTask).Value ?? [];
+            entries   = (await entriesTask).Value ?? [];
+            usages    = (await usagesTask).Value ?? [];
+            materialNames = ((await materialsTask).Value ?? []).ToDictionary(m => m.Id, m => m.Name);
+            pendingAbsences = ((await pendingTask).Value ?? []).OrderBy(a => a.StartDate).ToList();
+            var away = ((await awayTask).Value ?? []).Select(a => a.EmployeeId).ToHashSet();
 
-            BuildDashboard();
+            BuildNeedsYou(away);
+            BuildFeed();
+
+            if (company.HasPaydayCredentials)
+                await LoadPaydayAsync();
         }
         finally
         {
@@ -641,326 +618,128 @@ else
         }
     }
 
+    private void BuildNeedsYou(HashSet<Guid> awayOnLastWorkday)
+    {
+        // Crew who have been logging hours lately but logged nothing on the last
+        // working day — the ones worth a nudge. Office staff and the owner, who
+        // never log, never show.
+        var recent = entries.Where(e => e.WorkDate > today.AddDays(-30)).Select(e => e.EmployeeId).ToHashSet();
+        var loggedThen = entries.Where(e => e.WorkDate == lastWorkday).Select(e => e.EmployeeId).ToHashSet();
+        missingHours = employees
+            .Where(e => e.IsActive && recent.Contains(e.Id) && !loggedThen.Contains(e.Id) && !awayOnLastWorkday.Contains(e.Id))
+            .OrderBy(e => e.DisplayName)
+            .ToList();
+
+        var entriesByJob = entries.GroupBy(e => e.JobId).ToDictionary(g => g.Key, g => g.ToList());
+        var lanes = jobs.ToDictionary(j => j.Id, j => JobLanes.Of(j, entriesByJob.GetValueOrDefault(j.Id) ?? []));
+
+        waitingJobs = jobs.Where(j => lanes[j.Id] == JobLane.Waiting)
+            .OrderBy(j => j.KanbanWaitingAt ?? DateTimeOffset.MaxValue).ToList();
+        unassignedJobs = jobs.Where(j => lanes[j.Id] != JobLane.Done && j.AssignedEmployeeIds.Count == 0)
+            .OrderByDescending(j => j.JobNumber).ToList();
+
+        var openUsages = usages.Where(u => !u.IsInvoiced && u.JobId is not null).GroupBy(u => u.JobId!.Value).ToDictionary(g => g.Key, g => g.ToList());
+        toInvoice = jobs
+            .Select(j =>
+            {
+                var open = (entriesByJob.GetValueOrDefault(j.Id) ?? []).Where(e => !e.IsInvoiced).ToList();
+                var mats = openUsages.GetValueOrDefault(j.Id) ?? [];
+                if (open.Count == 0 && mats.Count == 0) return null;
+                var oldest = open.Select(e => e.WorkDate)
+                    .Concat(mats.Select(u => DateOnly.FromDateTime(u.UsedAt.LocalDateTime)))
+                    .Min();
+                return new InvoiceRow(j, open.Sum(e => e.Hours + e.OvertimeHours), mats.Count, oldest);
+            })
+            .OfType<InvoiceRow>()
+            .OrderBy(r => r.Oldest)
+            .ToList();
+    }
+
+    private void BuildFeed()
+    {
+        var since = today.AddDays(-6);
+        var jobLabel = jobs.ToDictionary(j => j.Id, j => $"{j.Code} · {j.Name}");
+        var hours = entries.Where(e => e.WorkDate >= since).Select(e => new FeedItem(
+            e.WorkDate,
+            e.CreatedAt ?? e.WorkDate.ToDateTime(TimeOnly.MinValue),
+            EmployeeName(e.EmployeeId),
+            jobLabel.GetValueOrDefault(e.JobId, "Unknown job"),
+            e.JobId,
+            e.Notes,
+            e.Hours + e.OvertimeHours,
+            e.OvertimeHours > 0 ? $"{e.Hours + e.OvertimeHours:0.##} h ({e.OvertimeHours:0.##} OT)" : $"{e.Hours:0.##} h"));
+        var materials = usages.Where(u => DateOnly.FromDateTime(u.UsedAt.LocalDateTime) >= since).Select(u => new FeedItem(
+            DateOnly.FromDateTime(u.UsedAt.LocalDateTime),
+            u.UsedAt,
+            EmployeeName(u.EmployeeId),
+            u.JobId is Guid id ? jobLabel.GetValueOrDefault(id, "Unknown job") : "No job",
+            u.JobId,
+            materialNames.GetValueOrDefault(u.MaterialId, "Material") + (string.IsNullOrWhiteSpace(u.Notes) ? "" : $" — {u.Notes}"),
+            null,
+            $"{u.Quantity:0.##} ×"));
+        feed = hours.Concat(materials)
+            .OrderByDescending(f => f.Date).ThenByDescending(f => f.At)
+            .Take(40)
+            .ToList();
+    }
+
+    /// <summary>Invoices are Workit's stored copy of Payday's (refreshed every 30 minutes), so this is quick.</summary>
+    private async Task LoadPaydayAsync()
+    {
+        var openTask   = PaydayInvoicesApi.GetAllAsync(page: 1, perPage: 200, include: null, excludeStatus: "DRAFT,CANCELLED,PAID,CREDIT,DELETED", order: "asc", orderBy: "dueDate");
+        var draftsTask = PaydayInvoicesApi.GetAllAsync(page: 1, perPage: 50, include: null, excludeStatus: "SENT,CANCELLED,PAID,CREDIT,DELETED");
+        var payrollTask = PayrollApi.GetExportsAsync();
+        await Task.WhenAll(openTask, draftsTask, payrollTask);
+
+        if ((await openTask) is { IsSuccess: true, Value: { } open })
+        {
+            paydayOutstanding = open.Summary?.UnpaidAmount;
+            paydayOpenCount   = open.Summary?.TotalCount ?? open.Total;
+            overdue = open.Invoices.Where(i => i.DueDate is DateTime due && DateOnly.FromDateTime(due) < today).ToList();
+        }
+        if ((await draftsTask) is { IsSuccess: true, Value: { } d })
+            drafts = d.Invoices;
+
+        // Early in the month, last month's hours should be on their way to Payday.
+        var lastMonth = new DateOnly(today.Year, today.Month, 1).AddMonths(-1);
+        if (today.Day <= 15 && HoursIn(lastMonth) > 0 && (await payrollTask) is { IsSuccess: true, Value: { } exports }
+            && !exports.Any(x => x.Year == lastMonth.Year && x.Month == lastMonth.Month))
+            payrollDue = lastMonth;
+    }
+
+    private async Task ReviewAsync(AbsenceRequest absence, AbsenceStatus status)
+    {
+        reviewingId = absence.Id;
+        reviewError = null;
+        var result = await AbsenceApi.ReviewAbsenceAsync(absence.Id, status);
+        if (result.IsSuccess) pendingAbsences.Remove(absence);
+        else reviewError = result.ErrorMessage ?? "The request could not be answered right now.";
+        reviewingId = null;
+    }
+
+    /// <summary>The working day before <paramref name="day"/>: not a weekend, not a full public holiday.</summary>
+    private static DateOnly PreviousWorkday(DateOnly day)
+    {
+        var d = day.AddDays(-1);
+        for (var i = 0; i < 14; i++, d = d.AddDays(-1))
+        {
+            if (d.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+            if (IcelandicHolidays.GetHolidaysInMonth(d.Year, d.Month).Any(h => h.Date == d && !h.IsHalfDay)) continue;
+            return d;
+        }
+        return day.AddDays(-1);
+    }
+
     private async Task RetryOrLoginAsync()
     {
-        await LoadDashboardAsync();
+        await LoadAsync();
         StateHasChanged();
     }
-
-    private async Task PreviousMonthAsync()
-    {
-        selectedMonth = selectedMonth.AddMonths(-1);
-        await LoadDashboardAsync();
-    }
-
-    private async Task NextMonthAsync()
-    {
-        selectedMonth = selectedMonth.AddMonths(1);
-        await LoadDashboardAsync();
-    }
-
-    private async Task OnMonthChangedAsync(ChangeEventArgs args)
-    {
-        var rawValue = args.Value?.ToString();
-        if (string.IsNullOrWhiteSpace(rawValue))
-        {
-            return;
-        }
-
-        if (DateOnly.TryParse($"{rawValue}-01", out var month))
-        {
-            selectedMonth = month;
-            await LoadDashboardAsync();
-        }
-    }
-
-    private void OnCustomerFilterChanged(ChangeEventArgs args)
-    {
-        ApplyCustomerFilter(ParseGuid(args.Value?.ToString()));
-    }
-
-    private void OnJobFilterChanged(ChangeEventArgs args)
-    {
-        ApplyJobFilter(ParseGuid(args.Value?.ToString()));
-    }
-
-    private void OnEmployeeFilterChanged(ChangeEventArgs args)
-    {
-        ApplyEmployeeFilter(ParseGuid(args.Value?.ToString()));
-    }
-
-    private void BuildDashboard()
-    {
-        var employeeNames = employees.ToDictionary(x => x.Id, x => x.DisplayName);
-        var jobNames = jobs.ToDictionary(x => x.Id, x => $"{x.Code} - {x.Name}");
-        var customerNames = customers.ToDictionary(x => x.Id, x => x.Name);
-        var jobToCustomer = jobs.ToDictionary(x => x.Id, x => x.CustomerId);
-        NormalizeFilters(jobToCustomer);
-        var filteredEntries = GetFilteredEntries(jobToCustomer);
-
-        totalHours = filteredEntries.Sum(x => x.Hours);
-        totalOvertimeHours = filteredEntries.Sum(x => x.OvertimeHours);
-        invoicedHours = filteredEntries.Where(x => x.IsInvoiced).Sum(x => x.Hours);
-        uninvoicedHours = totalHours - invoicedHours;
-        var workedDays = filteredEntries.Select(x => x.WorkDate).Distinct().Count();
-        averageHoursPerWorkedDay = workedDays == 0 ? 0m : totalHours / workedDays;
-
-        var customerSeeds = filteredEntries
-            .Where(x => jobToCustomer.ContainsKey(x.JobId))
-            .GroupBy(x => jobToCustomer[x.JobId])
-            .Select(group => new AggregateSeed(
-                group.Key,
-                customerNames.GetValueOrDefault(group.Key, "Unknown customer"),
-                group.Sum(x => x.Hours),
-                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
-                group.Count()))
-            .OrderByDescending(x => x.Hours)
-            .ThenBy(x => x.Name)
-            .ToList();
-
-        customerSummaries = ToAggregateRows(customerSeeds);
-
-        var jobSeeds = filteredEntries
-            .GroupBy(x => x.JobId)
-            .Select(group => new AggregateSeed(
-                group.Key,
-                jobNames.GetValueOrDefault(group.Key, "Unknown job"),
-                group.Sum(x => x.Hours),
-                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
-                group.Count()))
-            .OrderByDescending(x => x.Hours)
-            .ThenBy(x => x.Name)
-            .ToList();
-
-        jobSummaries = ToAggregateRows(jobSeeds);
-
-        var employeeSeeds = filteredEntries
-            .GroupBy(x => x.EmployeeId)
-            .Select(group => new AggregateSeed(
-                group.Key,
-                employeeNames.GetValueOrDefault(group.Key, "Unknown employee"),
-                group.Sum(x => x.Hours),
-                group.Where(x => !x.IsInvoiced).Sum(x => x.Hours),
-                group.Count()))
-            .OrderByDescending(x => x.Hours)
-            .ThenBy(x => x.Name)
-            .ToList();
-
-        employeeSummaries = ToAggregateRows(employeeSeeds);
-
-        recentEntries = filteredEntries
-            .OrderByDescending(x => x.WorkDate)
-            .ThenByDescending(x => x.Hours)
-            .Take(10)
-            .Select(entry =>
-            {
-                var customerId = jobToCustomer.GetValueOrDefault(entry.JobId);
-                return new RecentEntryRow(
-                    entry.WorkDate,
-                    employeeNames.GetValueOrDefault(entry.EmployeeId, "Unknown employee"),
-                    jobNames.GetValueOrDefault(entry.JobId, "Unknown job"),
-                    customerNames.GetValueOrDefault(customerId, "Unknown customer"),
-                    entry.Hours);
-            })
-            .ToList();
-
-        var monthStart = GetMonthStart();
-        var monthEnd = GetMonthEnd();
-        var dailyTotals = filteredEntries
-            .GroupBy(x => x.WorkDate)
-            .ToDictionary(group => group.Key, group => group.Sum(x => x.Hours));
-        dailyLoads = Enumerable.Range(0, monthEnd.DayNumber - monthStart.DayNumber + 1)
-            .Select(offset =>
-            {
-                var day = monthStart.AddDays(offset);
-                var hours = dailyTotals.GetValueOrDefault(day);
-                return new DayLoad(day.Day, hours);
-            })
-            .ToList();
-    }
-
-    private void ResetDashboard()
-    {
-        company = null;
-        customers = [];
-        employees = [];
-        jobs = [];
-        timeEntries = [];
-        selectedCustomerId = null;
-        selectedJobId = null;
-        selectedEmployeeId = null;
-        customerSummaries = [];
-        jobSummaries = [];
-        employeeSummaries = [];
-        dailyLoads = [];
-        recentEntries = [];
-        totalHours = 0m;
-        totalOvertimeHours = 0m;
-        invoicedHours = 0m;
-        uninvoicedHours = 0m;
-        averageHoursPerWorkedDay = 0m;
-    }
-
-    private List<TimeEntry> GetFilteredEntries(IReadOnlyDictionary<Guid, Guid> jobToCustomer) =>
-        timeEntries
-            .Where(entry =>
-                (selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId) &&
-                (selectedJobId is null || entry.JobId == selectedJobId) &&
-                (selectedCustomerId is null || (jobToCustomer.TryGetValue(entry.JobId, out var customerId) && customerId == selectedCustomerId)))
-            .ToList();
-
-    private void NormalizeFilters(IReadOnlyDictionary<Guid, Guid> jobToCustomer)
-    {
-        if (selectedJobId is not null && !jobs.Any(x => x.Id == selectedJobId))
-        {
-            selectedJobId = null;
-        }
-
-        if (selectedEmployeeId is not null && !employees.Any(x => x.Id == selectedEmployeeId))
-        {
-            selectedEmployeeId = null;
-        }
-
-        if (selectedCustomerId is not null && !customers.Any(x => x.Id == selectedCustomerId))
-        {
-            selectedCustomerId = null;
-        }
-
-        if (selectedJobId is not null &&
-            selectedCustomerId is not null &&
-            (!jobToCustomer.TryGetValue(selectedJobId.Value, out var jobCustomerId) || jobCustomerId != selectedCustomerId.Value))
-        {
-            selectedJobId = null;
-        }
-
-        if (selectedEmployeeId is not null)
-        {
-            var employeeHasMatchingEntries = timeEntries.Any(entry =>
-                entry.EmployeeId == selectedEmployeeId &&
-                (selectedJobId is null || entry.JobId == selectedJobId) &&
-                (selectedCustomerId is null || (jobToCustomer.TryGetValue(entry.JobId, out var customerId) && customerId == selectedCustomerId)));
-
-            if (!employeeHasMatchingEntries)
-            {
-                selectedEmployeeId = null;
-            }
-        }
-    }
-
-    private DateOnly GetMonthStart() => new(selectedMonth.Year, selectedMonth.Month, 1);
-
-    private DateOnly GetMonthEnd() => GetMonthStart().AddMonths(1).AddDays(-1);
-
-    private static string TopName(IReadOnlyList<AggregateRow> rows, string fallback) =>
-        rows.Count == 0 ? fallback : $"{rows[0].Name} leads";
-
-    private static List<AggregateRow> ToAggregateRows(List<AggregateSeed> seeds)
-    {
-        var peak = seeds.Count == 0 ? 0m : seeds.Max(x => x.Hours);
-
-        return seeds
-            .Select(seed => new AggregateRow(
-                seed.Id,
-                seed.Name,
-                seed.Hours,
-                seed.UninvoicedHours,
-                seed.EntryCount,
-                peak == 0m ? 0m : decimal.Round((seed.Hours / peak) * 100m, 2),
-                peak == 0m ? 0m : decimal.Round(((seed.Hours - seed.UninvoicedHours) / peak) * 100m, 2)))
-            .ToList();
-    }
-
-    private void ClearFilters()
-    {
-        selectedCustomerId = null;
-        selectedJobId = null;
-        selectedEmployeeId = null;
-        BuildDashboard();
-    }
-
-    private void ToggleCustomerFilter(Guid? customerId)
-    {
-        ApplyCustomerFilter(selectedCustomerId == customerId ? null : customerId);
-    }
-
-    private void ApplyCustomerFilter(Guid? customerId)
-    {
-        selectedCustomerId = customerId;
-        if (selectedJobId is not null && jobs.FirstOrDefault(x => x.Id == selectedJobId)?.CustomerId != selectedCustomerId)
-        {
-            selectedJobId = null;
-        }
-
-        if (selectedEmployeeId is not null && !AvailableEmployees.Any(x => x.Id == selectedEmployeeId))
-        {
-            selectedEmployeeId = null;
-        }
-
-        BuildDashboard();
-    }
-
-    private void ToggleJobFilter(Guid? jobId)
-    {
-        ApplyJobFilter(selectedJobId == jobId ? null : jobId);
-    }
-
-    private void ApplyJobFilter(Guid? jobId)
-    {
-        selectedJobId = jobId;
-        if (selectedJobId is not null)
-        {
-            selectedCustomerId = jobs.FirstOrDefault(x => x.Id == selectedJobId)?.CustomerId;
-        }
-
-        if (selectedEmployeeId is not null && !AvailableEmployees.Any(x => x.Id == selectedEmployeeId))
-        {
-            selectedEmployeeId = null;
-        }
-
-        BuildDashboard();
-    }
-
-    private void ToggleEmployeeFilter(Guid? employeeId)
-    {
-        ApplyEmployeeFilter(selectedEmployeeId == employeeId ? null : employeeId);
-    }
-
-    private void ApplyEmployeeFilter(Guid? employeeId)
-    {
-        selectedEmployeeId = employeeId;
-        BuildDashboard();
-    }
-
-    private static Guid? ParseGuid(string? rawValue) =>
-        Guid.TryParse(rawValue, out var parsed) ? parsed : null;
 
     private static bool IsUnauthorized(string? errorMessage) =>
         !string.IsNullOrWhiteSpace(errorMessage) &&
         (errorMessage.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase) ||
          errorMessage.Contains("401", StringComparison.OrdinalIgnoreCase));
-
-    private bool IsSelectedCustomer(Guid? id) => selectedCustomerId == id;
-    private bool IsSelectedJob(Guid? id) => selectedJobId == id;
-    private bool IsSelectedEmployee(Guid? id) => selectedEmployeeId == id;
-    private bool JobMatchesCustomer(Guid jobId, Guid customerId) => jobs.FirstOrDefault(x => x.Id == jobId)?.CustomerId == customerId;
-    private bool EntryMatchesSelectedJobAndEmployee(TimeEntry entry) =>
-        (selectedJobId is null || entry.JobId == selectedJobId) &&
-        (selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId);
-    private bool EntryMatchesSelectedEmployee(TimeEntry entry) =>
-        selectedEmployeeId is null || entry.EmployeeId == selectedEmployeeId;
-    private bool EntryMatchesSelectedCustomerAndJob(TimeEntry entry)
-    {
-        var job = jobs.FirstOrDefault(x => x.Id == entry.JobId);
-        if (job is null)
-        {
-            return false;
-        }
-
-        return (selectedCustomerId is null || job.CustomerId == selectedCustomerId) &&
-               (selectedJobId is null || entry.JobId == selectedJobId);
-    }
-    private bool EntryMatchesSelectedCustomerForJob(Job job) =>
-        selectedCustomerId is null || job.CustomerId == selectedCustomerId;
 
     private void OpenSwitchCompanyDialog()
     {
@@ -968,10 +747,7 @@ else
         showSwitchDialog = true;
     }
 
-    private void CloseSwitchCompanyDialog()
-    {
-        showSwitchDialog = false;
-    }
+    private void CloseSwitchCompanyDialog() => showSwitchDialog = false;
 
     private async Task SwitchToCompanyAsync(Guid companyId)
     {
@@ -1007,9 +783,7 @@ else
         Navigation.NavigateTo("/", forceLoad: true);
     }
 
-    private sealed record AggregateSeed(Guid Id, string Name, decimal Hours, decimal UninvoicedHours, int EntryCount);
-    /// <summary>WidthPercent is the whole bar; InvoicedWidthPercent the invoiced part of it, from the left.</summary>
-    private sealed record AggregateRow(Guid Id, string Name, decimal Hours, decimal UninvoicedHours, int EntryCount, decimal WidthPercent, decimal InvoicedWidthPercent);
-    private sealed record DayLoad(int Day, decimal Hours);
-    private sealed record RecentEntryRow(DateOnly WorkDate, string EmployeeName, string JobName, string CustomerName, decimal Hours);
+    private sealed record InvoiceRow(Job Job, decimal Hours, int MaterialLines, DateOnly Oldest);
+    /// <summary>One line of the latest-work feed: hours (Hours set) or a material logged (Hours null).</summary>
+    private sealed record FeedItem(DateOnly Date, DateTimeOffset At, string Who, string Job, Guid? JobId, string Note, decimal? Hours, string Amount);
 }
