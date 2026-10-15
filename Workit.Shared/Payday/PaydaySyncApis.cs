@@ -39,3 +39,16 @@ internal sealed class ExpenseSyncProxy(HttpClient httpClient, IAccessTokenAccess
     public Task<ApiResult<PaydayExpenseSyncResult>> SyncAsync() =>
         PostForJsonAsync<object, PaydayExpenseSyncResult>("api/payday/expenses/sync", new { }, "Expenses could not be synced from Payday right now.");
 }
+
+/// <summary>The console's handle on Workit's stored copy of the Payday employees.</summary>
+public interface IEmployeeSyncApi
+{
+    Task<ApiResult<PaydayEmployeeSyncResult>> SyncAsync();
+}
+
+internal sealed class EmployeeSyncProxy(HttpClient httpClient, IAccessTokenAccessor accessTokenAccessor)
+    : ApiClientBase(httpClient, accessTokenAccessor), IEmployeeSyncApi
+{
+    public Task<ApiResult<PaydayEmployeeSyncResult>> SyncAsync() =>
+        PostForJsonAsync<object, PaydayEmployeeSyncResult>("api/payday/employees/sync", new { }, "Employees could not be synced from Payday right now.");
+}

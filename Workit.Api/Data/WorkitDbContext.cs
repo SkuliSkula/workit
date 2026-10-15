@@ -31,6 +31,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<JobAttachment>      JobAttachments     => Set<JobAttachment>();
     public DbSet<JobTask>            JobTasks           => Set<JobTask>();
     public DbSet<PaydayProductCache> PaydayProducts     => Set<PaydayProductCache>();
+    public DbSet<PaydayEmployeeCache> PaydayEmployees   => Set<PaydayEmployeeCache>();
+    public DbSet<PaydaySnapshot>     PaydaySnapshots    => Set<PaydaySnapshot>();
     public DbSet<ProductCategory>    ProductCategories  => Set<ProductCategory>();
     public DbSet<PayrollExport>      PayrollExports     => Set<PayrollExport>();
 
@@ -253,6 +255,16 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Sku });
         modelBuilder.Entity<PaydayProductCache>()
             .Ignore(x => x.IsStockTracked);
+
+        // ── Payday employees + reference snapshots ────────────────────────────
+        modelBuilder.Entity<PaydayEmployeeCache>().ToTable("PaydayEmployees");
+        modelBuilder.Entity<PaydayEmployeeCache>()
+            .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .IsUnique();
+        modelBuilder.Entity<PaydaySnapshot>().ToTable("PaydaySnapshots");
+        modelBuilder.Entity<PaydaySnapshot>()
+            .HasIndex(x => new { x.CompanyId, x.Kind })
+            .IsUnique();
         modelBuilder.Entity<Material>()
             .Ignore(x => x.UninvoicedQuantity);
         modelBuilder.Entity<ProductCategory>().ToTable("ProductCategories");

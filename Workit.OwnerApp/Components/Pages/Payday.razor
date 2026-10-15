@@ -5,6 +5,7 @@
 @inject IPaydayUsersApi PaydayUsersApi
 @inject IPaydayCustomerSyncApi PaydayCustomerSync
 @inject IPaydayEmployeesApi PaydayEmployeesApi
+@inject IEmployeeSyncApi PaydayEmployeeSync
 @inject IPaydayPayrollApi PaydayPayrollApi
 @inject IAuthApi AuthApi
 @inject ICompanyApi CompanyApi
@@ -300,6 +301,14 @@
             if (!companyResult.IsSuccess || companyResult.Value is null)
             {
                 employeeSyncResult = $"Could not load company: {companyResult.ErrorMessage}";
+                return;
+            }
+
+            // Bring Workit's copy of Payday's employees up to date, then work from it.
+            var refreshed = await PaydayEmployeeSync.SyncAsync();
+            if (!refreshed.IsSuccess)
+            {
+                employeeSyncResult = $"Could not refresh employees from Payday: {refreshed.ErrorMessage}";
                 return;
             }
 

@@ -23,10 +23,21 @@ internal static class PaydayEndpoints
             .WithTags("Payday");
 
         // ── Users / company ───────────────────────────────────────────────────
-        payday.MapGet("/users/me",       async (IPaydayUsersApi api) => ToResult(await api.GetMeAsync()));
-        payday.MapGet("/users",          async (IPaydayUsersApi api) => ToResult(await api.GetAllAsync()));
-        payday.MapGet("/users/{id}",     async (IPaydayUsersApi api, string id) => ToResult(await api.GetByIdAsync(id)));
-        payday.MapGet("/companies/me",   async (IPaydayCompaniesApi api) => ToResult(await api.GetMeAsync()));
+        // Small reference data: asked of Payday each time and stored as a snapshot
+        // (PaydaySnapshotStore); when Payday can't be reached the snapshot answers.
+        payday.MapGet("/users/me", async (IPaydayUsersApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetMeAsync(), db, http, PaydaySnapshotStore.Me, ct));
+        payday.MapGet("/users", async (IPaydayUsersApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetAllAsync(), db, http, PaydaySnapshotStore.Users, ct));
+        payday.MapGet("/users/{id}", async (IPaydayUsersApi api, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.GetByIdAsync(id);
+            if (result.IsSuccess || result.IsNotFound) return ToResult(result);
+            var all = await PaydaySnapshotStore.GetAsync<List<PaydayUser>>(db, http.User.ToUserContext().CompanyId, PaydaySnapshotStore.Users, ct);
+            return all?.FirstOrDefault(u => u.Id.ToString() == id) is { } user ? Results.Ok(user) : ToResult(result);
+        });
+        payday.MapGet("/companies/me", async (IPaydayCompaniesApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetMeAsync(), db, http, PaydaySnapshotStore.Company, ct));
 
         // ── Customers ─────────────────────────────────────────────────────────
         // Workit's customers are the stored copy (PaydayCustomerSyncService keeps them in
@@ -72,11 +83,63 @@ internal static class PaydayEndpoints
         payday.MapGet("/customers/{id}/statement", async (IPaydayCustomersApi api, string id, string dateFrom, string dateTo, int page = 1, int perPage = 100) => ToResult(await api.GetAccountStatementAsync(id, dateFrom, dateTo, page, perPage)));
 
         // ── Employees ─────────────────────────────────────────────────────────
-        payday.MapGet("/employees",         async (IPaydayEmployeesApi api) => ToResult(await api.GetAllAsync()));
-        payday.MapGet("/employees/{id}",    async (IPaydayEmployeesApi api, string id) => ToResult(await api.GetByIdAsync(id)));
-        payday.MapPost("/employees",        async (IPaydayEmployeesApi api, CreateEmployeeRequest body) => ToResult(await api.CreateAsync(body)));
-        payday.MapPut("/employees/{id}",    async (IPaydayEmployeesApi api, string id, UpdateEmployeeRequest body) => ToResult(await api.UpdateAsync(id, body)));
-        payday.MapDelete("/employees/{id}", async (IPaydayEmployeesApi api, string id) => ToResult(await api.DeleteAsync(id)));
+        // Workit keeps its own copy of Payday's employees (PaydayEmployeeSyncService);
+        // the list answers from it, and opens and writes store Payday's answer.
+        payday.MapGet("/employees", async (WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+        {
+            var companyId = http.User.ToUserContext().CompanyId;
+            var stored = await db.PaydayEmployees.AsNoTracking()
+                .Where(e => e.CompanyId == companyId && !e.Archived)
+                .OrderBy(e => e.Name)
+                .ToListAsync(ct);
+            return Results.Ok(stored.Select(PaydayEmployeeSyncService.ToPayday).ToList());
+        });
+        payday.MapPost("/employees/sync", async (PaydayEmployeeSyncService sync, HttpContext http, CancellationToken ct) =>
+        {
+            var outcome = await sync.SyncAsync(http.User.ToUserContext().CompanyId, ct);
+            return outcome.Error is null
+                ? Results.Ok(outcome.Result)
+                : Results.Content(outcome.Error, "text/plain", statusCode: StatusCodes.Status502BadGateway);
+        });
+        payday.MapGet("/employees/{id}", async (IPaydayEmployeesApi api, PaydayEmployeeSyncService sync, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.GetByIdAsync(id);
+            var companyId = http.User.ToUserContext().CompanyId;
+            if (result.IsSuccess && result.Value is not null)
+            {
+                await sync.SaveAsync(companyId, result.Value, ct);
+                return ToResult(result);
+            }
+            if (!Guid.TryParse(id, out var employeeId)) return ToResult(result);
+            if (result.IsNotFound)
+            {
+                await sync.ArchiveAsync(companyId, employeeId, ct);
+                return ToResult(result);
+            }
+            var stored = await db.PaydayEmployees.AsNoTracking().FirstOrDefaultAsync(e => e.CompanyId == companyId && e.PaydayId == employeeId, ct);
+            return stored is not null ? Results.Ok(PaydayEmployeeSyncService.ToPayday(stored)) : ToResult(result);
+        });
+        payday.MapPost("/employees", async (IPaydayEmployeesApi api, PaydayEmployeeSyncService sync, HttpContext http, CreateEmployeeRequest body, CancellationToken ct) =>
+        {
+            var result = await api.CreateAsync(body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
+        payday.MapPut("/employees/{id}", async (IPaydayEmployeesApi api, PaydayEmployeeSyncService sync, HttpContext http, string id, UpdateEmployeeRequest body, CancellationToken ct) =>
+        {
+            var result = await api.UpdateAsync(id, body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
+        payday.MapDelete("/employees/{id}", async (IPaydayEmployeesApi api, PaydayEmployeeSyncService sync, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.DeleteAsync(id);
+            if (result.IsSuccess && Guid.TryParse(id, out var employeeId))
+                await sync.ArchiveAsync(http.User.ToUserContext().CompanyId, employeeId, ct);
+            return ToResult(result);
+        });
 
         // ── Pension / payroll ─────────────────────────────────────────────────
         payday.MapGet("/pension/funds/{type:int}", async (IPaydayPensionApi api, int type) => ToResult(await api.GetByTypeAsync((PaydayPensionType)type)));
@@ -256,6 +319,20 @@ internal static class PaydayEndpoints
             return ToResult(result);
         });
         payday.MapGet("/expenses/{id}/attachment", async (IPaydayExpensesApi api, string id) => ToFileResult(await api.GetAttachmentAsync(id), "application/octet-stream"));
+    }
+
+    /// <summary>Payday's answer, stored as a snapshot on the way through; the last snapshot when Payday can't be reached.</summary>
+    private static async Task<IResult> LiveOrSnapshotAsync<T>(ApiResult<T> result, WorkitDbContext db, HttpContext http, string kind, CancellationToken ct)
+    {
+        var companyId = http.User.ToUserContext().CompanyId;
+        if (result.IsSuccess && result.Value is not null)
+        {
+            await PaydaySnapshotStore.SaveAsync(db, companyId, kind, result.Value, ct);
+            return Results.Ok(result.Value);
+        }
+        return await PaydaySnapshotStore.GetAsync<T>(db, companyId, kind, ct) is { } stored
+            ? Results.Ok(stored)
+            : ToResult(result);
     }
 
     // Payday failures come back as 502 with the message as plain text, so the

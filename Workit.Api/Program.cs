@@ -173,6 +173,7 @@ builder.Services.AddScoped<Workit.Api.Payday.MaterialsMigrationService>();
 builder.Services.AddScoped<Workit.Api.Payday.PaydayCustomerSyncService>();
 builder.Services.AddScoped<Workit.Api.Payday.PaydayInvoiceSyncService>();
 builder.Services.AddScoped<Workit.Api.Payday.PaydayExpenseSyncService>();
+builder.Services.AddScoped<Workit.Api.Payday.PaydayEmployeeSyncService>();
 builder.Services.AddHostedService<Workit.Api.Payday.PaydaySyncBackgroundService>();
 
 // ── Address lookup (HMS Staðfangaskrá, open data) ─────────────────────────────
