@@ -462,3 +462,67 @@
 .job-site--empty { display: block; color: #94a3b8; font-style: italic; }
 .job-site-map { margin-left: 0.5rem; font-size: 0.8rem; color: #1d4ed8; text-decoration: none; }
 .job-site-map:hover { text-decoration: underline; }
+
+/* ── Search, status filter, sort ─────────────────────────────────────────── */
+.jobs-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem 1rem;
+    flex-wrap: wrap;
+    margin: 0.75rem 0 0.9rem;
+}
+
+::deep .jobs-search { flex: 1 1 260px; min-width: 200px; max-width: 420px; }
+
+.chips { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+
+.chip {
+    border: 1px solid #d5dbe3;
+    background: #fff;
+    color: #94a3b8;
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: line-through;
+    text-decoration-color: rgba(148, 163, 184, 0.6);
+}
+.chip:hover { background: #f1f5f9; }
+.chip:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.chip-n { opacity: 0.7; margin-left: 0.3rem; font-variant-numeric: tabular-nums; }
+
+/* A shown status wears its Kanban lane colours; a hidden one is struck through. */
+.chip--on { text-decoration: none; }
+.chip--on.chip--backlog    { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.chip--on.chip--inprogress { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.chip--on.chip--waiting    { background: #fffbeb; border-color: #fde68a; color: #b45309; }
+.chip--on.chip--done       { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+
+.jobs-sort { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; }
+
+.badge--lane.badge--backlog    { background: #f1f5f9; color: #475569; }
+.badge--lane.badge--inprogress { background: #eff6ff; color: #1d4ed8; }
+.badge--lane.badge--waiting    { background: #fffbeb; color: #b45309; }
+.badge--lane.badge--done       { background: #f0fdf4; color: #15803d; }
+
+.jobs-empty {
+    padding: 1.25rem 1rem;
+    text-align: center;
+    color: #60758b;
+    font-size: 0.9rem;
+}
+
+.jobs-reset {
+    margin-left: 0.4rem;
+    border: none;
+    background: none;
+    color: #1d4ed8;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    .jobs-sort { margin-left: 0; }
+}

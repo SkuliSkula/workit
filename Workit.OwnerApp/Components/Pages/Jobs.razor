@@ -134,9 +134,48 @@ else if (jobs.Count > 0)
     <div class="jobs-panel">
         <div class="jobs-panel-header">
             <span class="jobs-panel-title">All jobs</span>
-            <span class="jobs-count">@jobs.Count</span>
+            <span class="jobs-count" title="@(VisibleJobs.Count == jobs.Count ? "" : $"{VisibleJobs.Count} shown of {jobs.Count}")">
+                @(VisibleJobs.Count == jobs.Count ? jobs.Count.ToString() : $"{VisibleJobs.Count} / {jobs.Count}")
+            </span>
         </div>
-        @foreach (var job in jobs)
+
+        @* ── Search, status filter, sort ── *@
+        <div class="jobs-toolbar">
+            <FluentSearch Placeholder="Search code, name, customer, people or address…" Value="@search" ValueChanged="OnSearchChanged"
+                          Immediate="true" ImmediateDelay="250" class="jobs-search" aria-label="Search jobs" />
+            <div class="chips" role="group" aria-label="Show jobs by status">
+                @foreach (var lane in JobLanes.All)
+                {
+                    var on = shownLanes.Contains(lane);
+                    <button class="chip chip--@JobLanes.Key(lane) @(on ? "chip--on" : "")" aria-pressed="@(on ? "true" : "false")"
+                            title="@(on ? "Hide" : "Show") @JobLanes.Label(lane).ToLower() jobs" @onclick="@(() => ToggleLane(lane))">
+                        @JobLanes.Label(lane) <span class="chip-n">@LaneCount(lane)</span>
+                    </button>
+                }
+            </div>
+            <div class="jobs-sort">
+                <FluentSelect TValue="string" TOption="string" Value="@sortKey" ValueChanged="OnSortChanged" aria-label="Sort jobs by" style="min-width:9.5rem;">
+                    @foreach (var (key, label) in SortOptions)
+                    {
+                        <FluentOption TOption="string" Value="@key">@label</FluentOption>
+                    }
+                </FluentSelect>
+                <FluentButton Appearance="Appearance.Outline" @onclick="ToggleSortDirection"
+                              Title="@(sortDesc ? "Descending — click for ascending" : "Ascending — click for descending")"
+                              aria-label="@(sortDesc ? "Sort descending" : "Sort ascending")">
+                    @(sortDesc ? "↓" : "↑")
+                </FluentButton>
+            </div>
+        </div>
+
+        @if (VisibleJobs.Count == 0)
+        {
+            <div class="jobs-empty">
+                No jobs match@(string.IsNullOrWhiteSpace(search) ? "" : $" “{search}”")@(shownLanes.Count == JobLanes.All.Length ? "" : " in the statuses shown").
+                <button class="jobs-reset" @onclick="ResetFilters">Show all jobs</button>
+            </div>
+        }
+        @foreach (var job in VisibleJobs)
         {
             var isExpanded = expandedJobId == job.Id;
             var isEditing  = editingJob?.Id == job.Id;
@@ -156,6 +195,8 @@ else if (jobs.Count > 0)
                     {
                         <span class="job-assignee" title="@AssigneeNames(job, all: true)">@AssigneeNames(job, all: false)</span>
                     }
+                    @{ var lane = LaneOf(job); }
+                    <span class="job-billing-badge badge--lane badge--@JobLanes.Key(lane)" title="@(lane == JobLane.Waiting && !string.IsNullOrWhiteSpace(job.WaitingReason) ? job.WaitingReason : "")">@JobLanes.Label(lane)</span>
                     <span class="job-billing-badge badge--category">@CategoryLabel(job.Category)</span>
                     <span class="job-billing-badge @(job.BillingType == BillingType.Hourly ? "badge--hourly" : "badge--fixed")">
                         @(job.BillingType == BillingType.Hourly ? "Hourly" : "Fixed price")
@@ -702,7 +743,132 @@ else if (company is not null)
     }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        ReadQuery();
+        await LoadAsync();
+    }
+
+    // ── Search, status filter and sort (kept in the address, like Products) ──
+    [Parameter, SupplyParameterFromQuery(Name = "q")]      public string? QueryQ { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "status")] public string? QueryStatus { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "sort")]   public string? QuerySort { get; set; }
+
+    private const string DefaultSort = "number";
+    private static readonly (string Key, string Label)[] SortOptions =
+    [
+        ("number",   "Job number"),
+        ("code",     "Code"),
+        ("name",     "Name"),
+        ("customer", "Customer"),
+        ("status",   "Status"),
+        ("created",  "Created"),
+    ];
+
+    private string search = string.Empty;
+    private readonly HashSet<JobLane> shownLanes = [.. JobLanes.All];
+    private string sortKey = DefaultSort;
+    private bool sortDesc = true;
+
+    /// <summary>Every time entry, by job — what each job's status is worked out from.</summary>
+    private Dictionary<Guid, List<TimeEntry>> entriesByJob = [];
+
+    private JobLane LaneOf(Job job) => JobLanes.Of(job, entriesByJob.GetValueOrDefault(job.Id) ?? []);
+    private int LaneCount(JobLane lane) => jobs.Count(j => LaneOf(j) == lane && MatchesSearch(j));
+
+    private List<Job> VisibleJobs
+    {
+        get
+        {
+            var shown = jobs.Where(j => shownLanes.Contains(LaneOf(j)) && MatchesSearch(j));
+            // Newest job last-resort tie-break, so equal keys keep a steady order.
+            IOrderedEnumerable<Job> ordered = sortKey switch
+            {
+                "code"     => Order(shown, j => j.Code, StringComparer.CurrentCultureIgnoreCase),
+                "name"     => Order(shown, j => j.Name, StringComparer.CurrentCultureIgnoreCase),
+                "customer" => Order(shown, j => customerLookup.GetValueOrDefault(j.CustomerId, ""), StringComparer.CurrentCultureIgnoreCase),
+                "status"   => Order(shown, j => (int)LaneOf(j), Comparer<int>.Default),
+                "created"  => Order(shown, j => j.CreatedAt ?? DateTimeOffset.MinValue, Comparer<DateTimeOffset>.Default),
+                _          => Order(shown, j => j.JobNumber, Comparer<int>.Default),
+            };
+            return ordered.ThenByDescending(j => j.JobNumber).ThenByDescending(j => j.Code).ToList();
+        }
+    }
+
+    private IOrderedEnumerable<Job> Order<TKey>(IEnumerable<Job> source, Func<Job, TKey> key, IComparer<TKey> comparer) =>
+        sortDesc ? source.OrderByDescending(key, comparer) : source.OrderBy(key, comparer);
+
+    private bool MatchesSearch(Job job)
+    {
+        if (string.IsNullOrWhiteSpace(search)) return true;
+        var compare = System.Globalization.CultureInfo.InvariantCulture.CompareInfo;
+        bool Has(string? text) => !string.IsNullOrEmpty(text) &&
+            compare.IndexOf(text, search.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        return Has(job.Code) || Has(job.Name) || Has(customerLookup.GetValueOrDefault(job.CustomerId))
+            || Has(job.Location) || Has(job.ContactName) || Has(AssigneeNames(job, all: true))
+            || Has(job.JobNumber.ToString());
+    }
+
+    private void ReadQuery()
+    {
+        search = QueryQ ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(QueryStatus))
+        {
+            var keys = QueryStatus.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var lanes = JobLanes.All.Where(l => keys.Contains(JobLanes.Key(l), StringComparer.OrdinalIgnoreCase)).ToList();
+            shownLanes.Clear();
+            shownLanes.UnionWith(lanes.Count > 0 ? lanes : JobLanes.All);
+        }
+        var s = QuerySort ?? DefaultSort;
+        var asc = s.EndsWith("-asc", StringComparison.Ordinal);
+        var key = asc ? s[..^4] : s;
+        sortKey = SortOptions.Any(o => o.Key == key) ? key : DefaultSort;
+        sortDesc = !asc;
+    }
+
+    private void WriteQuery()
+    {
+        var url = Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["q"]      = string.IsNullOrWhiteSpace(search) ? null : search,
+            ["status"] = shownLanes.Count == JobLanes.All.Length ? null : string.Join(",", JobLanes.All.Where(shownLanes.Contains).Select(JobLanes.Key)),
+            ["sort"]   = sortKey == DefaultSort && sortDesc ? null : sortKey + (sortDesc ? "" : "-asc"),
+        });
+        Nav.NavigateTo(url, replace: true);
+    }
+
+    private void OnSearchChanged(string? value)
+    {
+        search = value ?? string.Empty;
+        WriteQuery();
+    }
+
+    private void ToggleLane(JobLane lane)
+    {
+        if (!shownLanes.Remove(lane)) shownLanes.Add(lane);
+        WriteQuery();
+    }
+
+    private void OnSortChanged(string? value)
+    {
+        sortKey = SortOptions.Any(o => o.Key == value) ? value! : DefaultSort;
+        // Words read A→Z; numbers and dates newest first.
+        sortDesc = sortKey is "number" or "created";
+        WriteQuery();
+    }
+
+    private void ToggleSortDirection()
+    {
+        sortDesc = !sortDesc;
+        WriteQuery();
+    }
+
+    private void ResetFilters()
+    {
+        search = string.Empty;
+        shownLanes.UnionWith(JobLanes.All);
+        WriteQuery();
+    }
 
     private async Task LoadAsync()
     {
@@ -723,7 +889,10 @@ else if (company is not null)
         var empTask  = EmployeesApi.GetEmployeesAsync();
         var matTask  = MaterialsApi.GetMaterialsAsync();
         var tasksTask = JobTasksApi.GetTasksAsync();
-        await Task.WhenAll(custTask, jobTask, empTask, matTask, tasksTask);
+        var entriesTask = TimeEntriesApi.GetTimeEntriesAsync();
+        await Task.WhenAll(custTask, jobTask, empTask, matTask, tasksTask, entriesTask);
+
+        entriesByJob = ((await entriesTask).Value ?? []).GroupBy(e => e.JobId).ToDictionary(g => g.Key, g => g.ToList());
 
         tasks.Clear();
         tasks.AddRange((await tasksTask).Value ?? []);

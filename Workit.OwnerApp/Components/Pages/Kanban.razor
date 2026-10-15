@@ -634,21 +634,13 @@ else
 
     // ── Lane derivation ────────────────────────────────────────────────────────
 
-    private List<Job> BacklogJobs    => jobs.Where(j => GetLane(j) == Lane.Backlog).ToList();
-    private List<Job> InProgressJobs => jobs.Where(j => GetLane(j) == Lane.InProgress).ToList();
-    private List<Job> WaitingJobs    => jobs.Where(j => GetLane(j) == Lane.Waiting).ToList();
-    private List<Job> DoneJobs       => jobs.Where(j => GetLane(j) == Lane.Done).OrderByDescending(j => j.KanbanDoneAt).ToList();
+    private List<Job> BacklogJobs    => jobs.Where(j => GetLane(j) == JobLane.Backlog).ToList();
+    private List<Job> InProgressJobs => jobs.Where(j => GetLane(j) == JobLane.InProgress).ToList();
+    private List<Job> WaitingJobs    => jobs.Where(j => GetLane(j) == JobLane.Waiting).ToList();
+    private List<Job> DoneJobs       => jobs.Where(j => GetLane(j) == JobLane.Done).OrderByDescending(j => j.KanbanDoneAt).ToList();
 
-    private enum Lane { Backlog, InProgress, Waiting, Done }
-
-    private Lane GetLane(Job job)
-    {
-        var entries = allEntries.Where(e => e.JobId == job.Id).ToList();
-        if (entries.Count == 0)                        return Lane.Backlog;
-        if (entries.All(e => e.IsInvoiced))            return Lane.Done;
-        if (job.KanbanStatus == KanbanStatus.Waiting)  return Lane.Waiting;
-        return Lane.InProgress;
-    }
+    // Shared with the Jobs page's status filter, so both say the same thing.
+    private JobLane GetLane(Job job) => JobLanes.Of(job, allEntries.Where(e => e.JobId == job.Id).ToList());
 
     private int     EntryCount(Guid jobId) => allEntries.Count(e => e.JobId == jobId);
     private decimal TotalHours(Guid jobId) => allEntries.Where(e => e.JobId == jobId).Sum(e => e.Hours);
