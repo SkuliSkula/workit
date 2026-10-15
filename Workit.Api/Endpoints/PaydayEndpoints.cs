@@ -142,7 +142,8 @@ internal static class PaydayEndpoints
         });
 
         // ── Pension / payroll ─────────────────────────────────────────────────
-        payday.MapGet("/pension/funds/{type:int}", async (IPaydayPensionApi api, int type) => ToResult(await api.GetByTypeAsync((PaydayPensionType)type)));
+        payday.MapGet("/pension/funds/{type:int}", async (IPaydayPensionApi api, WorkitDbContext db, HttpContext http, int type, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetByTypeAsync((PaydayPensionType)type), db, http, PaydaySnapshotStore.PensionFunds((PaydayPensionType)type), ct));
         payday.MapPost("/payroll/timesheet",       async (IPaydayPayrollApi api, List<TimesheetEntry> body) => ToResult(await api.UploadTimesheetAsync(body)));
 
         // ── Invoices ──────────────────────────────────────────────────────────
@@ -274,8 +275,10 @@ internal static class PaydayEndpoints
         payday.MapGet("/expenses/sync", async (WorkitDbContext db, HttpContext http, CancellationToken ct) =>
             Results.Ok(await PaydayExpenseStore.StatusAsync(db, http.User.ToUserContext().CompanyId, ct)));
 
-        payday.MapGet("/expenses/paymenttypes",    async (IPaydayExpensesApi api) => ToResult(await api.GetPaymentTypesAsync()));
-        payday.MapGet("/expenses/accounts",        async (IPaydayExpensesApi api) => ToResult(await api.GetAccountsAsync()));
+        payday.MapGet("/expenses/paymenttypes", async (IPaydayExpensesApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetPaymentTypesAsync(), db, http, PaydaySnapshotStore.PaymentTypes, ct));
+        payday.MapGet("/expenses/accounts", async (IPaydayExpensesApi api, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            await LiveOrSnapshotAsync(await api.GetAccountsAsync(), db, http, PaydaySnapshotStore.ExpenseAccounts, ct));
 
         // Opening an expense asks Payday for the latest and stores it; the stored
         // copy answers when Payday can't, and goes when Payday says it is gone.
@@ -322,18 +325,8 @@ internal static class PaydayEndpoints
     }
 
     /// <summary>Payday's answer, stored as a snapshot on the way through; the last snapshot when Payday can't be reached.</summary>
-    private static async Task<IResult> LiveOrSnapshotAsync<T>(ApiResult<T> result, WorkitDbContext db, HttpContext http, string kind, CancellationToken ct)
-    {
-        var companyId = http.User.ToUserContext().CompanyId;
-        if (result.IsSuccess && result.Value is not null)
-        {
-            await PaydaySnapshotStore.SaveAsync(db, companyId, kind, result.Value, ct);
-            return Results.Ok(result.Value);
-        }
-        return await PaydaySnapshotStore.GetAsync<T>(db, companyId, kind, ct) is { } stored
-            ? Results.Ok(stored)
-            : ToResult(result);
-    }
+    private static async Task<IResult> LiveOrSnapshotAsync<T>(ApiResult<T> result, WorkitDbContext db, HttpContext http, string kind, CancellationToken ct) =>
+        ToResult(await PaydaySnapshotStore.LiveOrStoredAsync(result, db, http.User.ToUserContext().CompanyId, kind, ct));
 
     // Payday failures come back as 502 with the message as plain text, so the
     // proxy clients surface the same error text the direct clients used to.
