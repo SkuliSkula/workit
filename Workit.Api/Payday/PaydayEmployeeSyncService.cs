@@ -6,8 +6,7 @@ using Workit.Shared.Payday;
 namespace Workit.Api.Payday;
 
 /// <summary>
-/// Payday → Workit for payroll employees, and the company's other Payday
-/// reference data (profile, users). Payday's employees are stored in
+/// Payday → Workit for payroll employees. Payday's employees are stored in
 /// <c>PaydayEmployees</c> and the employee routes answer from there; an
 /// employee Payday no longer lists is archived, never deleted. Each Workit
 /// employee whose SSN matches one is linked (<see cref="Employee.PaydayId"/>) —
@@ -16,10 +15,7 @@ namespace Workit.Api.Payday;
 /// </summary>
 public sealed class PaydayEmployeeSyncService(
     WorkitDbContext db,
-    IPaydayEmployeesApi employees,
-    IPaydayCompaniesApi companies,
-    IPaydayUsersApi users,
-    ILogger<PaydayEmployeeSyncService> logger)
+    IPaydayEmployeesApi employees)
 {
     public sealed record Outcome(PaydayEmployeeSyncResult? Result, string? Error);
 
@@ -27,8 +23,6 @@ public sealed class PaydayEmployeeSyncService(
 
     public async Task<Outcome> SyncAsync(Guid companyId, CancellationToken ct)
     {
-        await SyncReferenceAsync(companyId, ct);
-
         var result = await employees.GetAllAsync();
         if (!result.IsSuccess || result.Value is null)
             return new Outcome(null, result.ErrorMessage ?? "Payday employees could not be loaded right now.");
@@ -70,22 +64,6 @@ public sealed class PaydayEmployeeSyncService(
             await db.SaveChangesAsync(ct);
             return new Outcome(new PaydayEmployeeSyncResult(result.Value.Count, added, updated, archived, linked, now), null);
         }
-    }
-
-    /// <summary>The company profile and Payday users, kept as snapshots. A failure keeps the last ones.</summary>
-    public async Task SyncReferenceAsync(Guid companyId, CancellationToken ct)
-    {
-        var company = await companies.GetMeAsync();
-        if (company is { IsSuccess: true, Value: { } profile })
-            await PaydaySnapshotStore.SaveAsync(db, companyId, PaydaySnapshotStore.Company, profile, ct);
-        else
-            logger.LogWarning("Payday company profile for {Company} not refreshed: {Error}", companyId, company.ErrorMessage);
-
-        var all = await users.GetAllAsync();
-        if (all is { IsSuccess: true, Value: { } list })
-            await PaydaySnapshotStore.SaveAsync(db, companyId, PaydaySnapshotStore.Users, list, ct);
-        else
-            logger.LogWarning("Payday users for {Company} not refreshed: {Error}", companyId, all.ErrorMessage);
     }
 
     /// <summary>Stores one employee as Payday returned it (opening it, or a write to Payday).</summary>

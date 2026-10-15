@@ -56,6 +56,7 @@ Workit is a workforce management system for service contractors. This repository
 - Purchase expenses are stored in Workit the same way: every Payday expense and its lines, refreshed with the invoices and on the Expenses page; Payday's purchase details follow Payday, while job links, markup, typed sale prices and billings stay Workit's; an expense Payday deleted drops out, or stays as DELETED (not billable) if something was already billed from it
 - Customers: Workit's customers are the stored copy of Payday's (kept in step both ways every 30 minutes); the invoice pickers and the Customers page read them from Workit, and opening a customer stores Payday's latest
 - Payday employees, the company profile and Payday users are stored in Workit and refreshed every 30 minutes; Workit employees are linked to Payday's by SSN (linked only — their details and app accounts are not touched; "Sync Employees" on the Payday page still imports on purpose); the Payday page shows the stored company and users when Payday can't be reached
+- Payday's lookup lists (expense accounts, payment types, sales ledger accounts, pension funds) are stored in Workit too, refreshed every 30 minutes and on every read, and answer from Workit when Payday can't be reached; only statements, PDFs and attachments are still fetched live
 - Invoice dashboard: total revenue, collected, unpaid, overdue amounts
 - VAT owed and outstanding expenses
 - Income statement chart (revenue vs. collected) with configurable date range

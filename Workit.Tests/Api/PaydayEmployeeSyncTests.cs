@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Workit.Api.Data;
 using Workit.Api.Payday;
 using Workit.Shared.Api;
@@ -22,7 +21,7 @@ public class PaydayEmployeeSyncTests
         new(new DbContextOptionsBuilder<WorkitDbContext>().UseInMemoryDatabase($"employee-sync-{Guid.NewGuid()}").Options);
 
     private PaydayEmployeeSyncService Service(WorkitDbContext db) =>
-        new(db, payday, payday, payday, NullLogger<PaydayEmployeeSyncService>.Instance);
+        new(db, payday);
 
     private static PaydayEmployee Remote(string name, string? ssn, bool active = true) => new()
     {
@@ -91,24 +90,6 @@ public class PaydayEmployeeSyncTests
     }
 
     [Fact]
-    public async Task The_company_profile_and_users_are_kept_and_survive_Payday_being_down()
-    {
-        await using var db = NewDb();
-        payday.Company = new PaydayCompany { Id = Guid.NewGuid(), Name = "ÓS rafverktakar ehf.", VatNumber = "123456" };
-        payday.Users.Add(new PaydayUser { Id = Guid.NewGuid(), Name = "Skúli", IsOwner = true });
-        await Service(db).SyncAsync(companyId, CancellationToken.None);
-
-        payday.Fail = true;
-        var outcome = await Service(db).SyncAsync(companyId, CancellationToken.None);
-
-        outcome.Error.Should().NotBeNull();
-        (await PaydaySnapshotStore.GetAsync<PaydayCompany>(db, companyId, PaydaySnapshotStore.Company, CancellationToken.None))!.VatNumber.Should().Be("123456");
-        var users = await PaydaySnapshotStore.GetAsync<List<PaydayUser>>(db, companyId, PaydaySnapshotStore.Users, CancellationToken.None);
-        users.Should().ContainSingle().Which.IsOwner.Should().BeTrue();
-        (await db.PaydaySnapshots.CountAsync()).Should().Be(2, "one row per kind, refreshed in place");
-    }
-
-    [Fact]
     public async Task Opening_an_employee_stores_and_links_it()
     {
         await using var db = NewDb();
@@ -123,22 +104,12 @@ public class PaydayEmployeeSyncTests
         (await db.Employees.SingleAsync()).PaydayId.Should().Be(remote.Id);
     }
 
-    private sealed class FakePayday : IPaydayEmployeesApi, IPaydayCompaniesApi, IPaydayUsersApi
+    private sealed class FakePayday : IPaydayEmployeesApi
     {
         public List<PaydayEmployee> Employees { get; } = [];
-        public List<PaydayUser> Users { get; } = [];
-        public PaydayCompany Company { get; set; } = new() { Id = Guid.NewGuid(), Name = "Test" };
-        public bool Fail { get; set; }
 
-        private Task<ApiResult<T>> Answer<T>(T value) =>
-            Task.FromResult(Fail ? ApiResult<T>.Failure("Payday is down.") : ApiResult<T>.Success(value));
-
-        public Task<ApiResult<List<PaydayEmployee>>> GetAllAsync() => Answer(Employees.ToList());
-        Task<ApiResult<List<PaydayUser>>> IPaydayUsersApi.GetAllAsync() => Answer(Users.ToList());
-        public Task<ApiResult<PaydayCompany>> GetMeAsync() => Answer(Company);
-        Task<ApiResult<PaydayUser>> IPaydayUsersApi.GetMeAsync() => throw new NotSupportedException();
-        public Task<ApiResult<PaydayUser>> GetByIdAsync(string userId) => throw new NotSupportedException();
-        Task<ApiResult<PaydayEmployee>> IPaydayEmployeesApi.GetByIdAsync(string employeeId) => throw new NotSupportedException();
+        public Task<ApiResult<List<PaydayEmployee>>> GetAllAsync() => Task.FromResult(ApiResult<List<PaydayEmployee>>.Success(Employees.ToList()));
+        public Task<ApiResult<PaydayEmployee>> GetByIdAsync(string employeeId) => throw new NotSupportedException();
         public Task<ApiResult<PaydayEmployee>> CreateAsync(CreateEmployeeRequest request) => throw new NotSupportedException();
         public Task<ApiResult<PaydayEmployee>> UpdateAsync(string employeeId, UpdateEmployeeRequest request) => throw new NotSupportedException();
         public Task<ApiResult<bool>> DeleteAsync(string employeeId) => throw new NotSupportedException();

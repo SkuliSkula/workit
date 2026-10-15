@@ -10,7 +10,7 @@ namespace Workit.Api.Payday;
 /// Sync now: the product cache (and, where switched on, materials),
 /// customers in both directions — pending Workit edits go out, Payday's list
 /// comes in — Workit's copy of every sales invoice and expense, and Payday's
-/// employees, company profile and users. One company's failure
+/// employees, company profile, users and lookup lists. One company's failure
 /// never stops the loop.
 /// </summary>
 public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PaydaySyncBackgroundService> logger) : BackgroundService
@@ -92,6 +92,11 @@ public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactor
                 else
                     logger.LogInformation("Payday employee sync for {Company}: {Fetched} employees, {Added} new, {Archived} archived, {Linked} linked",
                         company.Name, staffOutcome.Result!.Fetched, staffOutcome.Result.Added, staffOutcome.Result.Archived, staffOutcome.Result.Linked);
+
+                var reference = companyScope.ServiceProvider.GetRequiredService<PaydayReferenceSyncService>();
+                var (refreshed, refused) = await reference.SyncAsync(company.Id, ct);
+                logger.LogInformation("Payday reference data for {Company}: {Refreshed} lists refreshed, {Failed} kept from before",
+                    company.Name, refreshed, refused);
             }
             catch (Exception ex)
             {

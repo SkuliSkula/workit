@@ -163,9 +163,11 @@ internal static class PaydayProductEndpoints
 
         // Payday owns the price list, so a product made in Workit is made in Payday first and
         // then pulled into the cache — with the role the owner picked, so it is usable at once.
-        app.MapGet("/api/payday/products/ledger-accounts", async (IPaydayProductsApi payday) =>
+        // Stored as a snapshot on the way through; the stored list answers when Payday can't.
+        app.MapGet("/api/payday/products/ledger-accounts", async (IPaydayProductsApi payday, WorkitDbContext db, HttpContext http, CancellationToken ct) =>
             {
-                var accounts = await payday.GetSalesLedgerAccountsAsync();
+                var accounts = await PaydaySnapshotStore.LiveOrStoredAsync(
+                    await payday.GetSalesLedgerAccountsAsync(), db, http.User.ToUserContext().CompanyId, PaydaySnapshotStore.LedgerAccounts, ct);
                 return accounts.IsSuccess
                     ? Results.Ok((accounts.Value ?? []).Where(a => !a.Archived).OrderBy(a => a.Code).ToList())
                     : Results.Content(accounts.ErrorMessage ?? "Payday's sales accounts could not be loaded.", "text/plain", statusCode: StatusCodes.Status502BadGateway);
