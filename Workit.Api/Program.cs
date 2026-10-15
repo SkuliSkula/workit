@@ -171,6 +171,7 @@ builder.Services.AddPaydayApiClients(builder.Configuration["Payday:BaseUrl"]);
 builder.Services.AddScoped<Workit.Api.Payday.PaydayProductSyncService>();
 builder.Services.AddScoped<Workit.Api.Payday.MaterialsMigrationService>();
 builder.Services.AddScoped<Workit.Api.Payday.PaydayCustomerSyncService>();
+builder.Services.AddScoped<Workit.Api.Payday.PaydayInvoiceSyncService>();
 builder.Services.AddHostedService<Workit.Api.Payday.PaydaySyncBackgroundService>();
 
 // ── Address lookup (HMS Staðfangaskrá, open data) ─────────────────────────────

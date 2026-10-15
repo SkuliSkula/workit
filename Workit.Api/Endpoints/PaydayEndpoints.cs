@@ -33,7 +33,12 @@ internal static class PaydayEndpoints
         payday.MapGet("/customers/{id}",    async (IPaydayCustomersApi api, string id) => ToResult(await api.GetByIdAsync(id)));
         payday.MapPost("/customers",        async (IPaydayCustomersApi api, CreateCustomerRequest body) => ToResult(await api.CreateAsync(body)));
         payday.MapPut("/customers/{id}",    async (IPaydayCustomersApi api, string id, UpdateCustomerRequest body) => ToResult(await api.UpdateAsync(id, body)));
-        payday.MapGet("/customers/{id}/invoices",  async (IPaydayCustomersApi api, string id, int page = 1, int perPage = 25) => ToResult(await api.GetInvoicesAsync(id, page, perPage)));
+        // Answered from Workit's stored invoices (see the Invoices section).
+        payday.MapGet("/customers/{id}/invoices", async (WorkitDbContext db, HttpContext http, string id, int page = 1, int perPage = 25, CancellationToken ct = default) =>
+            Guid.TryParse(id, out var customerId)
+                ? Results.Ok(await PaydayInvoiceStore.ListAsync(db, http.User.ToUserContext().CompanyId,
+                    new PaydayInvoiceStore.ListQuery(page, perPage, Include: "lines", CustomerId: customerId), ct))
+                : Results.BadRequest("Not a Payday customer id."));
         payday.MapGet("/customers/{id}/statement", async (IPaydayCustomersApi api, string id, string dateFrom, string dateTo, int page = 1, int perPage = 100) => ToResult(await api.GetAccountStatementAsync(id, dateFrom, dateTo, page, perPage)));
 
         // ── Employees ─────────────────────────────────────────────────────────
@@ -48,8 +53,13 @@ internal static class PaydayEndpoints
         payday.MapPost("/payroll/timesheet",       async (IPaydayPayrollApi api, List<TimesheetEntry> body) => ToResult(await api.UploadTimesheetAsync(body)));
 
         // ── Invoices ──────────────────────────────────────────────────────────
+        // Workit keeps its own copy of every Payday invoice (PaydayInvoiceSyncService)
+        // and the list answers from it, in Payday's shape and with Payday's filters.
+        // Everything Payday hands back — a created, edited or opened invoice — is
+        // stored on the way through, and /invoices/sync refreshes the whole copy.
         payday.MapGet("/invoices", async (
-                IPaydayInvoicesApi api,
+                WorkitDbContext db,
+                HttpContext http,
                 int     page          = 1,
                 int     perPage       = 25,
                 string? include       = "lines",
@@ -59,19 +69,59 @@ internal static class PaydayEndpoints
                 Guid?   customerId    = null,
                 string? query         = null,
                 string  order         = "desc",
-                string  orderBy       = "number") =>
-            ToResult(await api.GetAllAsync(page, perPage, include, dateFrom, dateTo, excludeStatus, customerId, query, order, orderBy)));
-        payday.MapGet("/invoices/{id}",            async (IPaydayInvoicesApi api, string id, string? include = "lines,payments") => ToResult(await api.GetByIdAsync(id, include)));
-        payday.MapPost("/invoices",                async (IPaydayInvoicesApi api, CreateInvoiceRequest body) => ToResult(await api.CreateAsync(body)));
+                string  orderBy       = "number",
+                CancellationToken ct  = default) =>
+            Results.Ok(await PaydayInvoiceStore.ListAsync(db, http.User.ToUserContext().CompanyId,
+                new PaydayInvoiceStore.ListQuery(page, perPage, include, dateFrom, dateTo, excludeStatus, customerId, query, order, orderBy), ct)));
+
+        payday.MapPost("/invoices/sync", async (PaydayInvoiceSyncService sync, HttpContext http, CancellationToken ct) =>
+        {
+            var outcome = await sync.SyncAsync(http.User.ToUserContext().CompanyId, ct);
+            return outcome.Error is null
+                ? Results.Ok(outcome.Result)
+                : Results.Content(outcome.Error, "text/plain", statusCode: StatusCodes.Status502BadGateway);
+        });
+        payday.MapGet("/invoices/sync", async (WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await PaydayInvoiceStore.StatusAsync(db, http.User.ToUserContext().CompanyId, ct)));
+
+        // Opening an invoice asks Payday for the latest and stores it. If Payday is
+        // unreachable the stored copy answers; if Payday says it is gone, so is the copy.
+        payday.MapGet("/invoices/{id}", async (IPaydayInvoicesApi api, PaydayInvoiceSyncService sync, WorkitDbContext db, HttpContext http, string id, string? include = "lines,payments", CancellationToken ct = default) =>
+        {
+            var result = await api.GetByIdAsync(id, include);
+            if (!Guid.TryParse(id, out var invoiceId)) return ToResult(result);
+            var companyId = http.User.ToUserContext().CompanyId;
+            if (result.IsSuccess && result.Value is not null)
+            {
+                await sync.SaveAsync(companyId, result.Value, ct);
+                return ToResult(result);
+            }
+            if (result.IsNotFound)
+            {
+                await sync.RemoveAsync(companyId, invoiceId, ct);
+                return ToResult(result);
+            }
+            var stored = await PaydayInvoiceStore.GetAsync(db, companyId, invoiceId, include, ct);
+            return stored is not null ? Results.Ok(stored) : ToResult(result);
+        });
+        payday.MapPost("/invoices", async (IPaydayInvoicesApi api, PaydayInvoiceSyncService sync, HttpContext http, CreateInvoiceRequest body, CancellationToken ct) =>
+        {
+            var result = await api.CreateAsync(body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
         // Cancelling an invoice, or issuing a draft, changes what Workit's records
         // should say: a cancelled invoice bills nothing, so its hours, materials and
         // expense quantities come back; an issued one now has a number to show.
-        payday.MapPut("/invoices/{id}", async (IPaydayInvoicesApi api, WorkitDbContext db, HttpContext http, string id, UpdateInvoiceRequest body, CancellationToken ct) =>
+        payday.MapPut("/invoices/{id}", async (IPaydayInvoicesApi api, PaydayInvoiceSyncService sync, WorkitDbContext db, HttpContext http, string id, UpdateInvoiceRequest body, CancellationToken ct) =>
         {
             var result = await api.UpdateAsync(id, body);
             if (result.IsSuccess && Guid.TryParse(id, out var invoiceId))
             {
                 var companyId = http.User.ToUserContext().CompanyId;
+                if (result.Value is not null)
+                    await sync.SaveAsync(companyId, result.Value, ct);
                 if (InvoiceRelease.ReleasesRecords(body.Status) || InvoiceRelease.ReleasesRecords(result.Value?.Status))
                     await InvoiceRelease.ReleaseAsync(db, companyId, invoiceId, ct);
                 else if (result.Value?.Number is int number)
@@ -82,11 +132,15 @@ internal static class PaydayEndpoints
 
         // Deleting a draft from Workit hands back everything it held. Only after
         // Payday confirms the delete — a draft that is still there keeps its records.
-        payday.MapDelete("/invoices/{id}", async (IPaydayInvoicesApi api, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
+        payday.MapDelete("/invoices/{id}", async (IPaydayInvoicesApi api, PaydayInvoiceSyncService sync, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
         {
             var result = await api.DeleteAsync(id);
             if (result.IsSuccess && Guid.TryParse(id, out var invoiceId))
-                await InvoiceRelease.ReleaseAsync(db, http.User.ToUserContext().CompanyId, invoiceId, ct);
+            {
+                var companyId = http.User.ToUserContext().CompanyId;
+                await InvoiceRelease.ReleaseAsync(db, companyId, invoiceId, ct);
+                await sync.RemoveAsync(companyId, invoiceId, ct);
+            }
             return ToResult(result);
         });
 
