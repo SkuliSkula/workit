@@ -261,6 +261,69 @@ public class PaydayCustomerSyncTests
     }
 
     [Fact]
+    public async Task Save_OneOpenedCustomer_UpdatesByPaydayId_LinksBySsn_OrAdds()
+    {
+        await using var db = NewDb();
+        var linkedId = Guid.NewGuid();
+        db.Customers.AddRange(
+            Local("Gamla nafnið", "5609002260", paydayId: linkedId, planInTasks: true),
+            Local("Kjarnafæði", "4709881589"));
+        await db.SaveChangesAsync();
+        var sync = Service(db, new FakeCustomers());
+
+        await sync.SaveAsync(CompanyId, new PaydayCustomer { Id = linkedId, Name = "Seðlabankinn", Ssn = "5609002260", Email = "s@sedlabanki.is" }, CancellationToken.None);
+        var bySsnId = Guid.NewGuid();
+        await sync.SaveAsync(CompanyId, new PaydayCustomer { Id = bySsnId, Name = "Kjarnafæði hf.", Ssn = "470988-1589" }, CancellationToken.None);
+        var newId = Guid.NewGuid();
+        await sync.SaveAsync(CompanyId, new PaydayCustomer { Id = newId, Name = "Foreign GmbH" }, CancellationToken.None);
+
+        var linked = await db.Customers.SingleAsync(c => c.PaydayId == linkedId);
+        linked.Name.Should().Be("Seðlabankinn");
+        linked.Email.Should().Be("s@sedlabanki.is");
+        linked.PlanJobsInTasks.Should().BeTrue("Workit-only fields are Workit's");
+        (await db.Customers.SingleAsync(c => c.PaydayId == bySsnId)).Name.Should().Be("Kjarnafæði hf.");
+        (await db.Customers.SingleAsync(c => c.PaydayId == newId)).Ssn.Should().Be("0000000000");
+        (await db.Customers.CountAsync()).Should().Be(3, "matching by SSN links the existing row instead of adding one");
+    }
+
+    [Fact]
+    public async Task Save_KeepsAPendingWorkitEditOverPaydaysOlderValues()
+    {
+        await using var db = NewDb();
+        var id = Guid.NewGuid();
+        var local = Local("Nýtt nafn", "5609002260", paydayId: id);
+        local.PaydayPushPending = true;
+        db.Customers.Add(local);
+        await db.SaveChangesAsync();
+
+        await Service(db, new FakeCustomers()).SaveAsync(CompanyId, new PaydayCustomer { Id = id, Name = "Gamalt nafn", Ssn = "5609002260" }, CancellationToken.None);
+
+        (await db.Customers.SingleAsync()).Name.Should().Be("Nýtt nafn");
+    }
+
+    [Fact]
+    public async Task Store_ListsTheLinkedCustomersInPaydaysShape()
+    {
+        await using var db = NewDb();
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        db.Customers.AddRange(
+            Local("Örn ehf.", "4709881589", paydayId: a),
+            Local("Arnar", "0000000000", paydayId: b),
+            Local("Not in Payday", "5609002260"),
+            new Customer { CompanyId = Guid.NewGuid(), Name = "Other company", Ssn = "1111111119", PaydayId = Guid.NewGuid() });
+        await db.SaveChangesAsync();
+
+        var list = await PaydayCustomerStore.ListAsync(db, CompanyId, 1, 100, CancellationToken.None);
+
+        list.Total.Should().Be(2);
+        list.Customers.Select(c => c.Id).Should().Equal(b, a);
+        list.Customers[0].Ssn.Should().BeNull("the placeholder means Payday has no SSN for it");
+        list.Customers[1].Email.Should().Be("local@example.is");
+        (await PaydayCustomerStore.GetAsync(db, CompanyId, a, CancellationToken.None))!.Name.Should().Be("Örn ehf.");
+    }
+
+    [Fact]
     public void NormalizeSsn_DigitsOnly_TenLong_NeverThePlaceholder()
     {
         PaydayCustomerSyncService.NormalizeSsn("010180-1239").Should().Be("0101801239");

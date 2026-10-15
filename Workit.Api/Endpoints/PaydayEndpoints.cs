@@ -29,10 +29,40 @@ internal static class PaydayEndpoints
         payday.MapGet("/companies/me",   async (IPaydayCompaniesApi api) => ToResult(await api.GetMeAsync()));
 
         // ── Customers ─────────────────────────────────────────────────────────
-        payday.MapGet("/customers",         async (IPaydayCustomersApi api, int page = 1, int perPage = 100) => ToResult(await api.GetAllAsync(page, perPage)));
-        payday.MapGet("/customers/{id}",    async (IPaydayCustomersApi api, string id) => ToResult(await api.GetByIdAsync(id)));
-        payday.MapPost("/customers",        async (IPaydayCustomersApi api, CreateCustomerRequest body) => ToResult(await api.CreateAsync(body)));
-        payday.MapPut("/customers/{id}",    async (IPaydayCustomersApi api, string id, UpdateCustomerRequest body) => ToResult(await api.UpdateAsync(id, body)));
+        // Workit's customers are the stored copy (PaydayCustomerSyncService keeps them in
+        // step both ways); the list answers from them, in Payday's shape. Opening one,
+        // or a write made straight to Payday, stores Payday's answer on the way through.
+        payday.MapGet("/customers", async (WorkitDbContext db, HttpContext http, int page = 1, int perPage = 100, CancellationToken ct = default) =>
+            Results.Ok(await PaydayCustomerStore.ListAsync(db, http.User.ToUserContext().CompanyId, page, perPage, ct)));
+        payday.MapGet("/customers/{id}", async (IPaydayCustomersApi api, PaydayCustomerSyncService sync, WorkitDbContext db, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.GetByIdAsync(id);
+            var companyId = http.User.ToUserContext().CompanyId;
+            if (result.IsSuccess && result.Value is not null)
+            {
+                await sync.SaveAsync(companyId, result.Value, ct);
+                return ToResult(result);
+            }
+            // Payday unreachable: the stored copy answers.
+            var stored = Guid.TryParse(id, out var customerId) && !result.IsNotFound
+                ? await PaydayCustomerStore.GetAsync(db, companyId, customerId, ct)
+                : null;
+            return stored is not null ? Results.Ok(stored) : ToResult(result);
+        });
+        payday.MapPost("/customers", async (IPaydayCustomersApi api, PaydayCustomerSyncService sync, HttpContext http, CreateCustomerRequest body, CancellationToken ct) =>
+        {
+            var result = await api.CreateAsync(body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
+        payday.MapPut("/customers/{id}", async (IPaydayCustomersApi api, PaydayCustomerSyncService sync, HttpContext http, string id, UpdateCustomerRequest body, CancellationToken ct) =>
+        {
+            var result = await api.UpdateAsync(id, body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
         // Answered from Workit's stored invoices (see the Invoices section).
         payday.MapGet("/customers/{id}/invoices", async (WorkitDbContext db, HttpContext http, string id, int page = 1, int perPage = 25, CancellationToken ct = default) =>
             Guid.TryParse(id, out var customerId)
