@@ -43,6 +43,9 @@ public sealed class Expense
     /// <summary>The corresponding Payday expense id, when synced from Payday.</summary>
     public Guid? PaydayId { get; set; }
 
+    /// <summary>When this copy was last refreshed from Payday.</summary>
+    public DateTimeOffset? SyncedAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public List<ExpenseLine> Lines { get; set; } = [];

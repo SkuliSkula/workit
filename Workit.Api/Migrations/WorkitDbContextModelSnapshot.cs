@@ -492,6 +492,9 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("SyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Voucher")
                         .HasColumnType("text");
 
@@ -503,6 +506,7 @@ namespace Workit.Api.Migrations
                         .HasFilter("\"JobId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "PaydayId")
+                        .IsUnique()
                         .HasFilter("\"PaydayId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "Status");

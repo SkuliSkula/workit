@@ -25,6 +25,7 @@ public static class PaydayProxyServiceCollectionExtensions
         services.AddScoped<IPaydayInvoicesApi, PaydayInvoicesProxy>();
         services.AddScoped<IInvoiceReconcileApi, InvoiceReconcileProxy>();
         services.AddScoped<IInvoiceSyncApi, InvoiceSyncProxy>();
+        services.AddScoped<IExpenseSyncApi, ExpenseSyncProxy>();
         services.AddScoped<IPaydayExpensesApi, PaydayExpensesProxy>();
         return services;
     }

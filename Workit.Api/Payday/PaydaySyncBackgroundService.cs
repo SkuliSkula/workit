@@ -9,7 +9,7 @@ namespace Workit.Api.Payday;
 /// Keeps every connected company in step with Payday without anyone pressing
 /// Sync now: the product cache (and, where switched on, materials),
 /// customers in both directions — pending Workit edits go out, Payday's list
-/// comes in — and Workit's copy of every sales invoice. One company's failure
+/// comes in — and Workit's copy of every sales invoice and expense. One company's failure
 /// never stops the loop.
 /// </summary>
 public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PaydaySyncBackgroundService> logger) : BackgroundService
@@ -75,6 +75,14 @@ public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactor
                 else
                     logger.LogInformation("Payday invoice sync for {Company}: {Fetched} invoices, {Added} new, {Updated} updated, {Removed} removed",
                         company.Name, invoiceOutcome.Result!.Fetched, invoiceOutcome.Result.Added, invoiceOutcome.Result.Updated, invoiceOutcome.Result.Removed);
+
+                var expenses = companyScope.ServiceProvider.GetRequiredService<PaydayExpenseSyncService>();
+                var expenseOutcome = await expenses.SyncAsync(company.Id, ct);
+                if (expenseOutcome.Error is not null)
+                    logger.LogWarning("Payday expense sync for {Company} failed: {Error}", company.Name, expenseOutcome.Error);
+                else
+                    logger.LogInformation("Payday expense sync for {Company}: {Fetched} expenses, {Added} new, {Updated} updated, {Removed} removed",
+                        company.Name, expenseOutcome.Result!.Fetched, expenseOutcome.Result.Added, expenseOutcome.Result.Updated, expenseOutcome.Result.Removed);
             }
             catch (Exception ex)
             {

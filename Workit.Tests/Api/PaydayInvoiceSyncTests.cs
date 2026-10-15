@@ -92,6 +92,25 @@ public class PaydayInvoiceSyncTests
     }
 
     [Fact]
+    public async Task An_open_invoices_part_payments_are_read_from_its_detail_since_the_list_leaves_them_out()
+    {
+        await using var db = NewDb();
+        var open = Remote(4212, status: "SENT", amount: 10_000m);
+        var paid = Remote(4211, status: "PAID", amount: 20_000m);
+        open.Payments = null;
+        paid.Payments = null;
+        payday.DetailPayments[open.Id] = [new PaydayInvoicePayment { Id = Guid.NewGuid(), PaymentDate = new DateTime(2026, 10, 5), Amount = 4_000m }];
+        payday.Invoices.AddRange([open, paid]);
+
+        await Service(db).SyncAsync(companyId, CancellationToken.None);
+
+        payday.DetailReads.Should().Equal(open.Id.ToString());
+        var summary = (await PaydayInvoiceStore.ListAsync(db, companyId,
+            new PaydayInvoiceStore.ListQuery(ExcludeStatus: "DRAFT,CANCELLED,PAID"), CancellationToken.None)).Summary!;
+        summary.UnpaidAmount.Should().Be(6_000m);
+    }
+
+    [Fact]
     public async Task A_draft_deleted_in_Payday_leaves_Workit_too()
     {
         await using var db = NewDb();
@@ -265,7 +284,21 @@ public class PaydayInvoiceSyncTests
             }));
         }
 
-        public Task<ApiResult<PaydayInvoice>> GetByIdAsync(string invoiceId, string? include = "lines,payments") => throw new NotSupportedException();
+        /// <summary>Payments Payday's detail route has but its list leaves out.</summary>
+        public Dictionary<Guid, List<PaydayInvoicePayment>> DetailPayments { get; } = [];
+        public List<string> DetailReads { get; } = [];
+
+        public Task<ApiResult<PaydayInvoice>> GetByIdAsync(string invoiceId, string? include = "lines,payments")
+        {
+            DetailReads.Add(invoiceId);
+            var invoice = Invoices.Single(i => i.Id.ToString() == invoiceId);
+            return Task.FromResult(ApiResult<PaydayInvoice>.Success(new PaydayInvoice
+            {
+                Id = invoice.Id, Number = invoice.Number, Status = invoice.Status, Customer = invoice.Customer,
+                InvoiceDate = invoice.InvoiceDate, AmountIncludingVat = invoice.AmountIncludingVat, Created = invoice.Created,
+                Lines = invoice.Lines, Payments = DetailPayments.GetValueOrDefault(invoice.Id) ?? invoice.Payments,
+            }));
+        }
         public Task<ApiResult<PaydayInvoice>> CreateAsync(CreateInvoiceRequest request) => throw new NotSupportedException();
         public Task<ApiResult<PaydayInvoice>> UpdateAsync(string invoiceId, UpdateInvoiceRequest request) => throw new NotSupportedException();
         public Task<ApiResult<bool>> DeleteAsync(string invoiceId) => throw new NotSupportedException();

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Payday;
 using Workit.Shared.Api;
 using Workit.Shared.Models;
 using Workit.Shared.Payday;
@@ -10,39 +11,28 @@ namespace Workit.Api.Endpoints;
 
 /// <summary>
 /// Links Payday expenses to jobs from the job code a vendor wrote on the
-/// invoice. Reads the company's expenses from Payday, looks for a code or a
-/// job-number reference in the free-text fields, and links each expense
-/// that points at exactly one job. An owner's decisions win: an expense
+/// invoice. Reads Workit's stored copy of the company's Payday expenses in the
+/// window, looks for a code or a job-number reference in the free-text fields,
+/// and links each expense that points at exactly one job. An owner's decisions win: an expense
 /// they linked is never re-pointed, and one they unlinked is never linked
 /// again. Expenses naming several jobs are reported, not guessed.
 /// </summary>
 internal static class ExpenseAutoLinkEndpoints
 {
-    private const int PageSize = 100;
-    /// <summary>Upper bound on Payday pages per pass — 1,000 expenses is far more than one owner's window.</summary>
-    private const int MaxPages = 10;
-
     internal static void MapExpenseAutoLinkEndpoints(this WebApplication app)
     {
         var logger = app.Logger;
 
         app.MapPost("/api/expenses/auto-link", async (
-                WorkitDbContext db, HttpContext httpContext, IPaydayExpensesApi payday,
+                WorkitDbContext db, HttpContext httpContext,
                 string? dateFrom, string? dateTo, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {
                     // Role and Payday connection are checked by PaydayCredentialsFilter.
                     var companyId = httpContext.User.ToUserContext().CompanyId;
 
-                    var expenses = new List<PaydayExpense>();
-                    for (var page = 1; page <= MaxPages; page++)
-                    {
-                        var result = await payday.GetAllAsync(page, PageSize, "lines", dateFrom, dateTo);
-                        if (!result.IsSuccess || result.Value is null)
-                            return Results.Problem(result.ErrorMessage ?? "Could not read expenses from Payday.", statusCode: StatusCodes.Status502BadGateway);
-                        expenses.AddRange(result.Value.Expenses);
-                        if (page >= result.Value.Pages || result.Value.Expenses.Count == 0) break;
-                    }
+                    // Workit's stored copy of the Payday expenses (kept by the expense sync).
+                    var expenses = await PaydayExpenseStore.AllAsync(db, companyId, dateFrom, dateTo, ct);
 
                     var jobs = await db.Jobs.AsNoTracking().Where(j => j.CompanyId == companyId).ToListAsync(ct);
                     var outcome = await LinkAsync(db, companyId, expenses, jobs, ct);
@@ -53,9 +43,7 @@ internal static class ExpenseAutoLinkEndpoints
                     return Results.Ok(outcome);
                 }, logger, "auto-linking Payday expenses to jobs"))
             .RequireAuthorization()
-            // Loads and decrypts the company's Payday credentials into the scoped
-            // client, exactly as the /api/payday proxy routes do. Without it the
-            // client has no credentials and every read fails.
+            // Owner/Admin of a company connected to Payday, as on the /api/payday routes.
             .AddEndpointFilter<PaydayCredentialsFilter>()
             .WithTags("Expenses")
             .WithName("AutoLinkPaydayExpenses");

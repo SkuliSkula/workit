@@ -4,6 +4,7 @@
 @inject BusyService Busy
 @inject IJobsApi JobsApi
 @inject IExpensesApi WorkitExpensesApi
+@inject IExpenseSyncApi SyncApi
 
 <PageTitle>Payday Expenses</PageTitle>
 
@@ -12,9 +13,9 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
         <FluentLabel Typo="Typography.PaneHeader">Payday Expenses</FluentLabel>
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <FluentButton Appearance="Appearance.Outline" @onclick="SyncToWorkitAsync"
-                          Disabled="@(syncing || expenses.Count == 0)">
-                @(syncing ? "Syncing…" : "Sync to Workit")
+            <FluentButton Appearance="Appearance.Outline" @onclick="RefreshFromPaydayAsync" Disabled="@syncing"
+                          Title="Pull every expense from Payday into Workit">
+                @(syncing ? "Refreshing…" : "Refresh from Payday")
             </FluentButton>
             <FluentButton Appearance="Appearance.Accent" @onclick="ToggleCreateForm">
                 @(showCreateForm ? "✕ Cancel" : "+ New Expense")
@@ -49,10 +50,9 @@
     {
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@loadError</FluentLabel>
     }
-    @if (!string.IsNullOrWhiteSpace(syncResult))
-    {
-        <FluentLabel style="margin-top:0.5rem;">@syncResult</FluentLabel>
-    }
+    <FluentLabel Typo="Typography.Body" style="margin-top:0.5rem; color:var(--neutral-foreground-hint);">
+        @SyncLine
+    </FluentLabel>
     @if (!string.IsNullOrWhiteSpace(syncError))
     {
         <FluentLabel Color="Color.Error" style="margin-top:0.5rem;">@syncError</FluentLabel>
@@ -219,7 +219,7 @@
     {
         <div style="font-size:0.8rem; color:var(--neutral-foreground-hint-rest); margin-bottom:0.4rem;">
             Showing @DisplayedExpenses.Count of @expenses.Count loaded
-            @(totalExpenses > 0 ? $"(total in Payday: {totalExpenses})" : string.Empty)
+            @(totalExpenses > 0 ? $"(total: {totalExpenses})" : string.Empty)
         </div>
 
         <div style="overflow-x:auto; min-width:0; max-width:100%;">
@@ -586,9 +586,25 @@
             : expenses.Where(e => e.Status == filterStatus).ToList();
 
     // ── Sync state ────────────────────────────────────────────────────────────
+    // Expenses are read from Workit's stored copy; this keeps it fresh.
+    private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(5);
     private bool    syncing;
-    private string? syncResult;
     private string? syncError;
+    private int     storedExpenses;
+    private DateTimeOffset? lastSynced;
+
+    private string SyncLine => lastSynced is DateTimeOffset t
+        ? $"Saved in Workit · {storedExpenses} expense{(storedExpenses == 1 ? "" : "s")} · synced with Payday {Ago(t)}"
+        : syncing ? "Saving expenses from Payday in Workit…" : "Not synced with Payday yet.";
+
+    private static string Ago(DateTimeOffset t)
+    {
+        var span = DateTimeOffset.UtcNow - t;
+        if (span < TimeSpan.FromMinutes(1)) return "just now";
+        if (span < TimeSpan.FromHours(1))   return $"{(int)span.TotalMinutes} min ago";
+        if (span < TimeSpan.FromDays(1))    return $"{(int)span.TotalHours} h ago";
+        return $"on {t.ToLocalTime():d MMM HH:mm}";
+    }
 
     // ── Action feedback ───────────────────────────────────────────────────────
     private string? actionResult;
@@ -657,7 +673,8 @@
         var accountsTask  = ExpensesApi.GetAccountsAsync();
         var jobsTask      = JobsApi.GetJobsAsync();
         var expensesTask  = FetchPageAsync(page: 1, append: false);
-        await Task.WhenAll(accountsTask, jobsTask, expensesTask);
+        var statusTask    = LoadSyncStatusAsync();
+        await Task.WhenAll(accountsTask, jobsTask, expensesTask, statusTask);
 
         var ar = await accountsTask;
         if (ar.IsSuccess && ar.Value is not null)
@@ -670,6 +687,54 @@
         await AutoLinkAsync();
         await LoadAllLinksAsync();
         DetectJobs();
+
+        // The stored copy shows at once; if it is getting old, bring it up to date
+        // from Payday and show that.
+        if (lastSynced is null || DateTimeOffset.UtcNow - lastSynced > StaleAfter)
+        {
+            StateHasChanged();
+            await SyncFromPaydayAsync();
+        }
+    }
+
+    private async Task LoadSyncStatusAsync()
+    {
+        var status = await SyncApi.GetStatusAsync();
+        if (status is { IsSuccess: true, Value: { } value })
+        {
+            storedExpenses = value.Stored;
+            lastSynced     = value.LastSyncedAt;
+        }
+    }
+
+    private async Task RefreshFromPaydayAsync()
+    {
+        using var busy = Busy.Begin("Refreshing expenses from Payday…");
+        await SyncFromPaydayAsync();
+    }
+
+    private async Task SyncFromPaydayAsync()
+    {
+        syncing   = true;
+        syncError = null;
+        try
+        {
+            var result = await SyncApi.SyncAsync();
+            if (!result.IsSuccess)
+            {
+                syncError = $"Showing the expenses saved in Workit — {result.ErrorMessage}";
+                return;
+            }
+            await LoadExpensesAsync();
+            // Newly stored expenses may carry a job code.
+            await AutoLinkAsync();
+            await LoadAllLinksAsync();
+            DetectJobs();
+        }
+        finally
+        {
+            syncing = false;
+        }
     }
 
     /// <summary>
@@ -717,7 +782,7 @@
     private async Task LoadExpensesAsync()
     {
         currentPage = 1;
-        await FetchPageAsync(page: 1, append: false);
+        await Task.WhenAll(FetchPageAsync(page: 1, append: false), LoadSyncStatusAsync());
     }
 
     private async Task LoadMoreAsync()
@@ -1125,53 +1190,6 @@
         else
         {
             actionError = result.ErrorMessage ?? "Could not remove job link.";
-        }
-    }
-
-    // ── Sync to Workit ────────────────────────────────────────────────────────
-    private async Task SyncToWorkitAsync()
-    {
-        using var busy = Busy.Begin("Syncing expenses to Workit…");
-        syncing    = true;
-        syncResult = null;
-        syncError  = null;
-
-        try
-        {
-            var existingResult = await WorkitExpensesApi.GetExpensesAsync();
-            if (!existingResult.IsSuccess)
-            {
-                syncError = $"Could not check existing expenses: {existingResult.ErrorMessage}";
-                return;
-            }
-
-            var existingPaydayIds = (existingResult.Value ?? [])
-                .Where(x => x.PaydayId.HasValue)
-                .Select(x => x.PaydayId!.Value)
-                .ToHashSet();
-
-            int created = 0, skipped = 0, failed = 0;
-
-            foreach (var pe in expenses)
-            {
-                if (existingPaydayIds.Contains(pe.Id))
-                {
-                    skipped++;
-                    continue;
-                }
-
-                var expense = pe.ToWorkitExpense(expenseJobLinks.GetValueOrDefault(pe.Id));
-                var result  = await WorkitExpensesApi.ImportPaydayExpenseAsync(expense);
-                if (result.IsSuccess) created++;
-                else failed++;
-            }
-
-            syncResult = $"✓ Sync complete — {created} created, {skipped} already synced" +
-                         (failed > 0 ? $", {failed} failed" : string.Empty) + ".";
-        }
-        finally
-        {
-            syncing = false;
         }
     }
 

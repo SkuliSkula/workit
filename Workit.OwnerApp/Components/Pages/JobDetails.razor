@@ -186,7 +186,7 @@ else if (job is not null)
             {
                 <div style="font-size:0.88rem; color:#374151;">
                     Remaining to bill (sale ex VAT):
-                    <strong style="color:#111827;">@AllExpenseLines.Sum(r => RemainingQty(r.Line) * r.Line.SalePriceExcludingVat).ToString("N0") ISK</strong>
+                    <strong style="color:#111827;">@AllExpenseLines.Sum(r => Remaining(r) * r.Line.SalePriceExcludingVat).ToString("N0") ISK</strong>
                 </div>
             }
         </div>
@@ -246,7 +246,7 @@ else if (job is not null)
                     </TemplateColumn>
                     <TemplateColumn Title="Billed / Rem." Align="Align.End">
                         <FluentLabel style="font-size:0.82rem;">
-                            @BilledQty(context.Line).ToString("0.##") / <strong>@RemainingQty(context.Line).ToString("0.##")</strong>
+                            @BilledQty(context.Line).ToString("0.##") / <strong>@Remaining(context).ToString("0.##")</strong>
                         </FluentLabel>
                     </TemplateColumn>
                     <TemplateColumn Title="Status">
@@ -260,7 +260,7 @@ else if (job is not null)
                 <div style="display:flex; justify-content:flex-end; gap:2rem; margin-top:0.75rem; font-size:0.88rem; color:#374151; border-top:1px solid #e5e7eb; padding-top:0.6rem;">
                     <span>Cost total ex VAT: <strong>@AllExpenseLines.Sum(r => r.Line.Quantity * (r.Line.UnitPriceExcludingVat ?? 0m)).ToString("N0") ISK</strong></span>
                     <span>Billed sale ex VAT: <strong>@AllExpenseLines.Sum(r => BilledQty(r.Line) * r.Line.SalePriceExcludingVat).ToString("N0") ISK</strong></span>
-                    <span>Remaining sale ex VAT: <strong style="color:#111827; font-size:0.95rem;">@AllExpenseLines.Sum(r => RemainingQty(r.Line) * r.Line.SalePriceExcludingVat).ToString("N0") ISK</strong></span>
+                    <span>Remaining sale ex VAT: <strong style="color:#111827; font-size:0.95rem;">@AllExpenseLines.Sum(r => Remaining(r) * r.Line.SalePriceExcludingVat).ToString("N0") ISK</strong></span>
                 </div>
             </div>
         }
@@ -606,6 +606,9 @@ else if (job is not null)
 
     private static decimal BilledQty(ExpenseLine l)    => l.Billings.Sum(b => b.Quantity);
     private static decimal RemainingQty(ExpenseLine l) => l.Quantity - BilledQty(l);
+
+    // A purchase Payday deleted keeps what was billed from it, but nothing is left to bill.
+    private static decimal Remaining(JobExpenseRow r) => r.Status == "DELETED" ? 0m : RemainingQty(r.Line);
 
     private static string InvoiceNumbers(ExpenseLine l) =>
         string.Join(", ", l.Billings.Where(b => b.PaydayInvoiceNumber.HasValue)
