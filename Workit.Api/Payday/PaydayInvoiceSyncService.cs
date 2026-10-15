@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Data;
 using Workit.Shared.Models;
@@ -26,18 +25,7 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
     /// </summary>
     internal static readonly TimeSpan RemovalGrace = TimeSpan.FromMinutes(10);
 
-    // The background sync, a page's refresh and an invoice write can land at the
-    // same moment; one at a time per company, so the same invoice is never added twice.
-    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> Gates = new();
-    private static SemaphoreSlim Gate(Guid companyId) => Gates.GetOrAdd(companyId, _ => new SemaphoreSlim(1, 1));
-
-    /// <summary>
-    /// Invoices stored straight from a Payday write or open, and when. A list
-    /// fetched within <see cref="ListLag"/> of that can still show the invoice as
-    /// it was before, so the sync leaves those alone; the next pass catches up.
-    /// </summary>
-    private static readonly ConcurrentDictionary<Guid, DateTimeOffset> DirectSaves = new();
-    internal static readonly TimeSpan ListLag = TimeSpan.FromMinutes(2);
+    private const string Kind = "invoices";
 
     public async Task<Outcome> SyncAsync(Guid companyId, CancellationToken ct)
     {
@@ -54,24 +42,24 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
             if (page >= result.Value.Pages || result.Value.Invoices.Count == 0) break;
         }
 
-        var gate = Gate(companyId);
-        await gate.WaitAsync(ct);
-        try
+        // Payday's list leaves payments out (52 paid invoices, not one payment, on
+        // the first production sync). An open invoice's part-payments are what its
+        // balance hangs on, so those few are read one by one, payments included.
+        foreach (var open in fetched.Where(i => i.Status == "SENT" && (i.Payments is null || i.Payments.Count == 0)).ToList())
         {
+            var detail = await payday.GetByIdAsync(open.Id.ToString(), "lines,payments");
+            if (detail is { IsSuccess: true, Value: { } full })
+                fetched[fetched.IndexOf(open)] = full;
+        }
+
+        using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
             return new Outcome(await StoreAllAsync(companyId, fetched, total, listedAt, ct), null);
-        }
-        finally
-        {
-            gate.Release();
-        }
     }
 
     private async Task<PaydayInvoiceSyncResult> StoreAllAsync(Guid companyId, List<PaydayInvoice> fetched, int total, DateTimeOffset listedAt, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        foreach (var old in DirectSaves.Where(d => d.Value < now - ListLag).ToList())
-            DirectSaves.TryRemove(old);
-        bool SavedSinceListed(Guid id) => DirectSaves.TryGetValue(id, out var at) && at > listedAt - ListLag;
+        bool SavedSinceListed(Guid id) => PaydaySyncGuard.SavedSince(id, listedAt);
         var stored = await TrackedAsync(companyId, null, ct);
         var byPaydayId = stored.Where(i => i.PaydayId is not null).ToDictionary(i => i.PaydayId!.Value);
         var seen = new HashSet<Guid>();
@@ -122,39 +110,27 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
     /// </summary>
     public async Task SaveAsync(Guid companyId, PaydayInvoice remote, CancellationToken ct)
     {
-        var gate = Gate(companyId);
-        await gate.WaitAsync(ct);
-        try
+        using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
         {
             var now = DateTimeOffset.UtcNow;
             var local = (await TrackedAsync(companyId, remote.Id, ct)).FirstOrDefault();
             if (local is null) Add(companyId, remote, now);
             else Apply(local, remote, now);
             await db.SaveChangesAsync(ct);
-            DirectSaves[remote.Id] = now;
-        }
-        finally
-        {
-            gate.Release();
+            PaydaySyncGuard.SavedDirectly(remote.Id);
         }
     }
 
     /// <summary>Drops Workit's copy of an invoice Payday no longer has.</summary>
     public async Task RemoveAsync(Guid companyId, Guid paydayId, CancellationToken ct)
     {
-        var gate = Gate(companyId);
-        await gate.WaitAsync(ct);
-        try
+        using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
         {
             foreach (var local in await TrackedAsync(companyId, paydayId, ct))
                 db.Invoices.Remove(local);
             await db.SaveChangesAsync(ct);
             // A list fetched just now may still carry it; don't bring it back.
-            DirectSaves[paydayId] = DateTimeOffset.UtcNow;
-        }
-        finally
-        {
-            gate.Release();
+            PaydaySyncGuard.SavedDirectly(paydayId);
         }
     }
 
@@ -172,7 +148,7 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
             CompanyId = companyId,
             PaydayId  = remote.Id,
             Source    = DataSource.Payday,
-            CreatedAt = remote.Created is DateTime created ? new DateTimeOffset(Utc(created)) : now,
+            CreatedAt = remote.Created is DateTime created ? new DateTimeOffset(PaydaySyncGuard.Utc(created)) : now,
         };
         db.Invoices.Add(local);
         Apply(local, remote, now);
@@ -201,18 +177,18 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
         if (!string.IsNullOrWhiteSpace(remote.CurrencyCode)) local.CurrencyCode = remote.CurrencyCode;
         if (remote.CurrencyRate > 0) local.CurrencyRate = remote.CurrencyRate;
 
-        local.InvoiceDate        = Utc(remote.InvoiceDate);
-        local.DueDate            = Utc(remote.DueDate);
-        local.FinalDueDate       = Utc(remote.FinalDueDate);
-        local.SentDate           = Utc(remote.SentDate);
-        local.PaidDate           = Utc(remote.PaidDate);
-        local.CancelDate         = Utc(remote.CancelDate);
-        local.CancelledDate      = Utc(remote.CancelledDate);
-        local.CreditDate         = Utc(remote.CreditDate);
-        local.RefundDate         = Utc(remote.RefundDate);
-        local.ClaimCreated       = Utc(remote.ClaimCreated);
-        local.ClaimFinalDueDate  = Utc(remote.ClaimFinalDueDate);
-        local.ClaimCancelledDate = Utc(remote.ClaimCancelledDate);
+        local.InvoiceDate        = PaydaySyncGuard.Utc(remote.InvoiceDate);
+        local.DueDate            = PaydaySyncGuard.Utc(remote.DueDate);
+        local.FinalDueDate       = PaydaySyncGuard.Utc(remote.FinalDueDate);
+        local.SentDate           = PaydaySyncGuard.Utc(remote.SentDate);
+        local.PaidDate           = PaydaySyncGuard.Utc(remote.PaidDate);
+        local.CancelDate         = PaydaySyncGuard.Utc(remote.CancelDate);
+        local.CancelledDate      = PaydaySyncGuard.Utc(remote.CancelledDate);
+        local.CreditDate         = PaydaySyncGuard.Utc(remote.CreditDate);
+        local.RefundDate         = PaydaySyncGuard.Utc(remote.RefundDate);
+        local.ClaimCreated       = PaydaySyncGuard.Utc(remote.ClaimCreated);
+        local.ClaimFinalDueDate  = PaydaySyncGuard.Utc(remote.ClaimFinalDueDate);
+        local.ClaimCancelledDate = PaydaySyncGuard.Utc(remote.ClaimCancelledDate);
         local.ClaimCancelled     = remote.ClaimCancelled;
 
         local.AmountExcludingVat        = remote.AmountExcludingVat;
@@ -285,7 +261,7 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
             }
             keep.Add(payment.Id);
             payment.PaymentTypePaydayId = r.PaymentTypeId == Guid.Empty ? null : r.PaymentTypeId;
-            payment.PaymentDate         = Utc(r.PaymentDate);
+            payment.PaymentDate         = PaydaySyncGuard.Utc(r.PaymentDate);
             payment.Amount              = r.Amount;
             payment.CurrencyCode        = r.CurrencyCode;
         }
@@ -295,15 +271,4 @@ public sealed class PaydayInvoiceSyncService(WorkitDbContext db, IPaydayInvoices
             db.InvoicePayments.Remove(stale);
         }
     }
-
-    // Payday sends plain dates ("2026-09-21T00:00:00"); Iceland is UTC all year,
-    // and Postgres timestamptz needs the kind spelled out.
-    private static DateTime Utc(DateTime value) => value.Kind switch
-    {
-        DateTimeKind.Utc   => value,
-        DateTimeKind.Local => value.ToUniversalTime(),
-        _                  => DateTime.SpecifyKind(value, DateTimeKind.Utc),
-    };
-
-    private static DateTime? Utc(DateTime? value) => value is DateTime v ? Utc(v) : null;
 }

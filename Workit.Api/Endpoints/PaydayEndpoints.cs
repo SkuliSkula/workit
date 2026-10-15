@@ -153,8 +153,12 @@ internal static class PaydayEndpoints
         payday.MapGet("/invoices/{id}/attachment", async (IPaydayInvoicesApi api, string id) => ToFileResult(await api.GetAttachmentAsync(id), "application/octet-stream"));
 
         // ── Expenses ──────────────────────────────────────────────────────────
+        // Like invoices: Workit keeps its own copy of every Payday expense
+        // (PaydayExpenseSyncService), the list answers from it, and whatever Payday
+        // hands back on a write or an open is stored on the way through.
         payday.MapGet("/expenses", async (
-                IPaydayExpensesApi api,
+                WorkitDbContext db,
+                HttpContext http,
                 int     page     = 1,
                 int     perPage  = 25,
                 string? include  = "lines",
@@ -162,14 +166,65 @@ internal static class PaydayEndpoints
                 string? dateTo   = null,
                 string? status   = null,
                 string  order    = "desc",
-                string  orderBy  = "date") =>
-            ToResult(await api.GetAllAsync(page, perPage, include, dateFrom, dateTo, status, order, orderBy)));
+                string  orderBy  = "date",
+                CancellationToken ct = default) =>
+            Results.Ok(await PaydayExpenseStore.ListAsync(db, http.User.ToUserContext().CompanyId,
+                new PaydayExpenseStore.ListQuery(page, perPage, include, dateFrom, dateTo, status, order, orderBy), ct)));
+
+        payday.MapPost("/expenses/sync", async (PaydayExpenseSyncService sync, HttpContext http, CancellationToken ct) =>
+        {
+            var outcome = await sync.SyncAsync(http.User.ToUserContext().CompanyId, ct);
+            return outcome.Error is null
+                ? Results.Ok(outcome.Result)
+                : Results.Content(outcome.Error, "text/plain", statusCode: StatusCodes.Status502BadGateway);
+        });
+        payday.MapGet("/expenses/sync", async (WorkitDbContext db, HttpContext http, CancellationToken ct) =>
+            Results.Ok(await PaydayExpenseStore.StatusAsync(db, http.User.ToUserContext().CompanyId, ct)));
+
         payday.MapGet("/expenses/paymenttypes",    async (IPaydayExpensesApi api) => ToResult(await api.GetPaymentTypesAsync()));
         payday.MapGet("/expenses/accounts",        async (IPaydayExpensesApi api) => ToResult(await api.GetAccountsAsync()));
-        payday.MapGet("/expenses/{id}",            async (IPaydayExpensesApi api, string id, string? include = "lines") => ToResult(await api.GetByIdAsync(id, include)));
-        payday.MapPost("/expenses",                async (IPaydayExpensesApi api, CreateExpenseRequest body) => ToResult(await api.CreateAsync(body)));
-        payday.MapPut("/expenses/{id}",            async (IPaydayExpensesApi api, string id, UpdateExpenseRequest body) => ToResult(await api.UpdateAsync(id, body)));
-        payday.MapDelete("/expenses/{id}",         async (IPaydayExpensesApi api, string id) => ToResult(await api.DeleteAsync(id)));
+
+        // Opening an expense asks Payday for the latest and stores it; the stored
+        // copy answers when Payday can't, and goes when Payday says it is gone.
+        payday.MapGet("/expenses/{id}", async (IPaydayExpensesApi api, PaydayExpenseSyncService sync, WorkitDbContext db, HttpContext http, string id, string? include = "lines", CancellationToken ct = default) =>
+        {
+            var result = await api.GetByIdAsync(id, include);
+            if (!Guid.TryParse(id, out var expenseId)) return ToResult(result);
+            var companyId = http.User.ToUserContext().CompanyId;
+            if (result.IsSuccess && result.Value is not null)
+            {
+                await sync.SaveAsync(companyId, result.Value, ct);
+                return ToResult(result);
+            }
+            if (result.IsNotFound)
+            {
+                await sync.RemoveAsync(companyId, expenseId, ct);
+                return ToResult(result);
+            }
+            var stored = await PaydayExpenseStore.GetAsync(db, companyId, expenseId, include, ct);
+            return stored is not null ? Results.Ok(stored) : ToResult(result);
+        });
+        payday.MapPost("/expenses", async (IPaydayExpensesApi api, PaydayExpenseSyncService sync, HttpContext http, CreateExpenseRequest body, CancellationToken ct) =>
+        {
+            var result = await api.CreateAsync(body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
+        payday.MapPut("/expenses/{id}", async (IPaydayExpensesApi api, PaydayExpenseSyncService sync, HttpContext http, string id, UpdateExpenseRequest body, CancellationToken ct) =>
+        {
+            var result = await api.UpdateAsync(id, body);
+            if (result.IsSuccess && result.Value is not null)
+                await sync.SaveAsync(http.User.ToUserContext().CompanyId, result.Value, ct);
+            return ToResult(result);
+        });
+        payday.MapDelete("/expenses/{id}", async (IPaydayExpensesApi api, PaydayExpenseSyncService sync, HttpContext http, string id, CancellationToken ct) =>
+        {
+            var result = await api.DeleteAsync(id);
+            if (result.IsSuccess && Guid.TryParse(id, out var expenseId))
+                await sync.RemoveAsync(http.User.ToUserContext().CompanyId, expenseId, ct);
+            return ToResult(result);
+        });
         payday.MapGet("/expenses/{id}/attachment", async (IPaydayExpensesApi api, string id) => ToFileResult(await api.GetAttachmentAsync(id), "application/octet-stream"));
     }
 

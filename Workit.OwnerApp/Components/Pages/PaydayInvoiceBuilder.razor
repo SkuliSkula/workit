@@ -986,8 +986,9 @@
                 js.Expenses = [];
                 if (js.IsPartial) continue;
                 var expensesResult = await ExpensesApi.GetExpensesAsync(jobId: js.Job.Id);
+                // A purchase Payday deleted keeps its billed history but has nothing left to bill.
                 if (expensesResult.IsSuccess)
-                    js.Expenses.AddRange(expensesResult.Value ?? []);
+                    js.Expenses.AddRange((expensesResult.Value ?? []).Where(e => e.Status != "DELETED"));
             }
 
             jobDataLoaded = true;
