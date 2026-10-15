@@ -1,9 +1,10 @@
-using Workit.Shared.Models;
+namespace Workit.Shared.Models;
 
-namespace Workit.OwnerApp.Services;
-
-/// <summary>Where a job stands — the Kanban board's lanes, also the Jobs page's status filter.</summary>
-public enum JobLane { Backlog, InProgress, Waiting, Done }
+/// <summary>
+/// Where a job stands — the Kanban board's lanes, the Jobs pages' status filter
+/// in the console and the apps. The API sends it on every job (<see cref="Job.Lane"/>).
+/// </summary>
+public enum JobLane { Backlog = 0, InProgress = 1, Waiting = 2, Done = 3 }
 
 public static class JobLanes
 {
@@ -13,10 +14,15 @@ public static class JobLanes
     /// No hours yet: backlog. Every hour invoiced: done. Otherwise in progress,
     /// unless the owner put it on hold (waiting).
     /// </summary>
-    public static JobLane Of(Job job, IReadOnlyCollection<TimeEntry> entriesOnJob)
+    public static JobLane Of(Job job, IReadOnlyCollection<TimeEntry> entriesOnJob) =>
+        Of(job, entriesOnJob.Count, entriesOnJob.Count(e => !e.IsInvoiced));
+
+    /// <param name="entries">Time entries on the job, everyone's.</param>
+    /// <param name="uninvoiced">How many of them are not invoiced yet.</param>
+    public static JobLane Of(Job job, int entries, int uninvoiced)
     {
-        if (entriesOnJob.Count == 0)                  return JobLane.Backlog;
-        if (entriesOnJob.All(e => e.IsInvoiced))      return JobLane.Done;
+        if (entries == 0)                             return JobLane.Backlog;
+        if (uninvoiced == 0)                          return JobLane.Done;
         if (job.KanbanStatus == KanbanStatus.Waiting) return JobLane.Waiting;
         return JobLane.InProgress;
     }

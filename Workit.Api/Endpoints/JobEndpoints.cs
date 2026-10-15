@@ -33,7 +33,18 @@ internal static class JobEndpoints
                     // Finished jobs still come back so an employee's past hours can
                     // name the job they were worked on; the apps stop offering them.
                     var finished = await JobClosure.FinishedJobIdsAsync(db, userContext.CompanyId, ct);
-                    foreach (var job in jobs) job.IsFinished = finished.Contains(job.Id);
+                    // Everyone's hours, so an employee sees a job a colleague works on as in progress.
+                    var hours = await db.TimeEntries
+                        .Where(e => e.CompanyId == userContext.CompanyId)
+                        .GroupBy(e => e.JobId)
+                        .Select(g => new { JobId = g.Key, Entries = g.Count(), Uninvoiced = g.Count(e => !e.IsInvoiced) })
+                        .ToDictionaryAsync(h => h.JobId, ct);
+                    foreach (var job in jobs)
+                    {
+                        job.IsFinished = finished.Contains(job.Id);
+                        var h = hours.GetValueOrDefault(job.Id);
+                        job.Lane = JobLanes.Of(job, h?.Entries ?? 0, h?.Uninvoiced ?? 0);
+                    }
 
                     return Results.Ok(jobs);
                 },

@@ -45,6 +45,13 @@ public sealed class Job : ICreatedAudit
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
     public bool              IsFinished        { get; set; }
 
+    /// <summary>
+    /// The Kanban lane, from everyone's hours on the job (see <see cref="JobLanes.Of(Job, int, int)"/>).
+    /// Derived on read, never stored; the apps filter their Jobs screens by it.
+    /// </summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public JobLane           Lane              { get; set; }
+
     public KanbanStatus      KanbanStatus      { get; set; } = KanbanStatus.Active;
     public string?           WaitingReason     { get; set; }
     public DateTimeOffset?   KanbanInProgressAt { get; set; }
