@@ -52,6 +52,7 @@ Workit is a workforce management system for service contractors. This repository
 
 ### Payday Integration
 - First-time company setup: import company details from Payday and auto-generate the owner account
+- Sales invoices are stored in Workit: every Payday invoice (lines and payments included) is kept in Workit's database, refreshed every 30 minutes, when the Invoices page opens on a copy older than 5 minutes, and on "Refresh from Payday"; invoices created, edited or opened from Workit are saved at once, and drafts deleted in Payday drop out
 - Invoice dashboard: total revenue, collected, unpaid, overdue amounts
 - VAT owed and outstanding expenses
 - Income statement chart (revenue vs. collected) with configurable date range

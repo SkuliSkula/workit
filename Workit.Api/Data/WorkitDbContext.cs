@@ -169,8 +169,10 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Status });
         modelBuilder.Entity<Invoice>()
             .HasIndex(x => new { x.CompanyId, x.InvoiceDate });
+        // One stored copy per Payday invoice.
         modelBuilder.Entity<Invoice>()
             .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .IsUnique()
             .HasFilter("\"PaydayId\" IS NOT NULL");
         modelBuilder.Entity<Invoice>()
             .HasMany(x => x.Lines)

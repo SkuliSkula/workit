@@ -7,9 +7,10 @@ namespace Workit.Api.Payday;
 
 /// <summary>
 /// Keeps every connected company in step with Payday without anyone pressing
-/// Sync now: the product cache (and, where switched on, materials), and
+/// Sync now: the product cache (and, where switched on, materials),
 /// customers in both directions — pending Workit edits go out, Payday's list
-/// comes in. One company's failure never stops the loop.
+/// comes in — and Workit's copy of every sales invoice. One company's failure
+/// never stops the loop.
 /// </summary>
 public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactory, ILogger<PaydaySyncBackgroundService> logger) : BackgroundService
 {
@@ -66,10 +67,18 @@ public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactor
                 else
                     logger.LogInformation("Payday customer sync for {Company}: {Fetched} customers, {Added} new, {Linked} linked, {Pushed} pushed, {PushFailed} push failures",
                         company.Name, customerOutcome.Result!.Fetched, customerOutcome.Result.Added, customerOutcome.Result.Linked, customerOutcome.Result.Pushed, customerOutcome.Result.PushFailed);
+
+                var invoices = companyScope.ServiceProvider.GetRequiredService<PaydayInvoiceSyncService>();
+                var invoiceOutcome = await invoices.SyncAsync(company.Id, ct);
+                if (invoiceOutcome.Error is not null)
+                    logger.LogWarning("Payday invoice sync for {Company} failed: {Error}", company.Name, invoiceOutcome.Error);
+                else
+                    logger.LogInformation("Payday invoice sync for {Company}: {Fetched} invoices, {Added} new, {Updated} updated, {Removed} removed",
+                        company.Name, invoiceOutcome.Result!.Fetched, invoiceOutcome.Result.Added, invoiceOutcome.Result.Updated, invoiceOutcome.Result.Removed);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Payday product sync failed for company {CompanyId}", company.Id);
+                logger.LogError(ex, "Payday sync failed for company {CompanyId}", company.Id);
             }
         }
     }
