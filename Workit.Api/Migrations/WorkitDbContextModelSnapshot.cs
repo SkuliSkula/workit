@@ -287,6 +287,7 @@ namespace Workit.Api.Migrations
                     b.HasIndex("CompanyId", "Name");
 
                     b.HasIndex("CompanyId", "PaydayId")
+                        .IsUnique()
                         .HasFilter("\"PaydayId\" IS NOT NULL");
 
                     b.ToTable("Customers", (string)null);

@@ -23,6 +23,8 @@ public sealed class PaydayCustomerSyncService(WorkitDbContext db, IPaydayCustome
     /// <summary>The seeded placeholder SSN; never a match key.</summary>
     private const string PlaceholderSsn = "0000000000";
 
+    private const string Kind = "customers";
+
     /// <summary>
     /// Creates or updates the customer in Payday and records the outcome on the
     /// row. Does not save — the caller owns the transaction.
@@ -113,60 +115,95 @@ public sealed class PaydayCustomerSyncService(WorkitDbContext db, IPaydayCustome
             if (page >= result.Value.Pages || result.Value.Customers.Count == 0) break;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var byPaydayId = locals.Where(c => c.PaydayId is not null).ToDictionary(c => c.PaydayId!.Value);
-        var bySsn = locals
+        // One writer per company; read the customers again inside, so one stored
+        // meanwhile (an open, a write-through) is matched rather than added twice.
+        using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
+        {
+            var now = DateTimeOffset.UtcNow;
+            var match = new Matcher(await db.Customers.Where(c => c.CompanyId == companyId).ToListAsync(ct));
+            int added = 0, updated = 0, linked = 0;
+            foreach (var remote in fetched)
+            {
+                switch (Upsert(companyId, remote, match, now))
+                {
+                    case Change.Added:   added++;   break;
+                    case Change.Updated: updated++; break;
+                    case Change.Linked:  linked++;  break;
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+            return new Outcome(new PaydayCustomerSyncResult(fetched.Count, added, updated, linked, pushed, pushFailed, now), null);
+        }
+    }
+
+    /// <summary>
+    /// Stores one customer exactly as Payday returned it (opening it, or a write
+    /// made straight to Payday) — by Payday id, else by SSN, else as a new
+    /// customer, the same rules as <see cref="SyncAsync"/>.
+    /// </summary>
+    public async Task SaveAsync(Guid companyId, PaydayCustomer remote, CancellationToken ct)
+    {
+        using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
+        {
+            var locals = await db.Customers.Where(c => c.CompanyId == companyId).ToListAsync(ct);
+            Upsert(companyId, remote, new Matcher(locals), DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    private enum Change { Added, Updated, Linked, Kept }
+
+    /// <summary>Workit's customers keyed the two ways a Payday customer can be found.</summary>
+    private sealed class Matcher(List<Customer> locals)
+    {
+        public Dictionary<Guid, Customer> ByPaydayId { get; } =
+            locals.Where(c => c.PaydayId is not null).ToDictionary(c => c.PaydayId!.Value);
+        public Dictionary<string, Customer> BySsn { get; } = locals
             .Where(c => c.PaydayId is null && IsMatchableSsn(c.Ssn))
             .GroupBy(c => NormalizeSsn(c.Ssn)!)
             .ToDictionary(g => g.Key, g => g.First());
-        int added = 0, updated = 0, linked = 0;
+    }
 
-        foreach (var remote in fetched)
+    private Change Upsert(Guid companyId, PaydayCustomer remote, Matcher match, DateTimeOffset now)
+    {
+        if (match.ByPaydayId.TryGetValue(remote.Id, out var local))
         {
-            if (byPaydayId.TryGetValue(remote.Id, out var local))
-            {
-                // A push Payday has not accepted yet carries the newer Workit values; keep them.
-                if (local.PaydayPushPending) continue;
-                ApplyBilling(local, remote);
-                local.PaydaySyncedAt = now;
-                updated++;
-                continue;
-            }
-
-            var remoteSsn = NormalizeSsn(remote.Ssn);
-            if (remoteSsn is not null && bySsn.TryGetValue(remoteSsn, out local))
-            {
-                local.PaydayId = remote.Id;
-                local.Source   = DataSource.Payday;
-                bySsn.Remove(remoteSsn);
-                byPaydayId[remote.Id] = local;
-                if (!local.PaydayPushPending) ApplyBilling(local, remote);
-                local.PaydaySyncedAt = now;
-                linked++;
-                continue;
-            }
-
-            local = new Customer
-            {
-                CompanyId      = companyId,
-                // Workit requires an SSN on save; a foreign Payday customer has none, so it
-                // gets the placeholder — which the push treats as "no SSN" again.
-                Ssn            = PlaceholderSsn,
-                Source         = DataSource.Payday,
-                PaydayId       = remote.Id,
-                PaydaySyncedAt = now,
-                CreatedAt      = now,
-                CreatedByName  = "Payday sync",
-            };
+            // A push Payday has not accepted yet carries the newer Workit values; keep them.
+            if (local.PaydayPushPending) return Change.Kept;
             ApplyBilling(local, remote);
-            db.Customers.Add(local);
-            locals.Add(local);
-            byPaydayId[remote.Id] = local;
-            added++;
+            local.PaydaySyncedAt = now;
+            return Change.Updated;
         }
 
-        await db.SaveChangesAsync(ct);
-        return new Outcome(new PaydayCustomerSyncResult(fetched.Count, added, updated, linked, pushed, pushFailed, now), null);
+        var remoteSsn = NormalizeSsn(remote.Ssn);
+        if (remoteSsn is not null && match.BySsn.TryGetValue(remoteSsn, out local))
+        {
+            local.PaydayId = remote.Id;
+            local.Source   = DataSource.Payday;
+            match.BySsn.Remove(remoteSsn);
+            match.ByPaydayId[remote.Id] = local;
+            if (!local.PaydayPushPending) ApplyBilling(local, remote);
+            local.PaydaySyncedAt = now;
+            return Change.Linked;
+        }
+
+        local = new Customer
+        {
+            CompanyId      = companyId,
+            // Workit requires an SSN on save; a foreign Payday customer has none, so it
+            // gets the placeholder — which the push treats as "no SSN" again.
+            Ssn            = PlaceholderSsn,
+            Source         = DataSource.Payday,
+            PaydayId       = remote.Id,
+            PaydaySyncedAt = now,
+            CreatedAt      = now,
+            CreatedByName  = "Payday sync",
+        };
+        ApplyBilling(local, remote);
+        db.Customers.Add(local);
+        match.ByPaydayId[remote.Id] = local;
+        return Change.Added;
     }
 
     /// <summary>Payday owns the billing identity; Workit-only fields are left as they are.</summary>

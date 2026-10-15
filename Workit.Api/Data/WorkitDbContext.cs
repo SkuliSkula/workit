@@ -63,8 +63,10 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
             .HasIndex(x => new { x.CompanyId, x.Name })
             .IsUnique(false);
 
+        // One Workit customer per Payday customer.
         modelBuilder.Entity<Customer>()
             .HasIndex(x => new { x.CompanyId, x.PaydayId })
+            .IsUnique()
             .HasFilter("\"PaydayId\" IS NOT NULL");
 
         modelBuilder.Entity<Employee>()
