@@ -126,9 +126,11 @@ internal static class ExpenseEndpoints
                         line.ExpenseId = expense.Id;
                         line.CompanyId = companyId;
                         if (line.MarkupFactor <= 0) line.MarkupFactor = 1.5m;
-                        if (line.SalePriceExcludingVat <= 0)
-                            line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(
-                                line.UnitPriceExcludingVat, line.DiscountPercentage, line.MarkupFactor);
+                        // Always the server's price on a fresh import — nobody has typed
+                        // one yet. Filling it only when empty is what let a client-side
+                        // list-price figure through after the #70 fix.
+                        line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(
+                            line.UnitPriceExcludingVat, line.DiscountPercentage, line.MarkupFactor);
                     }
 
                     db.Expenses.Add(expense);
