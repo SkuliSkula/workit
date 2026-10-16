@@ -512,3 +512,6 @@
         grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
     }
 }
+
+/* FluentCard renders its own element, which scoped styles don't reach on their own. */
+.dashboard-kpis ::deep .kpi-card { display: grid; gap: 0.2rem; }
