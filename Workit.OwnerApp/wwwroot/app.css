@@ -147,3 +147,80 @@ h1:focus {
     display: flex;
     justify-content: flex-start;
 }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────────
+   Every FluentButton in the console, one family: rounded pills. Accent is the
+   one thing to do (navy), Outline and Neutral the alternatives (white with a
+   thin border), Stealth the quiet ones (no border until hovered). The owner
+   home's quick links (.pill) are the same design for plain links.
+   Danger: add Class="btn-danger" (filled red) or "btn-danger-text" (red text). */
+fluent-button::part(control) {
+    border-radius: 999px;
+    font-weight: 600;
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s, color 0.15s;
+}
+fluent-button:focus-visible::part(control) {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 2px;
+}
+
+fluent-button[appearance="accent"]::part(control) {
+    background: #14304b;
+    border: 1px solid #14304b;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(20, 48, 75, 0.12);
+}
+fluent-button[appearance="accent"]:not([disabled]):hover::part(control) {
+    background: #1d4269;
+    border-color: #1d4269;
+    box-shadow: 0 3px 8px rgba(20, 48, 75, 0.18);
+    transform: translateY(-1px);
+}
+fluent-button[appearance="accent"]:not([disabled]):active::part(control) {
+    background: #102740;
+    transform: none;
+}
+
+fluent-button[appearance="outline"]::part(control),
+fluent-button[appearance="neutral"]::part(control) {
+    background: #fff;
+    border: 1px solid #d5dfea;
+    color: #14304b;
+    box-shadow: 0 1px 2px rgba(20, 48, 75, 0.06);
+}
+fluent-button[appearance="outline"]:not([disabled]):hover::part(control),
+fluent-button[appearance="neutral"]:not([disabled]):hover::part(control) {
+    background: #f1f6fc;
+    border-color: #a9c4e4;
+    box-shadow: 0 3px 8px rgba(20, 48, 75, 0.10);
+    transform: translateY(-1px);
+}
+
+fluent-button[appearance="stealth"]::part(control) {
+    color: #14304b;
+}
+fluent-button[appearance="stealth"]:not([disabled]):hover::part(control) {
+    background: #eef3f9;
+}
+
+fluent-button[disabled]::part(control) {
+    box-shadow: none;
+    transform: none;
+}
+
+/* Destructive actions */
+fluent-button.btn-danger::part(control) {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+fluent-button.btn-danger:not([disabled]):hover::part(control) {
+    background: #b91c1c;
+    border-color: #b91c1c;
+}
+fluent-button.btn-danger-text::part(control) {
+    color: #b91c1c;
+}
+fluent-button.btn-danger-text:not([disabled]):hover::part(control) {
+    background: #fef2f2;
+}

@@ -65,6 +65,11 @@
             @if (ownerExpanded)
             {
                 <div class="nav-submenu">
+                    <div class="nav-item">
+                        <NavLink class="nav-link nav-sublink" href="dashboard">
+                            <FluentIcon Value="new Size24.DataBarVertical()" /> Monthly dashboard
+                        </NavLink>
+                    </div>
                     @if (isOwner && ownerHasCompany)
                     {
                         <div class="nav-item">

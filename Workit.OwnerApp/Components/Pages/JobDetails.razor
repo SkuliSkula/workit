@@ -315,7 +315,7 @@ else if (job is not null)
                             <FluentButton Appearance="Appearance.Stealth" @onclick="() => DownloadAsync(a)">Download</FluentButton>
                             @if (CanDelete(a))
                             {
-                                <FluentButton Appearance="Appearance.Stealth" Style="color:#dc2626;" @onclick="() => DeleteAsync(a)">Delete</FluentButton>
+                                <FluentButton Appearance="Appearance.Stealth" Class="btn-danger-text" @onclick="() => DeleteAsync(a)">Delete</FluentButton>
                             }
                         </div>
                     </div>
