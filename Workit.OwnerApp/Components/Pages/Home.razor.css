@@ -552,3 +552,38 @@
 @media (max-width: 1000px) { .today-grid { grid-template-columns: 1fr; } }
 .today-section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
 .today-section-head h2 { white-space: nowrap; }
+
+/* Quick links: one family of pills, the monthly dashboard the one to go to. */
+.today-actions { gap: 0.5rem; align-items: center; }
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2.25rem;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    border: 1px solid #d5dfea;
+    background: #fff;
+    color: #14304b;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(20, 48, 75, 0.06);
+    transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.pill:hover {
+    background: #f1f6fc;
+    border-color: #a9c4e4;
+    box-shadow: 0 3px 8px rgba(20, 48, 75, 0.10);
+    transform: translateY(-1px);
+}
+.pill:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+.pill ::deep svg { width: 1.05rem; height: 1.05rem; opacity: 0.85; }
+.pill--primary {
+    background: #14304b;
+    border-color: #14304b;
+    color: #fff;
+}
+.pill--primary:hover { background: #1d4269; border-color: #1d4269; }

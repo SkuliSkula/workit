@@ -100,20 +100,26 @@ else
                 <h1>@Greeting@(string.IsNullOrEmpty(FirstName) ? "" : $", {FirstName}")</h1>
                 <p>@HeroLine</p>
             </div>
-            <div class="today-actions">
+            <nav class="today-actions" aria-label="Quick links">
                 @if (userCompanies.Count > 1)
                 {
-                    <FluentButton Appearance="Appearance.Stealth" @onclick="OpenSwitchCompanyDialog">
-                        <FluentIcon Value="new Size24.ArrowSwap()" /> Switch company
-                    </FluentButton>
+                    <button type="button" class="pill" @onclick="OpenSwitchCompanyDialog">
+                        <FluentIcon Value="@(new Size20.ArrowSwap())" Color="Color.Custom" CustomColor="currentColor" /> Switch company
+                    </button>
                 }
-                <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/jobs"))">Jobs</FluentButton>
+                <a class="pill" href="/jobs">
+                    <FluentIcon Value="@(new Size20.Briefcase())" Color="Color.Custom" CustomColor="currentColor" /> Jobs
+                </a>
                 @if (company?.HasPaydayCredentials == true)
                 {
-                    <FluentButton Appearance="Appearance.Outline" @onclick="@(() => Navigation.NavigateTo("/payday/invoice-builder"))">Invoice builder</FluentButton>
+                    <a class="pill" href="/payday/invoice-builder">
+                        <FluentIcon Value="@(new Size20.Receipt())" Color="Color.Custom" CustomColor="currentColor" /> Invoice builder
+                    </a>
                 }
-                <FluentButton Appearance="Appearance.Accent" @onclick="@(() => Navigation.NavigateTo("/dashboard"))">Monthly dashboard</FluentButton>
-            </div>
+                <a class="pill pill--primary" href="/dashboard">
+                    <FluentIcon Value="@(new Size20.DataBarVertical())" Color="Color.Custom" CustomColor="currentColor" /> Monthly dashboard
+                </a>
+            </nav>
         </FluentCard>
 
         <section class="today-kpis">
