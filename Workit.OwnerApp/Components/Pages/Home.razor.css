@@ -550,3 +550,5 @@
 .feed-amount { font-weight: 700; color: #14304b; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .feed-amount--material { color: #92400e; font-weight: 600; }
 @media (max-width: 1000px) { .today-grid { grid-template-columns: 1fr; } }
+.today-section-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.today-section-head h2 { white-space: nowrap; }

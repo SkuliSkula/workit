@@ -190,7 +190,7 @@ else
                     <div class="act">
                         <div class="act-head">
                             <span class="act-dot act-dot--amber"></span>
-                            <strong>No hours logged for @DayName(lastWorkday)</strong>
+                            <strong>No hours logged @(lastWorkday == today.AddDays(-1) ? "yesterday" : $"on {lastWorkday.ToDateTime(TimeOnly.MinValue):dddd d MMM}")</strong>
                             <a class="act-link" href="/timeentries">Time entries →</a>
                         </div>
                         <div class="act-row">
@@ -331,7 +331,7 @@ else
 
             @* ── Latest work ── *@
             <FluentCard Class="dashboard-shell">
-                <div class="section-head">
+                <div class="section-head today-section-head">
                     <div>
                         <span class="eyebrow">Latest work</span>
                         <h2>From the crew</h2>
@@ -475,7 +475,7 @@ else
             var crew = CrewOn(today);
             var hours = HoursOn(today);
             return crew == 0
-                ? $"No hours logged yet today. {DayName(lastWorkday)} the crew logged {HoursOn(lastWorkday):0.##} h."
+                ? $"No hours logged yet today. {(lastWorkday == today.AddDays(-1) ? "Yesterday" : lastWorkday.ToDateTime(TimeOnly.MinValue).ToString("dddd"))} the crew logged {HoursOn(lastWorkday):0.##} h."
                 : $"{crew} {(crew == 1 ? "person has" : "people have")} logged {hours:0.##} h today.";
         }
     }
