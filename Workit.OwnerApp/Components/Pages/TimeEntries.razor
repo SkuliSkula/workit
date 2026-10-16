@@ -258,7 +258,7 @@
                         @* Invoiced hours stay: the invoice is the record, and the API refuses. *@
                         @if (!context.IsInvoiced)
                         {
-                            <FluentButton Appearance="Appearance.Lightweight" Style="color:#b91c1c;"
+                            <FluentButton Appearance="Appearance.Lightweight" Class="btn-danger-text"
                                           Title="Delete this entry"
                                           @onclick="@(() => ConfirmDelete(context))">Delete</FluentButton>
                         }
@@ -296,7 +296,7 @@
             <FluentLabel style="margin-top:0.5rem;" Color="Color.Error">@deleteResult</FluentLabel>
         }
         <div style="display:flex; gap:0.5rem; margin-top:1rem;">
-            <FluentButton Appearance="Appearance.Accent" Style="background:#dc2626;" @onclick="ExecuteDeleteAsync" Disabled="@deleteSaving">
+            <FluentButton Appearance="Appearance.Accent" Class="btn-danger" @onclick="ExecuteDeleteAsync" Disabled="@deleteSaving">
                 @(deleteSaving ? "Deleting…" : "Yes, delete")
             </FluentButton>
             <FluentButton Appearance="Appearance.Neutral" @onclick="CancelDelete" Disabled="@deleteSaving">Cancel</FluentButton>
@@ -319,7 +319,7 @@
             <FluentLabel style="margin-top:0.25rem;" Color="@(uninvoiceResult.StartsWith("✓") ? Color.Success : Color.Error)">@uninvoiceResult</FluentLabel>
         }
         <div style="display:flex; gap:0.5rem; margin-top:0.75rem;">
-            <FluentButton Appearance="Appearance.Accent" Style="background:#dc2626;" @onclick="ExecuteUninvoiceAsync" Disabled="@uninvoiceSaving">
+            <FluentButton Appearance="Appearance.Accent" Class="btn-danger" @onclick="ExecuteUninvoiceAsync" Disabled="@uninvoiceSaving">
                 @(uninvoiceSaving ? "Resetting…" : "Yes, reset")
             </FluentButton>
             <FluentButton Appearance="Appearance.Neutral" @onclick="CancelUninvoice">Cancel</FluentButton>
