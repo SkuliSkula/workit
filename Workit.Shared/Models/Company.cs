@@ -29,6 +29,17 @@ public sealed class Company
     /// </summary>
     public bool MaterialsManagedInPayday { get; set; }
 
+    /// <summary>
+    /// When set, purchases entered in Payday from this moment on keep the Payday
+    /// price list up to date: an item bought at a higher Ein.verð raises its product's
+    /// price, and an item not in the list is created (see PurchasePriceListService).
+    /// Null: off. Set when the owner applies the preview on the Products page.
+    /// </summary>
+    public DateTimeOffset? PriceListFromPurchasesSince { get; set; }
+
+    /// <summary>Item numbers the owner left out of the price list from purchases, one per line — never suggested again.</summary>
+    public string PriceListIgnoredSkus { get; set; } = string.Empty;
+
     public string ZipCode { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string VatNumber { get; set; } = string.Empty;

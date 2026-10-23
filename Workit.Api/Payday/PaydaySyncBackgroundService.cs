@@ -85,6 +85,12 @@ public sealed class PaydaySyncBackgroundService(IServiceScopeFactory scopeFactor
                     logger.LogInformation("Payday expense sync for {Company}: {Fetched} expenses, {Added} new, {Updated} updated, {Removed} removed",
                         company.Name, expenseOutcome.Result!.Fetched, expenseOutcome.Result.Added, expenseOutcome.Result.Updated, expenseOutcome.Result.Removed);
 
+                // Once the owner switched it on: new purchases keep the price list up to date.
+                var prices = companyScope.ServiceProvider.GetRequiredService<PurchasePriceListService>();
+                if (await prices.SyncAsync(company.Id, ct) is { } priced)
+                    logger.LogInformation("Price list from purchases for {Company}: {Raised} raised, {Created} created, {Failed} refused",
+                        company.Name, priced.Raised, priced.Created, priced.Failed.Count);
+
                 var staff = companyScope.ServiceProvider.GetRequiredService<PaydayEmployeeSyncService>();
                 var staffOutcome = await staff.SyncAsync(company.Id, ct);
                 if (staffOutcome.Error is not null)

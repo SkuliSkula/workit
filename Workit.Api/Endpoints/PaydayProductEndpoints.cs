@@ -177,6 +177,52 @@ internal static class PaydayProductEndpoints
             .WithTags("Payday products")
             .WithName("GetPaydaySalesLedgerAccounts");
 
+        // ── Price list from purchases ─────────────────────────────────────────
+        // Preview: what the latest purchase of each item would raise or add. Reads only.
+        app.MapGet("/api/payday/products/from-purchases", async (HttpContext http, WorkitDbContext db, PurchasePriceListService prices, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var companyId = http.User.ToUserContext().CompanyId;
+                    var since = await db.Companies.Where(c => c.Id == companyId).Select(c => c.PriceListFromPurchasesSince).FirstOrDefaultAsync(ct);
+                    return Results.Ok(await prices.PlanAsync(companyId, since, ct));
+                }, logger, "previewing the price list from purchases"))
+            .RequireAuthorization()
+            .AddEndpointFilter<PaydayCredentialsFilter>()
+            .WithTags("Payday products")
+            .WithName("PreviewPriceListFromPurchases");
+
+        // Apply: writes the preview to Payday, and from then on new purchases keep it up.
+        app.MapPost("/api/payday/products/from-purchases/apply", async (HttpContext http, WorkitDbContext db, PurchasePriceListService prices, PriceListApplyRequest? body, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var companyId = http.User.ToUserContext().CompanyId;
+                    // What the owner unticked is left out now and from then on.
+                    if (body?.Ignore is { Count: > 0 } ignore) await prices.IgnoreAsync(companyId, ignore, ct);
+                    var since = await db.Companies.Where(c => c.Id == companyId).Select(c => c.PriceListFromPurchasesSince).FirstOrDefaultAsync(ct);
+                    var plan = await prices.PlanAsync(companyId, since, ct);
+                    if (plan.Problem is not null) return Results.Content(plan.Problem, "text/plain", statusCode: StatusCodes.Status409Conflict);
+                    return Results.Ok(await prices.ApplyAsync(companyId, plan, ct));
+                }, logger, "applying the price list from purchases"))
+            .RequireAuthorization()
+            .AddEndpointFilter<PaydayCredentialsFilter>()
+            .WithTags("Payday products")
+            .WithName("ApplyPriceListFromPurchases");
+
+        app.MapPost("/api/payday/products/from-purchases/off", async (HttpContext http, WorkitDbContext db, CancellationToken ct) =>
+                await ExecuteDbAsync(async () =>
+                {
+                    var companyId = http.User.ToUserContext().CompanyId;
+                    var company = await db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, ct);
+                    if (company is null) return Results.NotFound();
+                    company.PriceListFromPurchasesSince = null;
+                    await db.SaveChangesAsync(ct);
+                    return Results.NoContent();
+                }, logger, "turning off the price list from purchases"))
+            .RequireAuthorization()
+            .AddEndpointFilter<PaydayCredentialsFilter>()
+            .WithTags("Payday products")
+            .WithName("StopPriceListFromPurchases");
+
         app.MapPost("/api/payday/products", async (HttpContext http, WorkitDbContext db, IPaydayProductsApi payday, PaydayProductSyncService sync, PaydayProductCreate body, CancellationToken ct) =>
                 await ExecuteDbAsync(async () =>
                 {

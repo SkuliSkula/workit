@@ -39,6 +39,7 @@ public class PaydayProductSyncTests
         public Task<ApiResult<PaydayProductMovementsResponse>> GetMovementsAsync(Guid id, int page = 1, int perPage = 100) => throw new NotSupportedException();
         public Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync() => throw new NotSupportedException();
         public Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request) => throw new NotSupportedException();
+        public Task<ApiResult<PaydayProduct>> UpdateAsync(Guid id, UpdateProductRequest request) => throw new NotSupportedException();
     }
 
     private static PaydayProductSyncService Service(WorkitDbContext db, IPaydayProductsApi payday) =>

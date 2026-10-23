@@ -132,6 +132,8 @@ internal static class EndpointHelpers
             PayrollOvertimeItemName  = company.PayrollOvertimeItemName,
             PayrollDrivingItemName   = company.PayrollDrivingItemName,
             MaterialsManagedInPayday = company.MaterialsManagedInPayday,
+            PriceListFromPurchasesSince = company.PriceListFromPurchasesSince,
+            PriceListIgnoredSkus = company.PriceListIgnoredSkus,
             Source              = company.Source,
             PaydayId            = company.PaydayId,
             PaydayClientId      = null,

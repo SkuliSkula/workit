@@ -176,6 +176,13 @@ namespace Workit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTimeOffset?>("PriceListFromPurchasesSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PriceListIgnoredSkus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("Source")
                         .HasColumnType("integer");
 

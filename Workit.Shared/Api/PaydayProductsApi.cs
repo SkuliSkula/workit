@@ -20,6 +20,12 @@ public interface IPaydayProductsCacheApi
     Task<ApiResult<int>> ApplyCategoriesAsync(List<PaydayProductCategoryAssignment> assignments);
     /// <summary>Gives every product that still has no role the given one (optionally only those matching q). Returns how many changed.</summary>
     Task<ApiResult<int>> AssignUnsetAsync(PaydayProductRole role, string? q);
+    /// <summary>What the latest purchase of each item would raise or add in the Payday price list. Reads only.</summary>
+    Task<ApiResult<PriceListPlan>> PreviewFromPurchasesAsync();
+    /// <summary>Writes that to Payday and keeps it up from new purchases from now on.</summary>
+    Task<ApiResult<PriceListApplyResult>> ApplyFromPurchasesAsync(List<string> ignore);
+    /// <summary>Stops new purchases from changing the price list.</summary>
+    Task<ApiResult> StopFromPurchasesAsync();
     /// <summary>Payday's sales ledger accounts, for the New product form.</summary>
     Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync();
     /// <summary>Creates the product in Payday and returns the cached row with its role set.</summary>
@@ -88,4 +94,13 @@ internal sealed class PaydayProductsCacheApi(HttpClient httpClient, IAccessToken
 
     public Task<ApiResult<PaydayProductCache>> SetRoleAsync(Guid id, PaydayProductRole role, string? unit = null, string? category = null) =>
         PutForJsonAsync<PaydayProductRoleUpdate, PaydayProductCache>($"api/payday/products/{id}/role", new PaydayProductRoleUpdate(role, unit, category), "The product role could not be saved right now.");
+
+    public Task<ApiResult<PriceListPlan>> PreviewFromPurchasesAsync() =>
+        GetAsync<PriceListPlan>("api/payday/products/from-purchases", "The price-list preview could not be made right now.");
+
+    public Task<ApiResult<PriceListApplyResult>> ApplyFromPurchasesAsync(List<string> ignore) =>
+        PostForJsonAsync<PriceListApplyRequest, PriceListApplyResult>("api/payday/products/from-purchases/apply", new PriceListApplyRequest(ignore), "The price list could not be updated in Payday right now.");
+
+    public Task<ApiResult> StopFromPurchasesAsync() =>
+        PostAsync("api/payday/products/from-purchases/off", new { }, "The setting could not be changed right now.");
 }
