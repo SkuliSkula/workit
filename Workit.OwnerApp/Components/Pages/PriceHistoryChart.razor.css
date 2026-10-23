@@ -1,0 +1,88 @@
+.phc {
+    margin: 0.5rem 0 0;
+}
+
+.phc-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+    font-size: 0.85rem;
+    color: #334155;
+}
+
+.phc-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.phc-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.phc-plot {
+    position: relative;
+}
+
+.phc-plot svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.phc-grid {
+    stroke: #e2e8f0;
+    stroke-width: 1;
+}
+
+.phc-axis {
+    fill: #64748b;
+    font-size: 11px;
+}
+
+.phc-dot {
+    stroke: #fff;
+    stroke-width: 2;
+}
+
+.phc-cross {
+    stroke: #94a3b8;
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.phc-tip {
+    position: absolute;
+    transform: translate(-50%, calc(-100% - 12px));
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid rgba(22, 50, 79, 0.14);
+    box-shadow: 0 6px 18px rgba(18, 41, 63, 0.12);
+    font-size: 0.8rem;
+    color: #1e293b;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.phc-tip-muted {
+    color: #64748b;
+}
+
+.phc-end {
+    position: absolute;
+    transform: translate(8px, -50%);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #334155;
+    pointer-events: none;
+}

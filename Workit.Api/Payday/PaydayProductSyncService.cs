@@ -32,16 +32,39 @@ public sealed class PaydayProductSyncService(WorkitDbContext db, IPaydayProducts
         var existing = await db.PaydayProducts.Where(p => p.CompanyId == companyId).ToListAsync(ct);
         var byPaydayId = existing.ToDictionary(p => p.PaydayId);
         int added = 0, updated = 0, archived = 0;
+        // A company's very first sync is not a price change; every later one can be.
+        var trackChanges = existing.Count > 0;
+        var recorded = trackChanges
+            ? (await db.PriceListChanges.Where(c => c.CompanyId == companyId).Select(c => c.PaydayProductId).Distinct().ToListAsync(ct)).ToHashSet()
+            : [];
 
         foreach (var remote in fetched)
         {
             if (byPaydayId.TryGetValue(remote.Id, out var local))
             {
+                // A price changed in Payday itself — Workit's own raises update the cache
+                // as they are made, so they never show up here a second time.
+                var before = Math.Round(local.SalePriceExVat, 0, MidpointRounding.AwayFromZero);
+                var after  = Math.Round(remote.SalesUnitPriceExcludingVAT ?? 0m, 0, MidpointRounding.AwayFromZero);
+                if (trackChanges && before != after && !remote.Archived)
+                    db.PriceListChanges.Add(new PriceListChange
+                    {
+                        CompanyId = companyId, PaydayProductId = remote.Id, Sku = remote.Sku?.Trim() ?? "", Name = remote.Name?.Trim() ?? "",
+                        OldPriceExVat = before, NewPriceExVat = after, ChangedAt = now, Source = PriceChangeSource.Payday,
+                    });
                 Apply(local, remote, now);
                 updated++;
             }
             else
             {
+                // New in Payday — unless Workit created it from a purchase and already said so.
+                if (trackChanges && !recorded.Contains(remote.Id))
+                    db.PriceListChanges.Add(new PriceListChange
+                    {
+                        CompanyId = companyId, PaydayProductId = remote.Id, Sku = remote.Sku?.Trim() ?? "", Name = remote.Name?.Trim() ?? "",
+                        OldPriceExVat = null, NewPriceExVat = Math.Round(remote.SalesUnitPriceExcludingVAT ?? 0m, 0, MidpointRounding.AwayFromZero),
+                        ChangedAt = now, Source = PriceChangeSource.Payday,
+                    });
                 local = new PaydayProductCache { CompanyId = companyId, PaydayId = remote.Id };
                 Apply(local, remote, now);
                 // A product Payday tracks stock for is a material until the owner says otherwise.

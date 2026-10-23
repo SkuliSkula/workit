@@ -33,6 +33,8 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
     public DbSet<PaydayProductCache> PaydayProducts     => Set<PaydayProductCache>();
     public DbSet<PaydayEmployeeCache> PaydayEmployees   => Set<PaydayEmployeeCache>();
     public DbSet<PaydaySnapshot>     PaydaySnapshots    => Set<PaydaySnapshot>();
+    public DbSet<PurchasePrice>      PurchasePrices     => Set<PurchasePrice>();
+    public DbSet<PriceListChange>    PriceListChanges   => Set<PriceListChange>();
     public DbSet<ProductCategory>    ProductCategories  => Set<ProductCategory>();
     public DbSet<PayrollExport>      PayrollExports     => Set<PayrollExport>();
 
@@ -261,6 +263,16 @@ public sealed class WorkitDbContext(DbContextOptions<WorkitDbContext> options) :
         modelBuilder.Entity<PaydayEmployeeCache>()
             .HasIndex(x => new { x.CompanyId, x.PaydayId })
             .IsUnique();
+        // ── Price tracker ─────────────────────────────────────────────────────
+        modelBuilder.Entity<PurchasePrice>().ToTable("PurchasePrices");
+        modelBuilder.Entity<PurchasePrice>().HasIndex(x => x.ExpenseLineId).IsUnique();
+        modelBuilder.Entity<PurchasePrice>().HasIndex(x => new { x.CompanyId, x.Sku });
+        modelBuilder.Entity<PurchasePrice>().HasIndex(x => new { x.CompanyId, x.Vendor });
+        modelBuilder.Entity<PriceListChange>().ToTable("PriceListChanges");
+        modelBuilder.Entity<PriceListChange>().HasIndex(x => new { x.CompanyId, x.ChangedAt });
+        modelBuilder.Entity<PriceListChange>().HasIndex(x => new { x.CompanyId, x.Sku });
+        modelBuilder.Entity<PriceListChange>().HasIndex(x => new { x.CompanyId, x.PaydayProductId });
+
         modelBuilder.Entity<PaydaySnapshot>().ToTable("PaydaySnapshots");
         modelBuilder.Entity<PaydaySnapshot>()
             .HasIndex(x => new { x.CompanyId, x.Kind })

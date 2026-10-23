@@ -1456,6 +1456,58 @@ namespace Workit.Api.Migrations
                     b.ToTable("PayrollExports", (string)null);
                 });
 
+            modelBuilder.Entity("Workit.Shared.Models.PriceListChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("By")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NewPriceExVat")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("OldPriceExVat")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("PaydayProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PurchasedOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Vendor")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "ChangedAt");
+
+                    b.HasIndex("CompanyId", "PaydayProductId");
+
+                    b.HasIndex("CompanyId", "Sku");
+
+                    b.ToTable("PriceListChanges", (string)null);
+                });
+
             modelBuilder.Entity("Workit.Shared.Models.ProductCategory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1481,6 +1533,66 @@ namespace Workit.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("ProductCategories", (string)null);
+                });
+
+            modelBuilder.Entity("Workit.Shared.Models.PurchasePrice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("DiscountPercentage")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("EinVerdExVat")
+                        .HasColumnType("numeric");
+
+                    b.Property<Guid>("ExpenseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ExpenseLineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PaidExVat")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("PurchasedOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("VatPercentage")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Vendor")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpenseLineId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "Sku");
+
+                    b.HasIndex("CompanyId", "Vendor");
+
+                    b.ToTable("PurchasePrices", (string)null);
                 });
 
             modelBuilder.Entity("Workit.Shared.Models.RefreshToken", b =>

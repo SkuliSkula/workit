@@ -298,6 +298,7 @@ app.MapExpenseAutoLinkEndpoints();
 app.MapJobAttachmentEndpoints();
 app.MapPaydayEndpoints();
 app.MapPaydayProductEndpoints();
+app.MapPriceTrackerEndpoints();
 app.MapPaydayCustomerEndpoints();
 app.MapProductCategoryEndpoints();
 app.MapPayrollEndpoints();

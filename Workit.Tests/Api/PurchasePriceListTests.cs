@@ -291,7 +291,7 @@ public class PurchasePriceListTests
         (await db.Companies.SingleAsync()).PriceListIgnoredSkus.Should().Be("000002");
     }
 
-    private sealed class FakeProducts : IPaydayProductsApi
+    internal sealed class FakeProducts : IPaydayProductsApi
     {
         public List<PaydayProduct> Products { get; } = [];
         public List<CreateProductRequest> Creates { get; } = [];

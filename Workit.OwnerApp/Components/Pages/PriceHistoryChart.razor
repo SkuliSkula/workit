@@ -1,0 +1,154 @@
+@using System.Globalization
+
+@* Ein.verð over time, one line per seller. The three sellers bought from most get a
+   colour each; the rest share grey as "Other sellers". The purchase table under it is
+   the table view. *@
+
+<figure class="phc" aria-label="Ein.verð by purchase date and seller">
+    @if (series.Count > 1)
+    {
+        <ul class="phc-legend">
+            @foreach (var s in series)
+            {
+                <li><span class="phc-swatch" style="background:@s.Color"></span>@s.Label</li>
+            }
+        </ul>
+    }
+    <div class="phc-plot">
+        <svg viewBox="0 0 @W @H" role="img" aria-hidden="true" @onmouseleave="@(() => hover = null)">
+            @foreach (var t in yTicks)
+            {
+                <g>
+                    <line x1="@L" x2="@(W - R)" y1="@F(Y(t))" y2="@F(Y(t))" class="phc-grid" />
+                    <text x="@(L - 8)" y="@F(Y(t) + 4)" text-anchor="end" class="phc-axis">@t.ToString("N0")</text>
+                </g>
+            }
+            @foreach (var (t, label) in xTicks)
+            {
+                <g><text x="@F(X(t))" y="@(H - 6)" text-anchor="middle" class="phc-axis">@label</text></g>
+            }
+            @foreach (var s in series)
+            {
+                @if (s.Points.Count > 1 && !s.IsOther)
+                {
+                    <polyline points="@string.Join(' ', s.Points.Select(p => $"{F(X(p.At))},{F(Y(p.Price))}"))" fill="none"
+                              stroke="@s.Color" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                }
+            }
+            @foreach (var s in series)
+            {
+                @foreach (var p in s.Points)
+                {
+                    <circle cx="@F(X(p.At))" cy="@F(Y(p.Price))" r="4" fill="@s.Color" class="phc-dot" />
+                }
+            }
+            @if (hover is { } h)
+            {
+                <line x1="@F(X(h.At))" x2="@F(X(h.At))" y1="@T" y2="@(H - B)" class="phc-cross" />
+                <circle cx="@F(X(h.At))" cy="@F(Y(h.Price))" r="6" fill="@h.Color" class="phc-dot" />
+            }
+            @* Hit targets bigger than the marks. *@
+            @foreach (var s in series)
+            {
+                @foreach (var p in s.Points)
+                {
+                    var point = p;
+                    <circle cx="@F(X(p.At))" cy="@F(Y(p.Price))" r="12" fill="transparent" @onmouseenter="@(() => hover = point)" />
+                }
+            }
+        </svg>
+        @if (hover is { } tip)
+        {
+            <div class="phc-tip" style="left:@F(X(tip.At) / W * 100)%; top:@F(Y(tip.Price) / H * 100)%;">
+                <strong>@tip.Price.ToString("N0") kr.</strong>
+                <span>@tip.Vendor</span>
+                <span class="phc-tip-muted">@tip.At.ToString("d MMM yyyy") · @tip.Quantity.ToString("0.##") pcs</span>
+            </div>
+        }
+        @foreach (var last in EndLabels())
+        {
+            <span class="phc-end" style="left:@F(X(last.At) / W * 100)%; top:@F(Y(last.Price) / H * 100)%;">@last.Price.ToString("N0")</span>
+        }
+    </div>
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public List<PurchasePrice> Purchases { get; set; } = [];
+
+    private const double W = 720, H = 260, L = 64, R = 56, T = 14, B = 26;
+    private static readonly string[] Slots = ["#2a78d6", "#eb6834", "#1baf7a"];
+    private const string OtherColor = "#94a3b8";
+
+    private sealed record Point(DateTime At, decimal Price, string Vendor, decimal Quantity, string Color);
+    private sealed record Series(string Label, string Color, bool IsOther, List<Point> Points);
+
+    private List<Series> series = [];
+    private List<decimal> yTicks = [];
+    private List<(DateTime, string)> xTicks = [];
+    private DateTime minX, maxX;
+    private decimal minY, maxY;
+    private Point? hover;
+
+    protected override void OnParametersSet()
+    {
+        hover = null;
+        var dated = Purchases.Where(p => p.PurchasedOn is not null).ToList();
+        // Colour follows the seller: most purchases first, ties by name, so a seller keeps its colour.
+        var ranked = dated.GroupBy(p => p.Vendor)
+            .OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).ToList();
+
+        series = [];
+        for (var i = 0; i < ranked.Count && i < Slots.Length; i++)
+            series.Add(Make(ranked[i].Key, Slots[i], false, ranked[i]));
+        if (ranked.Count > Slots.Length)
+            series.Add(Make(ranked.Count - Slots.Length == 1 ? ranked[^1].Key : "Other sellers", OtherColor, ranked.Count - Slots.Length > 1,
+                ranked.Skip(Slots.Length).SelectMany(g => g)));
+
+        if (dated.Count == 0) return;
+        minX = dated.Min(p => p.PurchasedOn!.Value).Date;
+        maxX = dated.Max(p => p.PurchasedOn!.Value).Date;
+        if (maxX == minX) { minX = minX.AddDays(-15); maxX = maxX.AddDays(15); }
+
+        var lo = dated.Min(p => p.EinVerdExVat);
+        var hi = dated.Max(p => p.EinVerdExVat);
+        var step = NiceStep((hi - lo) == 0 ? Math.Max(hi * 0.2m, 1m) : (hi - lo) / 3m);
+        minY = Math.Max(0, Math.Floor(lo / step) * step - (hi == lo ? step : 0));
+        maxY = Math.Ceiling(hi / step) * step + (hi == lo ? step : 0);
+        if (maxY == minY) maxY = minY + step;
+        yTicks = [];
+        for (var v = minY; v <= maxY + step / 2; v += step) yTicks.Add(v);
+
+        var span = (maxX - minX).TotalDays;
+        var fmt = span > 300 ? "MMM yy" : "d MMM";
+        xTicks = Enumerable.Range(0, 4).Select(i => minX.AddDays(span * i / 3))
+            .Select(d => (d, d.ToString(fmt, CultureInfo.CurrentCulture))).ToList();
+    }
+
+    /// <summary>Each coloured seller's latest price, newest first, leaving out any that would sit on one already placed.</summary>
+    private IEnumerable<Point> EndLabels()
+    {
+        var placed = new List<Point>();
+        foreach (var last in series.Where(s => s.Color != OtherColor && s.Points.Count > 0).Select(s => s.Points[^1]).OrderByDescending(p => p.At))
+        {
+            if (placed.Any(p => Math.Abs(X(p.At) - X(last.At)) < 48 && Math.Abs(Y(p.Price) - Y(last.Price)) < 14)) continue;
+            placed.Add(last);
+            yield return last;
+        }
+    }
+
+    private static Series Make(string label, string color, bool isOther, IEnumerable<PurchasePrice> rows) =>
+        new(label, color, isOther, rows
+            .OrderBy(p => p.PurchasedOn).ThenBy(p => p.RecordedAt)
+            .Select(p => new Point(p.PurchasedOn!.Value.Date, p.EinVerdExVat, p.Vendor, p.Quantity, color)).ToList());
+
+    private static decimal NiceStep(decimal raw)
+    {
+        var mag = (decimal)Math.Pow(10, Math.Floor(Math.Log10((double)raw)));
+        var n = raw / mag;
+        return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+    }
+
+    private double X(DateTime d) => L + (d - minX).TotalDays / Math.Max((maxX - minX).TotalDays, 1) * (W - L - R);
+    private double Y(decimal v) => T + (double)((maxY - v) / (maxY - minY)) * (H - T - B);
+    private static string F(double v) => v.ToString("0.#", CultureInfo.InvariantCulture);
+}

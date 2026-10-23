@@ -97,6 +97,7 @@ public sealed class PaydayExpenseSyncService(WorkitDbContext db, IPaydayExpenses
 
         await db.SaveChangesAsync(ct);
         await ExpensePricing.RepriceAsync(db, companyId, ct);
+        await PriceHistory.RecordPurchasesAsync(db, companyId, ct);
         return new PaydayExpenseSyncResult(seen.Count, added, updated, removed, now);
     }
 
@@ -114,6 +115,7 @@ public sealed class PaydayExpenseSyncService(WorkitDbContext db, IPaydayExpenses
             else Apply(local, remote, await BilledLineIdsAsync(companyId, ct), now);
             await db.SaveChangesAsync(ct);
             await ExpensePricing.RepriceAsync(db, companyId, ct);
+            await PriceHistory.RecordPurchasesAsync(db, companyId, ct);
             PaydaySyncGuard.SavedDirectly(remote.Id);
         }
     }
