@@ -15,12 +15,18 @@ namespace Workit.Api.Payday;
 internal static class PriceHistory
 {
     /// <summary>
-    /// One row per purchase line that starts with the vendor's item number, at its
-    /// Ein.verð read the way the expense's total says. Rows for lines that are gone are
-    /// dropped. Saves.
+    /// One row per line of goods bought for resale — the same lines the price list is
+    /// kept from: on "Vörukaup innanlands", starting with the vendor's item number, not a
+    /// charge (rounding, delivery, fees) and not an item the owner unticked. At its
+    /// Ein.verð read the way the expense's total says. Rows for other lines are dropped.
+    /// Saves. Does nothing until Payday's expense accounts are stored.
     /// </summary>
     public static async Task RecordPurchasesAsync(WorkitDbContext db, Guid companyId, CancellationToken ct)
     {
+        var goods = await PurchasePriceListService.GoodsAccountsAsync(db, companyId, ct);
+        if (goods.Count == 0) return;
+        var ignored = await PurchasePriceListService.IgnoredAsync(db, companyId, ct);
+
         var expenses = await db.Expenses.AsNoTracking().Include(e => e.Lines)
             .Where(e => e.CompanyId == companyId && e.Status != PaydayExpenseSyncService.DeletedStatus)
             .ToListAsync(ct);
@@ -31,8 +37,10 @@ internal static class PriceHistory
             var reading = ExpenseUnitPrice.Read(expense.AmountExcludingVat, expense.Lines);
             foreach (var line in expense.Lines)
             {
+                if (line.AccountId is not Guid account || !goods.Contains(account)) continue;
                 if (line.Quantity <= 0 || (line.UnitPriceExcludingVat ?? 0) <= 0) continue;
                 if (PurchasePriceListService.ItemOf(line.Description) is not { } item) continue;
+                if (PurchasePriceListService.LooksLikeCharge(item.Name) || ignored.Contains(item.Sku)) continue;
                 var einVerd = ExpenseUnitPrice.SalePrice(line, reading);
                 var discount = Math.Clamp(line.DiscountPercentage ?? 0m, 0m, 100m);
                 wanted[line.Id] = new PurchasePrice
