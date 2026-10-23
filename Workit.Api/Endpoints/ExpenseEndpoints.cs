@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Workit.Api.Auth;
 using Workit.Api.Data;
+using Workit.Api.Payday;
 using Workit.Shared.Api;
 using Workit.Shared.Models;
 using static Workit.Api.Endpoints.EndpointHelpers;
@@ -125,16 +126,13 @@ internal static class ExpenseEndpoints
                     {
                         line.ExpenseId = expense.Id;
                         line.CompanyId = companyId;
-                        if (line.MarkupFactor <= 0) line.MarkupFactor = 1.5m;
-                        // Always the server's price on a fresh import — nobody has typed
-                        // one yet. Filling it only when empty is what let a client-side
-                        // list-price figure through after the #70 fix.
-                        line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(
-                            line.UnitPriceExcludingVat, line.DiscountPercentage, line.MarkupFactor);
+                        // A fresh import is Workit's to price — whatever the client sent.
+                        line.SalePriceSetByOwner = false;
                     }
 
                     db.Expenses.Add(expense);
                     await db.SaveChangesAsync(ct);
+                    await ExpensePricing.RepriceAsync(db, companyId, ct);
                     return Results.Created($"/api/expenses/{expense.Id}", expense);
                 }, logger, "importing Payday expense"))
             .WithName("ImportPaydayExpense");
@@ -204,10 +202,13 @@ internal static class ExpenseEndpoints
                     {
                         line.ExpenseId = expense.Id;
                         line.CompanyId = companyId;
+                        // A price typed with the line is the owner's; none, and the rule prices it.
+                        line.SalePriceSetByOwner = line.SalePriceExcludingVat != 0;
                     }
 
                     db.Expenses.Add(expense);
                     await db.SaveChangesAsync(ct);
+                    await ExpensePricing.RepriceAsync(db, companyId, ct);
                     return Results.Created($"/api/expenses/{expense.Id}", expense);
                 }, logger, "creating expense"))
             .WithName("CreateExpense");
@@ -293,8 +294,10 @@ internal static class ExpenseEndpoints
 
                     line.ExpenseId = id;
                     line.CompanyId = companyId;
+                    line.SalePriceSetByOwner = line.SalePriceExcludingVat != 0;
                     db.ExpenseLines.Add(line);
                     await db.SaveChangesAsync(ct);
+                    await ExpensePricing.RepriceAsync(db, companyId, ct);
                     return Results.Created($"/api/expenses/{id}/lines/{line.Id}", line);
                 }, logger, "adding expense line"))
             .WithName("AddExpenseLine");
@@ -317,6 +320,9 @@ internal static class ExpenseEndpoints
                     existing.UnitPriceExcludingVat = line.UnitPriceExcludingVat;
                     existing.UnitPriceIncludingVat = line.UnitPriceIncludingVat;
                     existing.MarkupFactor          = line.MarkupFactor;
+                    // A price the owner changes is theirs from now on; repricing leaves it.
+                    if (line.SalePriceExcludingVat != existing.SalePriceExcludingVat)
+                        existing.SalePriceSetByOwner = true;
                     existing.SalePriceExcludingVat = line.SalePriceExcludingVat;
                     existing.VatPercentage         = line.VatPercentage;
                     existing.DiscountPercentage    = line.DiscountPercentage;

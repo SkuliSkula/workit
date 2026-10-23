@@ -12,8 +12,8 @@ namespace Workit.Api.Payday;
 /// <para>
 /// Payday owns the purchase itself — creditor, dates, status, amounts, and each
 /// line's description, quantity, list price, VAT and vendor discount. Workit owns
-/// what it adds: the job link, the markup, a sale price an owner typed, and the
-/// billings of each line. A sync refreshes Payday's part and never touches
+/// what it adds: the job link, the sale price (set by <see cref="ExpensePricing"/>,
+/// or an owner's own), and the billings of each line. A sync refreshes Payday's part and never touches
 /// Workit's: an owner's sale price stays, a billed line is never removed, and an
 /// expense something was billed from is kept (marked DELETED) if Payday drops it.
 /// </para>
@@ -96,6 +96,7 @@ public sealed class PaydayExpenseSyncService(WorkitDbContext db, IPaydayExpenses
         }
 
         await db.SaveChangesAsync(ct);
+        await ExpensePricing.RepriceAsync(db, companyId, ct);
         return new PaydayExpenseSyncResult(seen.Count, added, updated, removed, now);
     }
 
@@ -112,6 +113,7 @@ public sealed class PaydayExpenseSyncService(WorkitDbContext db, IPaydayExpenses
             if (local is null) Add(companyId, remote, now);
             else Apply(local, remote, await BilledLineIdsAsync(companyId, ct), now);
             await db.SaveChangesAsync(ct);
+            await ExpensePricing.RepriceAsync(db, companyId, ct);
             PaydaySyncGuard.SavedDirectly(remote.Id);
         }
     }
@@ -219,19 +221,12 @@ public sealed class PaydayExpenseSyncService(WorkitDbContext db, IPaydayExpenses
                     ExpenseId    = local.Id,
                     CompanyId    = local.CompanyId,
                     PaydayId     = r.Id,
-                    MarkupFactor = PaydayExpenseMapper.DefaultMarkupFactor,
+                    MarkupFactor = 1m,
                 };
-                // Priced from the values below, as a fresh line.
-                line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(r.UnitPriceExcludingVat, r.DiscountPercentage, line.MarkupFactor);
                 local.Lines.Add(line);
                 db.ExpenseLines.Add(line);
             }
-            else if (line.SalePriceExcludingVat == ExpenseLine.DefaultSalePrice(line.UnitPriceExcludingVat, line.DiscountPercentage, line.MarkupFactor))
-            {
-                // Still the price Workit worked out, not one an owner typed: follow
-                // the vendor's price or discount if Payday's changed.
-                line.SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(r.UnitPriceExcludingVat, r.DiscountPercentage, line.MarkupFactor);
-            }
+            // The sale price is ExpensePricing's, set once the lines are saved.
             keep.Add(line.Id);
             line.Description           = r.Description;
             line.Quantity              = r.Quantity;

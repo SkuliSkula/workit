@@ -49,7 +49,7 @@ public class PaydayExpenseSyncTests
     };
 
     [Fact]
-    public async Task A_sync_stores_every_expense_priced_from_what_was_paid()
+    public async Task A_sync_stores_every_expense_priced_at_its_Ein_verd()
     {
         await using var db = NewDb();
         for (var i = 0; i < 130; i++) payday.Expenses.Add(Remote());
@@ -59,8 +59,8 @@ public class PaydayExpenseSyncTests
         outcome.Result!.Added.Should().Be(130);
         (await db.Expenses.CountAsync(e => e.CompanyId == companyId)).Should().Be(130);
         var line = await db.ExpenseLines.FirstAsync();
-        line.SalePriceExcludingVat.Should().Be(1_074m, "981 less 27 % = 716.13, × 1.5");
-        line.MarkupFactor.Should().Be(1.5m);
+        line.SalePriceExcludingVat.Should().Be(981m, "the Ein.verð — no markup on the 716.13 paid");
+        line.MarkupFactor.Should().Be(1m);
         var expense = await db.Expenses.FirstAsync();
         expense.JobId.Should().BeNull("linking to jobs is the auto-link's job, within the owner's window");
         expense.Date!.Value.Kind.Should().Be(DateTimeKind.Utc);
@@ -81,6 +81,7 @@ public class PaydayExpenseSyncTests
         stored.JobLinkSource = ExpenseJobLinkSource.Manual;
         stored.Lines[0].MarkupFactor = 1.3m;
         stored.Lines[0].SalePriceExcludingVat = 999m;
+        stored.Lines[0].SalePriceSetByOwner = true;   // what PUT /expenses/{id}/lines/{lineId} records
         await db.SaveChangesAsync();
 
         // Payday: paid now, and the vendor corrected the discount.
@@ -107,10 +108,12 @@ public class PaydayExpenseSyncTests
         payday.Expenses.Add(remote);
         await Service(db).SyncAsync(companyId, CancellationToken.None);
 
-        remote.Lines![0].DiscountPercentage = 30m;
+        // The vendor re-issues with a new Ein.verð (and the total that goes with it).
+        remote.Lines![0].UnitPriceExcludingVat = 1000m;
+        remote.AmountExcludingVat = 7_300m;
         await Service(db).SyncAsync(companyId, CancellationToken.None);
 
-        (await db.ExpenseLines.SingleAsync()).SalePriceExcludingVat.Should().Be(1_030m, "981 less 30 % = 686.70, × 1.5");
+        (await db.ExpenseLines.SingleAsync()).SalePriceExcludingVat.Should().Be(1000m);
     }
 
     [Fact]
