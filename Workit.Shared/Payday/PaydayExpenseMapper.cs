@@ -4,14 +4,12 @@ namespace Workit.Shared.Payday;
 
 public static class PaydayExpenseMapper
 {
-    /// <summary>Default markup applied to imported expense lines (50%).</summary>
-    public const decimal DefaultMarkupFactor = 1.5m;
 
     /// <summary>
-    /// Maps a Payday expense into a Workit <see cref="Expense"/> (Source = Payday), deriving a
-    /// sale price per line from what was actually paid — the vendor's list price less their
-    /// discount — marked up. CompanyId is set on the server for the API path; pass it here for
-    /// direct DB seeding.
+    /// Maps a Payday expense into a Workit <see cref="Expense"/> (Source = Payday). Each line's
+    /// sale price starts as its Ein.verð as Payday reports it; the API confirms how to read it
+    /// against the expense total once stored (ExpensePricing). CompanyId is set on the server
+    /// for the API path; pass it here for direct DB seeding.
     /// </summary>
     public static Expense ToWorkitExpense(this PaydayExpense p, Guid? jobId, Guid companyId = default)
     {
@@ -43,8 +41,8 @@ public static class PaydayExpenseMapper
 
         expense.Lines = (p.Lines ?? []).Select(l =>
         {
-            // The list price, before the vendor's discount — see ExpenseLine.
-            var cost = l.UnitPriceExcludingVat ?? 0m;
+            // The Ein.verð without VAT, before the vendor's discount — see ExpenseUnitPrice.
+            var einVerd = l.UnitPriceExcludingVat ?? 0m;
             return new ExpenseLine
             {
                 Id                    = Guid.NewGuid(),
@@ -52,13 +50,12 @@ public static class PaydayExpenseMapper
                 CompanyId             = companyId,
                 Description           = l.Description,
                 Quantity              = l.Quantity,
-                UnitPriceExcludingVat = cost,
+                UnitPriceExcludingVat = einVerd,
                 UnitPriceIncludingVat = l.UnitPriceIncludingVat,
-                MarkupFactor          = DefaultMarkupFactor,
-                // Marking up the list price and leaving the discount on the line was
-                // the #70 bug; this mapper did it a second time, for every expense
-                // auto-linked by job code and every one imported from the console.
-                SalePriceExcludingVat = ExpenseLine.DefaultSalePrice(cost, l.DiscountPercentage, DefaultMarkupFactor),
+                MarkupFactor          = 1m,
+                // Provisional — Payday's reading of the Ein.verð. The API checks the
+                // reading against the expense total (ExpensePricing) once it is stored.
+                SalePriceExcludingVat = Math.Round(einVerd, 0, MidpointRounding.AwayFromZero),
                 VatPercentage         = l.VatPercentage,
                 DiscountPercentage    = l.DiscountPercentage,
                 AccountId             = l.AccountId,

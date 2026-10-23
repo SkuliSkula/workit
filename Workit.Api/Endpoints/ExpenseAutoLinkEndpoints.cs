@@ -36,6 +36,8 @@ internal static class ExpenseAutoLinkEndpoints
 
                     var jobs = await db.Jobs.AsNoTracking().Where(j => j.CompanyId == companyId).ToListAsync(ct);
                     var outcome = await LinkAsync(db, companyId, expenses, jobs, ct);
+                    // Anything LinkAsync had to add is priced by the one rule.
+                    if (outcome.Linked.Count > 0) await ExpensePricing.RepriceAsync(db, companyId, ct);
 
                     if (outcome.Linked.Count > 0)
                         logger.LogInformation("Auto-linked {Count} Payday expenses to jobs for company {CompanyId}.", outcome.Linked.Count, companyId);

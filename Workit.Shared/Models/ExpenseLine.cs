@@ -20,10 +20,13 @@ public sealed class ExpenseLine
     /// <summary>The same list price incl. VAT, before the vendor's discount.</summary>
     public decimal? UnitPriceIncludingVat { get; set; }
 
-    /// <summary>Markup multiplier applied to the cost to derive the sale price. Default 1.5 = 50% markup.</summary>
+    /// <summary>
+    /// No longer prices anything: purchases bill at their Ein.verð with no markup
+    /// (see ExpenseUnitPrice), and repricing sets this to 1. Kept as history.
+    /// </summary>
     public decimal MarkupFactor { get; set; } = 1.5m;
 
-    /// <summary>Sale price excl. VAT (per unit) — what we charge the customer. = cost × MarkupFactor, or set manually.</summary>
+    /// <summary>Sale price excl. VAT per unit — what the customer is billed: the Ein.verð, or an owner's own price.</summary>
     public decimal SalePriceExcludingVat { get; set; }
 
     public decimal VatPercentage         { get; set; }
@@ -40,15 +43,10 @@ public sealed class ExpenseLine
         (UnitPriceExcludingVat ?? 0m) * (1m - Math.Clamp(DiscountPercentage ?? 0m, 0m, 100m) / 100m);
 
     /// <summary>
-    /// The default sale price: what we paid, marked up. Built on the net cost —
-    /// marking up the list price and then passing the vendor's discount on to the
-    /// customer lands on roughly the same total, but only while nobody touches
-    /// the discount; change it on the invoice and the customer is overcharged.
+    /// True once an owner set this line's sale price themselves; repricing then
+    /// leaves it alone. Otherwise the price is the Ein.verð (see ExpenseUnitPrice).
     /// </summary>
-    public static decimal DefaultSalePrice(decimal? listUnitPrice, decimal? discountPercentage, decimal markupFactor) =>
-        Math.Round(
-            (listUnitPrice ?? 0m) * (1m - Math.Clamp(discountPercentage ?? 0m, 0m, 100m) / 100m) * markupFactor,
-            0, MidpointRounding.AwayFromZero);
+    public bool SalePriceSetByOwner { get; set; }
 
     /// <summary>Payday accounting account id.</summary>
     public Guid? AccountId { get; set; }

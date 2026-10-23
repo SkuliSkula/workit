@@ -549,6 +549,9 @@ namespace Workit.Api.Migrations
                     b.Property<decimal>("SalePriceExcludingVat")
                         .HasColumnType("numeric");
 
+                    b.Property<bool>("SalePriceSetByOwner")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal?>("UnitPriceExcludingVat")
                         .HasColumnType("numeric");
 
