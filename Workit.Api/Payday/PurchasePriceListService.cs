@@ -61,6 +61,18 @@ public sealed class PurchasePriceListService(
     public static bool LooksLikeCharge(string name) =>
         ChargeWords.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>The company's "Vörukaup innanlands" accounts, from the stored Payday expense accounts.</summary>
+    internal static async Task<HashSet<Guid>> GoodsAccountsAsync(WorkitDbContext db, Guid companyId, CancellationToken ct) =>
+        ((await PaydaySnapshotStore.GetAsync<List<PaydayExpenseAccount>>(db, companyId, PaydaySnapshotStore.ExpenseAccounts, ct)) ?? [])
+            .Where(a => string.Equals(a.Name?.Trim(), GoodsAccountName, StringComparison.OrdinalIgnoreCase))
+            .Select(a => a.Id)
+            .ToHashSet();
+
+    internal static async Task<HashSet<string>> IgnoredAsync(WorkitDbContext db, Guid companyId, CancellationToken ct) =>
+        await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.PriceListIgnoredSkus).FirstOrDefaultAsync(ct) is { } list
+            ? IgnoredOf(new Company { PriceListIgnoredSkus = list })
+            : [];
+
     public static HashSet<string> IgnoredOf(Company company) =>
         company.PriceListIgnoredSkus.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal);
 
@@ -70,17 +82,11 @@ public sealed class PurchasePriceListService(
     /// </summary>
     public async Task<PriceListPlan> PlanAsync(Guid companyId, DateTimeOffset? since, CancellationToken ct)
     {
-        var accounts = await PaydaySnapshotStore.GetAsync<List<PaydayExpenseAccount>>(db, companyId, PaydaySnapshotStore.ExpenseAccounts, ct);
-        var goods = (accounts ?? [])
-            .Where(a => string.Equals(a.Name?.Trim(), GoodsAccountName, StringComparison.OrdinalIgnoreCase))
-            .Select(a => a.Id)
-            .ToHashSet();
+        var goods = await GoodsAccountsAsync(db, companyId, ct);
         if (goods.Count == 0)
             return new([], [], [], since, $"Payday's expense accounts have no \"{GoodsAccountName}\" account yet — wait for the next sync.");
 
-        var ignored = await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.PriceListIgnoredSkus).FirstOrDefaultAsync(ct) is { } list
-            ? IgnoredOf(new Company { PriceListIgnoredSkus = list })
-            : [];
+        var ignored = await IgnoredAsync(db, companyId, ct);
 
         var query = db.Expenses.AsNoTracking().Include(e => e.Lines)
             .Where(e => e.CompanyId == companyId && e.Status != PaydayExpenseSyncService.DeletedStatus);
@@ -256,6 +262,7 @@ public sealed class PurchasePriceListService(
         foreach (var sku in skus.Select(s => s.Trim()).Where(s => s.Length > 0)) ignored.Add(sku);
         company.PriceListIgnoredSkus = string.Join('\n', ignored.Order(StringComparer.Ordinal));
         await db.SaveChangesAsync(ct);
+        await PriceHistory.RecordPurchasesAsync(db, companyId, ct);   // an unticked item leaves the price tracker too
     }
 
     /// <summary>The background run: once switched on, act on purchases entered since then. Null when off or nothing to do.</summary>

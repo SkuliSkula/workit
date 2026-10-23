@@ -16,6 +16,7 @@ public class PriceTrackerTests
 {
     private readonly Guid companyId = Guid.NewGuid();
     private static readonly Guid GoodsAccount = Guid.NewGuid();
+    private static readonly Guid CarAccount = Guid.NewGuid();
     private readonly PurchasePriceListTests.FakeProducts payday = new();
 
     private async Task<WorkitDbContext> NewDbAsync()
@@ -24,7 +25,8 @@ public class PriceTrackerTests
         db.Companies.Add(new Company { Id = companyId, Name = "ÓS" });
         await db.SaveChangesAsync();
         await PaydaySnapshotStore.SaveAsync(db, companyId, PaydaySnapshotStore.ExpenseAccounts,
-            new List<PaydayExpenseAccount> { new() { Id = GoodsAccount, Name = "Vörukaup innanlands" } }, CancellationToken.None);
+            new List<PaydayExpenseAccount> { new() { Id = GoodsAccount, Name = "Vörukaup innanlands" }, new() { Id = CarAccount, Name = "Rekstur bifreiðar" } },
+            CancellationToken.None);
         return db;
     }
 
@@ -33,7 +35,7 @@ public class PriceTrackerTests
     private PurchasePriceListService PriceList(WorkitDbContext db) => new(db, payday, ProductSync(db), NullLogger<PurchasePriceListService>.Instance);
 
     private Expense Bought(WorkitDbContext db, string description, decimal einVerd, string vendor = "Rönning", DateTime? on = null,
-        decimal discount = 0m, decimal quantity = 1m, bool einVerdHasVat = false, string status = "PAID")
+        decimal discount = 0m, decimal quantity = 1m, bool einVerdHasVat = false, string status = "PAID", Guid? account = null)
     {
         var expense = new Expense
         {
@@ -44,7 +46,7 @@ public class PriceTrackerTests
         expense.Lines.Add(new ExpenseLine
         {
             ExpenseId = expense.Id, CompanyId = companyId, Description = description, Quantity = quantity,
-            UnitPriceExcludingVat = einVerdHasVat ? einVerd * 1.24m : einVerd, DiscountPercentage = discount, VatPercentage = 24m, AccountId = GoodsAccount,
+            UnitPriceExcludingVat = einVerdHasVat ? einVerd * 1.24m : einVerd, DiscountPercentage = discount, VatPercentage = 24m, AccountId = account ?? GoodsAccount,
         });
         db.Expenses.Add(expense);
         db.SaveChanges();
@@ -65,6 +67,38 @@ public class PriceTrackerTests
         var row = await db.PurchasePrices.SingleAsync();
         row.Should().BeEquivalentTo(new { Sku = "6268002", Name = "PROFILED BORÐI 230V", Vendor = "Húsasmiðjan ehf.",
             EinVerdExVat = 70395m, DiscountPercentage = 45m, PaidExVat = 38717.34m, Quantity = 2m });
+    }
+
+    [Fact]
+    public async Task Only_goods_bought_for_resale_are_tracked_never_charges_or_unticked_items()
+    {
+        await using var db = await NewDbAsync();
+        Bought(db, "7777001 - Varrofi C16", 1450m, vendor: "Reykjafell ehf.");
+        Bought(db, "90004 - Auramunur sléttun", 1m, vendor: "Reykjafell ehf.");          // rounding, not a product
+        Bought(db, "000002 - AKSTUR REYKJAVÍK", 4910m, vendor: "Húsasmiðjan ehf.");      // delivery
+        Bought(db, "2580002 - Kílómetragjald", 8187m, vendor: "Skatturinn", account: CarAccount);
+        Bought(db, "BKS0 - Skilagjald", 860m, vendor: "Sýslumaðurinn", account: CarAccount);
+        Bought(db, "6268002 - PROFILED BORÐI", 70000m);
+        await PriceHistory.RecordPurchasesAsync(db, companyId, CancellationToken.None);
+        (await db.PurchasePrices.Select(p => p.Sku).OrderBy(s => s).ToListAsync()).Should().Equal("6268002", "7777001");
+
+        await PriceList(db).IgnoreAsync(companyId, ["6268002"], CancellationToken.None);
+
+        (await db.PurchasePrices.Select(p => p.Sku).ToListAsync()).Should().Equal(new[] { "7777001" }, "an item the owner unticks leaves the tracker too");
+    }
+
+    [Fact]
+    public async Task Before_the_expense_accounts_are_known_nothing_is_dropped()
+    {
+        await using var db = await NewDbAsync();
+        Bought(db, "6268002 - PROFILED BORÐI", 70000m);
+        await PriceHistory.RecordPurchasesAsync(db, companyId, CancellationToken.None);
+        db.PaydaySnapshots.RemoveRange(db.PaydaySnapshots);
+        await db.SaveChangesAsync();
+
+        await PriceHistory.RecordPurchasesAsync(db, companyId, CancellationToken.None);
+
+        (await db.PurchasePrices.CountAsync()).Should().Be(1);
     }
 
     [Fact]
