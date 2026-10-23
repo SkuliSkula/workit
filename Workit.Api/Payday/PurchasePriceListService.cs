@@ -134,7 +134,8 @@ public sealed class PurchasePriceListService(
     /// and marks the created products as Materials. The first apply also switches the
     /// feature on: from then on <see cref="SyncAsync"/> runs it for new purchases.
     /// </summary>
-    public async Task<PriceListApplyResult> ApplyAsync(Guid companyId, PriceListPlan plan, CancellationToken ct)
+    /// <param name="by">Who applied it — the owner's name, or "Automatic" for the background run. Kept on each change.</param>
+    public async Task<PriceListApplyResult> ApplyAsync(Guid companyId, PriceListPlan plan, CancellationToken ct, string by = "Automatic")
     {
         using (await PaydaySyncGuard.EnterAsync(Kind, companyId, ct))
         {
@@ -155,6 +156,7 @@ public sealed class PurchasePriceListService(
                     continue;
                 }
                 if ((product.SalesUnitPriceExcludingVAT ?? 0) >= raise.NewPriceExVat) continue;   // already raised meanwhile
+                var oldPrice = Math.Round(product.SalesUnitPriceExcludingVAT ?? 0m, 0, MidpointRounding.AwayFromZero);
                 var updated = await payday.UpdateAsync(product.Id, new UpdateProductRequest
                 {
                     Name                       = product.Name ?? raise.Name,
@@ -166,7 +168,20 @@ public sealed class PurchasePriceListService(
                     Tags                       = product.Tags,
                     Archived                   = product.Archived,
                 });
-                if (updated.IsSuccess) raised++;
+                if (updated.IsSuccess)
+                {
+                    raised++;
+                    db.PriceListChanges.Add(new PriceListChange
+                    {
+                        CompanyId = companyId, PaydayProductId = product.Id, Sku = raise.Sku, Name = product.Name ?? raise.Name,
+                        OldPriceExVat = oldPrice, NewPriceExVat = raise.NewPriceExVat,
+                        Source = PriceChangeSource.Purchase, Vendor = raise.Vendor, PurchasedOn = raise.PurchasedOn, By = by,
+                    });
+                    // The cache follows at once, so the product sync doesn't see this as a change made in Payday.
+                    var cachedRow = await db.PaydayProducts.FirstOrDefaultAsync(p => p.CompanyId == companyId && p.PaydayId == product.Id, ct);
+                    if (cachedRow is not null) cachedRow.SalePriceExVat = raise.NewPriceExVat;
+                    await db.SaveChangesAsync(ct);
+                }
                 else failed.Add($"{raise.Sku}: {updated.ErrorMessage}");
             }
 
@@ -196,7 +211,18 @@ public sealed class PurchasePriceListService(
                     SalesLedgerAccountId       = ledger.Id,
                     Tags                       = ["workit"],
                 });
-                if (result.IsSuccess) { created++; createdSkus.Add(addition.Sku); }
+                if (result is { IsSuccess: true, Value: { } made })
+                {
+                    created++;
+                    createdSkus.Add(addition.Sku);
+                    db.PriceListChanges.Add(new PriceListChange
+                    {
+                        CompanyId = companyId, PaydayProductId = made.Id, Sku = addition.Sku, Name = addition.Name,
+                        OldPriceExVat = null, NewPriceExVat = addition.PriceExVat,
+                        Source = PriceChangeSource.Purchase, Vendor = addition.Vendor, PurchasedOn = addition.PurchasedOn, By = by,
+                    });
+                    await db.SaveChangesAsync(ct);
+                }
                 else failed.Add($"{addition.Sku}: {result.ErrorMessage}");
             }
 

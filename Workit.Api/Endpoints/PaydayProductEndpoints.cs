@@ -201,7 +201,9 @@ internal static class PaydayProductEndpoints
                     var since = await db.Companies.Where(c => c.Id == companyId).Select(c => c.PriceListFromPurchasesSince).FirstOrDefaultAsync(ct);
                     var plan = await prices.PlanAsync(companyId, since, ct);
                     if (plan.Problem is not null) return Results.Content(plan.Problem, "text/plain", statusCode: StatusCodes.Status409Conflict);
-                    return Results.Ok(await prices.ApplyAsync(companyId, plan, ct));
+                    var userId = http.User.ToUserContext().UserId;
+                    var by = await db.AppUsers.Where(u => u.Id == userId).Select(u => u.Name).FirstOrDefaultAsync(ct) ?? "Owner";
+                    return Results.Ok(await prices.ApplyAsync(companyId, plan, ct, by));
                 }, logger, "applying the price list from purchases"))
             .RequireAuthorization()
             .AddEndpointFilter<PaydayCredentialsFilter>()

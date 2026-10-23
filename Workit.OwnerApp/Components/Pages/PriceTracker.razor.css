@@ -1,0 +1,154 @@
+.pt-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0 0.75rem;
+}
+
+.pt-tile {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.75rem 1rem;
+    border-radius: 16px;
+    background: #f5f8fc;
+    border: 1px solid rgba(22, 50, 79, 0.08);
+}
+
+.pt-tile strong {
+    font-size: 1.6rem;
+    color: #14304b;
+    letter-spacing: -0.02em;
+}
+
+.pt-tile-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #60758b;
+}
+
+.pt-tile-foot,
+.pt-muted {
+    color: #60758b;
+    font-size: 0.85rem;
+}
+
+.pt-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+
+.pt-tab,
+.pt-chip,
+.pt-back {
+    font: inherit;
+    border-radius: 999px;
+    border: 1px solid rgba(22, 50, 79, 0.16);
+    background: #fff;
+    color: #14304b;
+    padding: 0.35rem 0.95rem;
+    cursor: pointer;
+}
+
+.pt-tab:hover,
+.pt-chip:hover,
+.pt-back:hover {
+    background: #eef3f8;
+}
+
+.pt-tab--on,
+.pt-chip--on,
+.pt-tab--on:hover,
+.pt-chip--on:hover {
+    background: #14304b;
+    border-color: #14304b;
+    color: #fff;
+}
+
+.pt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.pt-table-wrap {
+    overflow-x: auto;
+}
+
+.pt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.pt-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #60758b;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid rgba(22, 50, 79, 0.12);
+    white-space: nowrap;
+}
+
+.pt-table td {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid rgba(22, 50, 79, 0.06);
+    color: #1e293b;
+    vertical-align: top;
+}
+
+.pt-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pt-row {
+    cursor: pointer;
+}
+
+.pt-row:hover,
+.pt-row:focus-visible {
+    background: #f5f8fc;
+    outline: none;
+}
+
+.pt-sku {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.pt-up {
+    color: #b42318;
+    font-weight: 600;
+}
+
+.pt-down {
+    color: #067647;
+    font-weight: 600;
+}
+
+.pt-below {
+    color: #b42318;
+    font-weight: 600;
+    text-decoration: underline dotted;
+}
+
+.pt-h4 {
+    margin: 1.25rem 0 0.4rem;
+    color: #14304b;
+}
+
+.pt-when {
+    white-space: nowrap;
+}

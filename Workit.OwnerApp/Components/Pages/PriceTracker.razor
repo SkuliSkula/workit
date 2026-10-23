@@ -1,0 +1,333 @@
+@page "/prices"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IPriceTrackerApi PricesApi
+
+<PageTitle>Price tracker</PageTitle>
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <FluentLabel Typo="Typography.PaneHeader">Price tracker</FluentLabel>
+    <FluentLabel Style="color:#60758b; margin-top:0.25rem;">
+        What you pay for every item you buy — the vendor's Ein.verð, without VAT and before your discount — and how your Payday price list follows it.
+    </FluentLabel>
+
+    @if (summary is { } s)
+    {
+        <div class="pt-tiles">
+            <div class="pt-tile"><span class="pt-tile-label">Items tracked</span><strong>@s.Items.ToString("N0")</strong></div>
+            <div class="pt-tile"><span class="pt-tile-label">Sellers</span><strong>@s.Vendors</strong></div>
+            <div class="pt-tile">
+                <span class="pt-tile-label">Went up, last 90 days</span>
+                <strong>@s.ItemsUp90Days</strong>
+                <span class="pt-tile-foot">@(s.MedianIncreasePercent90Days is decimal m ? $"median +{m:0.#} %" : "no increases")</span>
+            </div>
+            <div class="pt-tile"><span class="pt-tile-label">Price-list changes, 30 days</span><strong>@s.PriceListChanges30Days</strong></div>
+        </div>
+    }
+
+    <div class="pt-tabs" role="tablist" aria-label="Price tracker views">
+        <button role="tab" aria-selected="@(tab == Tab.Products ? "true" : "false")" class="pt-tab @(tab == Tab.Products ? "pt-tab--on" : "")" @onclick="@(() => ShowAsync(Tab.Products))">By product</button>
+        <button role="tab" aria-selected="@(tab == Tab.Sellers ? "true" : "false")" class="pt-tab @(tab == Tab.Sellers ? "pt-tab--on" : "")" @onclick="@(() => ShowAsync(Tab.Sellers))">By seller</button>
+        <button role="tab" aria-selected="@(tab == Tab.Changes ? "true" : "false")" class="pt-tab @(tab == Tab.Changes ? "pt-tab--on" : "")" @onclick="@(() => ShowAsync(Tab.Changes))">Price-list changes</button>
+    </div>
+</FluentCard>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <FluentLabel Color="Color.Error" Style="margin:0.5rem 0;">@error</FluentLabel>
+}
+
+<FluentCard Class="admin-card" AreaRestricted="false">
+    @if (loading)
+    {
+        <PageLoader />
+    }
+    else if (tab == Tab.Products)
+    {
+        <div class="pt-toolbar">
+            @if (vendor is not null)
+            {
+                <button class="pt-back" @onclick="@(() => ShowAsync(Tab.Sellers))">← All sellers</button>
+                <strong>@vendor</strong>
+            }
+            <FluentSearch Placeholder="Search item number or name…" Value="@search" ValueChanged="OnSearchAsync"
+                          Immediate="true" ImmediateDelay="300" Style="width:280px;" aria-label="Search items" />
+            <span class="pt-muted">@items.Count item@(items.Count == 1 ? "" : "s")</span>
+        </div>
+        @if (items.Count == 0)
+        {
+            <p class="pt-muted">No purchases with an item number@(string.IsNullOrWhiteSpace(search) ? "" : $" match “{search}”").</p>
+        }
+        else
+        {
+            <div class="pt-table-wrap">
+                <table class="pt-table">
+                    <thead>
+                        <tr>
+                            <th>Item no.</th><th>Product</th><th class="num">Ein.verð</th><th class="num">Change</th>
+                            <th>Last bought</th><th class="num">Price list</th><th class="num">Bought</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var i in SortedItems)
+                        {
+                            <tr class="pt-row" @onclick="@(() => OpenAsync(i.Sku))" tabindex="0" @onkeydown="@(e => OnRowKeyAsync(e, i.Sku))">
+                                <td class="pt-sku">@i.Sku</td>
+                                <td>@i.Name</td>
+                                <td class="num">@i.LatestEinVerd.ToString("N0")</td>
+                                <td class="num">@Change(i.ChangePercent)</td>
+                                <td class="pt-when">@i.LatestVendor<br /><span class="pt-muted">@i.LatestOn?.ToString("d MMM yyyy")</span></td>
+                                <td class="num">
+                                    @if (i.PriceListPriceExVat is decimal pl)
+                                    {
+                                        <span class="@(pl < i.LatestEinVerd ? "pt-below" : "")" title="@(pl < i.LatestEinVerd ? "Below what you last paid the vendor's Ein.verð at" : null)">@pl.ToString("N0")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pt-muted">—</span>
+                                    }
+                                </td>
+                                <td class="num">@i.Purchases</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    else if (tab == Tab.Sellers)
+    {
+        @if (vendors.Count == 0)
+        {
+            <p class="pt-muted">No purchases with an item number yet.</p>
+        }
+        else
+        {
+            <div class="pt-table-wrap">
+                <table class="pt-table">
+                    <thead><tr><th>Seller</th><th class="num">Items</th><th class="num">Purchases</th><th>Last purchase</th><th class="num">Up</th><th class="num">Down</th></tr></thead>
+                    <tbody>
+                        @foreach (var v in vendors)
+                        {
+                            <tr class="pt-row" @onclick="@(() => OpenVendorAsync(v.Vendor))" tabindex="0" @onkeydown="@(e => OnVendorKeyAsync(e, v.Vendor))">
+                                <td><strong>@v.Vendor</strong></td>
+                                <td class="num">@v.Items</td>
+                                <td class="num">@v.Purchases</td>
+                                <td>@v.LastOn?.ToString("d MMM yyyy")</td>
+                                <td class="num">@(v.ItemsUp > 0 ? $"▲ {v.ItemsUp}" : "—")</td>
+                                <td class="num">@(v.ItemsDown > 0 ? $"▼ {v.ItemsDown}" : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="pt-muted" style="margin-top:0.5rem;">Up / down: items whose latest purchase price from that seller differs from the one before.</p>
+        }
+    }
+    else
+    {
+        <div class="pt-toolbar">
+            @foreach (var d in new[] { 30, 90, 365 })
+            {
+                <button class="pt-chip @(changeDays == d ? "pt-chip--on" : "")" @onclick="@(() => ChangeDaysAsync(d))">@(d == 365 ? "12 months" : $"{d} days")</button>
+            }
+        </div>
+        @if (changes.Count == 0)
+        {
+            <p class="pt-muted">No changes to the price list in that time. Workit records them from the day this page went live — raises from purchases, and changes made in Payday.</p>
+        }
+        else
+        {
+            <div class="pt-table-wrap">
+                <table class="pt-table">
+                    <thead><tr><th>When</th><th>Item no.</th><th>Product</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th><th>Why</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in changes)
+                        {
+                            <tr class="pt-row" @onclick="@(() => OpenAsync(c.Sku))">
+                                <td>@c.ChangedAt.LocalDateTime.ToString("d MMM HH:mm")</td>
+                                <td class="pt-sku">@c.Sku</td>
+                                <td>@c.Name</td>
+                                <td class="num">@(c.OldPriceExVat is decimal o ? o.ToString("N0") : "new")</td>
+                                <td class="num"><strong>@c.NewPriceExVat.ToString("N0")</strong></td>
+                                <td class="num">@Change(c.OldPriceExVat is decimal old && old > 0 ? Math.Round((c.NewPriceExVat - old) / old * 100m, 1) : null)</td>
+                                <td>@Why(c)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</FluentCard>
+
+@if (detail is { } h)
+{
+    <AppDialog Title="@($"{h.Sku} · {h.Name}")" OnClose="CloseDetail" Wide="true">
+        <p style="margin-top:0; color:#334155;">
+            @if (h.PriceListPriceExVat is decimal pl) { <span>Price list: <strong>@pl.ToString("N0") kr.</strong> without VAT · </span> }
+            @h.Purchases.Count purchase@(h.Purchases.Count == 1 ? "" : "s") from @h.Purchases.Select(p => p.Vendor).Distinct().Count() seller@(h.Purchases.Select(p => p.Vendor).Distinct().Count() == 1 ? "" : "s")
+        </p>
+
+        @if (h.Purchases.Count > 0)
+        {
+            <PriceHistoryChart Purchases="h.Purchases" />
+            <h4 class="pt-h4">Purchases</h4>
+            <div class="pt-table-wrap">
+                <table class="pt-table">
+                    <thead><tr><th>Date</th><th>Seller</th><th class="num">Ein.verð</th><th class="num">Your discount</th><th class="num">You paid</th><th class="num">Qty</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in h.Purchases)
+                        {
+                            <tr>
+                                <td>@p.PurchasedOn?.ToString("d MMM yyyy")</td>
+                                <td>@p.Vendor</td>
+                                <td class="num"><strong>@p.EinVerdExVat.ToString("N0")</strong></td>
+                                <td class="num">@(p.DiscountPercentage > 0 ? $"{p.DiscountPercentage:0.#} %" : "—")</td>
+                                <td class="num">@p.PaidExVat.ToString("N0")</td>
+                                <td class="num">@p.Quantity.ToString("0.##")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (h.Changes.Count > 0)
+        {
+            <h4 class="pt-h4">Price-list changes</h4>
+            <div class="pt-table-wrap">
+                <table class="pt-table">
+                    <thead><tr><th>When</th><th class="num">Before</th><th class="num">After</th><th>Why</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in h.Changes)
+                        {
+                            <tr>
+                                <td>@c.ChangedAt.LocalDateTime.ToString("d MMM yyyy HH:mm")</td>
+                                <td class="num">@(c.OldPriceExVat is decimal o ? o.ToString("N0") : "new")</td>
+                                <td class="num"><strong>@c.NewPriceExVat.ToString("N0")</strong></td>
+                                <td>@Why(c)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </AppDialog>
+}
+
+@code {
+    private enum Tab { Products, Sellers, Changes }
+
+    private Tab tab = Tab.Products;
+    private bool loading = true;
+    private string? error;
+    private string search = string.Empty;
+    private string? vendor;
+    private int changeDays = 90;
+
+    private PriceTrackerSummary? summary;
+    private List<TrackedItem> items = [];
+    private List<TrackedVendor> vendors = [];
+    private List<PriceListChange> changes = [];
+    private TrackedItemHistory? detail;
+
+    /// <summary>With a seller picked, the biggest increases lead; otherwise the latest purchases.</summary>
+    private IEnumerable<TrackedItem> SortedItems => vendor is null
+        ? items
+        : items.OrderByDescending(i => i.ChangePercent ?? decimal.MinValue).ThenByDescending(i => i.LatestOn);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        var s = await PricesApi.GetSummaryAsync();
+        if (s.IsSuccess) summary = s.Value;
+        await LoadItemsAsync();
+        StateHasChanged();
+    }
+
+    private async Task ShowAsync(Tab next)
+    {
+        tab = next;
+        error = null;
+        if (next == Tab.Products) { vendor = null; await LoadItemsAsync(); }
+        else if (next == Tab.Sellers) await LoadVendorsAsync();
+        else await LoadChangesAsync();
+    }
+
+    private async Task LoadItemsAsync()
+    {
+        loading = true;
+        var r = await PricesApi.GetItemsAsync(search, vendor);
+        loading = false;
+        if (r.IsSuccess) items = r.Value ?? [];
+        else error = r.ErrorMessage;
+    }
+
+    private async Task LoadVendorsAsync()
+    {
+        loading = true;
+        var r = await PricesApi.GetVendorsAsync();
+        loading = false;
+        if (r.IsSuccess) vendors = r.Value ?? [];
+        else error = r.ErrorMessage;
+    }
+
+    private async Task LoadChangesAsync()
+    {
+        loading = true;
+        var r = await PricesApi.GetChangesAsync(changeDays);
+        loading = false;
+        if (r.IsSuccess) changes = r.Value ?? [];
+        else error = r.ErrorMessage;
+    }
+
+    private async Task OnSearchAsync(string? value)
+    {
+        search = value ?? string.Empty;
+        await LoadItemsAsync();
+    }
+
+    private async Task OpenVendorAsync(string v)
+    {
+        tab = Tab.Products;
+        vendor = v;
+        search = string.Empty;
+        await LoadItemsAsync();
+    }
+
+    private async Task ChangeDaysAsync(int days)
+    {
+        changeDays = days;
+        await LoadChangesAsync();
+    }
+
+    private async Task OpenAsync(string sku)
+    {
+        var r = await PricesApi.GetItemAsync(sku);
+        if (r.IsSuccess) detail = r.Value;
+        else error = r.ErrorMessage;
+    }
+
+    private void CloseDetail() => detail = null;
+
+    private async Task OnRowKeyAsync(KeyboardEventArgs e, string sku)
+    {
+        if (e.Key is "Enter" or " ") await OpenAsync(sku);
+    }
+
+    private async Task OnVendorKeyAsync(KeyboardEventArgs e, string v)
+    {
+        if (e.Key is "Enter" or " ") await OpenVendorAsync(v);
+    }
+
+    /// <summary>A change with its direction as a symbol and a sign, never colour alone.</summary>
+    private static RenderFragment Change(decimal? percent) => __builder =>
+    {
+        if (percent is not decimal p || p == 0) { <span class="pt-muted">—</span> return; }
+        <span class="@(p > 0 ? "pt-up" : "pt-down")">@(p > 0 ? "▲" : "▼") @(p > 0 ? "+" : "")@p.ToString("0.#") %</span>
+    };
+
+    private static string Why(PriceListChange c) => c.Source == PriceChangeSource.Purchase
+        ? $"Bought from {c.Vendor}{(c.PurchasedOn is DateTime d ? $" {d:d MMM}" : "")} · {(c.By ?? "Automatic")}"
+        : c.OldPriceExVat is null ? "New in the price list" : "Changed in Payday";
+}
