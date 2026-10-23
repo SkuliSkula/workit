@@ -27,6 +27,7 @@ public class MaterialsMigrationTests
         public Task<ApiResult<PaydayProductsResponse>> GetAllAsync(int page = 1, int perPage = 100, string orderBy = "sku", string order = "asc", string? query = null) =>
             Task.FromResult(ApiResult<PaydayProductsResponse>.Success(new PaydayProductsResponse { Products = page == 1 ? Products : [], Page = page, Pages = 1, PerPage = perPage, Total = Products.Count }));
 
+        public Task<ApiResult<PaydayProduct>> UpdateAsync(Guid id, UpdateProductRequest request) => throw new NotSupportedException();
         public Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request)
         {
             Created.Add(request);

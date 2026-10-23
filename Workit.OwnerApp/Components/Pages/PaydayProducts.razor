@@ -34,6 +34,130 @@
     }
 </FluentCard>
 
+@* ── Price list from purchases ── *@
+<FluentCard Class="admin-card" AreaRestricted="false">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+        <div style="max-width:52rem;">
+            <FluentLabel Typo="Typography.Body" Style="font-weight:700;">Price list from purchases</FluentLabel>
+            <FluentLabel Style="color:#60758b; font-size:0.85rem; margin-top:0.25rem; line-height:1.45;">
+                Goods you buy (account <em>Vörukaup innanlands</em>, lines that start with the vendor's item number) keep this price list up to date:
+                bought at a higher Ein.verð than the product's price → the price is raised in Payday; not in the list yet → the product is created as a Material.
+                Prices are never lowered.
+                @if (company?.PriceListFromPurchasesSince is DateTimeOffset since)
+                {
+                    <span><br /><strong style="color:#065f46;">On</strong> — purchases entered since @since.LocalDateTime.ToString("d MMM yyyy HH:mm") are applied with every Payday sync.</span>
+                }
+                else
+                {
+                    <span><br /><strong>Off</strong> — preview what your purchases so far would change, then apply it to turn this on.</span>
+                }
+            </FluentLabel>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+            <FluentButton Appearance="Appearance.Accent" @onclick="PreviewPriceListAsync" Disabled="@previewing">
+                @(previewing ? "Reading purchases…" : "Preview")
+            </FluentButton>
+            @if (company?.PriceListFromPurchasesSince is not null)
+            {
+                <FluentButton Appearance="Appearance.Stealth" @onclick="StopPriceListAsync">Turn off</FluentButton>
+            }
+        </div>
+    </div>
+</FluentCard>
+
+@if (pricePlan is not null)
+{
+    <AppDialog Title="Price list from purchases" OnClose="ClosePricePlan" Busy="applyingPrices" Wide="true">
+        @if (pricePlan.Problem is { } problem)
+        {
+            <p style="color:#b91c1c;">@problem</p>
+        }
+        else
+        {
+            <p style="margin-top:0; color:#334155;">
+                From the latest purchase of each item@(pricePlan.Since is DateTimeOffset s ? $" entered since {s.LocalDateTime:d MMM HH:mm}" : ""):
+                <strong>@pricePlan.Raises.Count</strong> @(pricePlan.Raises.Count == 1 ? "price goes" : "prices go") up and
+                <strong>@pricePlan.Additions.Count</strong> new @(pricePlan.Additions.Count == 1 ? "product is" : "products are") added to your Payday price list.
+            </p>
+
+            @if (pricePlan.Raises.Count > 0)
+            {
+                <h4 style="margin:0.75rem 0 0.35rem;">Prices raised</h4>
+                <div class="table-wrap">
+                    <table class="products">
+                        <thead><tr><th></th><th>SKU</th><th>Product</th><th class="num">Now</th><th class="num">New</th><th>Bought from</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in pricePlan.Raises)
+                            {
+                                <tr style="@(unticked.Contains(r.Sku) ? "opacity:0.5;" : "")">
+                                    <td><input type="checkbox" checked="@(!unticked.Contains(r.Sku))" @onchange="@(() => Toggle(r.Sku))" aria-label="Include @r.Sku" /></td>
+                                    <td>@r.Sku</td><td>@r.Name @if (r.LooksLikeCharge) { <span class="charge-hint">looks like a charge</span> }</td>
+                                    <td class="num">@r.CurrentPriceExVat.ToString("N0")</td>
+                                    <td class="num"><strong>@r.NewPriceExVat.ToString("N0")</strong> <span style="color:#b45309; font-size:0.8rem;">+@((r.CurrentPriceExVat > 0 ? (r.NewPriceExVat - r.CurrentPriceExVat) / r.CurrentPriceExVat * 100 : 0).ToString("0.#")) %</span></td>
+                                    <td>@r.Vendor @(r.PurchasedOn?.ToString("d MMM"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @if (pricePlan.Additions.Count > 0)
+            {
+                <h4 style="margin:0.9rem 0 0.35rem;">New products (as Materials, no stock tracking)</h4>
+                <div class="table-wrap">
+                    <table class="products">
+                        <thead><tr><th></th><th>SKU</th><th>Product</th><th class="num">Price ex. VAT</th><th class="num">VAT</th><th>Bought from</th></tr></thead>
+                        <tbody>
+                            @foreach (var a in pricePlan.Additions)
+                            {
+                                <tr style="@(unticked.Contains(a.Sku) ? "opacity:0.5;" : "")">
+                                    <td><input type="checkbox" checked="@(!unticked.Contains(a.Sku))" @onchange="@(() => Toggle(a.Sku))" aria-label="Include @a.Sku" /></td>
+                                    <td>@a.Sku</td><td>@a.Name @if (a.LooksLikeCharge) { <span class="charge-hint">looks like a charge</span> }</td>
+                                    <td class="num">@a.PriceExVat.ToString("N0")</td>
+                                    <td class="num">@a.VatPercentage.ToString("0.#") %</td>
+                                    <td>@a.Vendor @(a.PurchasedOn?.ToString("d MMM"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <p style="color:#60758b; font-size:0.85rem;">
+                Untick anything that isn't goods for resale (delivery, rounding, fees). Unticked items are left out now and never suggested again.
+                @if (pricePlan.IgnoredCount > 0) { <span>@pricePlan.IgnoredCount item@(pricePlan.IgnoredCount == 1 ? " is" : "s are") already left out.</span> }
+            </p>
+
+            @if (pricePlan.ArchivedSkus.Count > 0)
+            {
+                <p style="color:#60758b; font-size:0.85rem;">Bought but archived in Payday, left alone: @string.Join(", ", pricePlan.ArchivedSkus)</p>
+            }
+
+            @if (priceApplyResult is { } done)
+            {
+                <p style="color:@(done.Failed.Count == 0 ? "#065f46" : "#92400e");">
+                    ✓ @done.Raised raised, @done.Created created in Payday.
+                    @if (done.Failed.Count > 0) { <span> Payday refused @done.Failed.Count: @string.Join("; ", done.Failed)</span> }
+                </p>
+            }
+            else if (TickedCount > 0 || unticked.Count > 0)
+            {
+                <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top:1rem;">
+                    <FluentButton Appearance="Appearance.Outline" @onclick="ClosePricePlan">Cancel</FluentButton>
+                    <FluentButton Appearance="Appearance.Accent" @onclick="ApplyPriceListAsync" Disabled="@(applyingPrices || TickedCount == 0 && unticked.Count == 0)">
+                        @(applyingPrices ? "Updating Payday…" : $"Apply to Payday ({TickedCount} changes)")
+                    </FluentButton>
+                </div>
+            }
+            else
+            {
+                <p style="color:#065f46;">Nothing to change — your price list is up to date with your purchases.</p>
+            }
+        }
+    </AppDialog>
+}
+
 @* ── New product ── *@
 @if (showCreate)
 {
@@ -440,6 +564,63 @@
     }
     private int MaterialCount => listPage?.RoleCounts.GetValueOrDefault(PaydayProductRole.Material) ?? 0;
     private bool loading = true;
+
+    // ── Price list from purchases ──
+    private PriceListPlan? pricePlan;
+    /// <summary>Items the owner unticked in the preview; sent as "ignore" on apply.</summary>
+    private readonly HashSet<string> unticked = [];
+    private int TickedCount => pricePlan is null ? 0
+        : pricePlan.Raises.Count(r => !unticked.Contains(r.Sku)) + pricePlan.Additions.Count(a => !unticked.Contains(a.Sku));
+    private void Toggle(string sku) { if (!unticked.Remove(sku)) unticked.Add(sku); }
+    private PriceListApplyResult? priceApplyResult;
+    private bool previewing;
+    private bool applyingPrices;
+
+    private async Task PreviewPriceListAsync()
+    {
+        previewing = true;
+        priceApplyResult = null;
+        var result = await ProductsApi.PreviewFromPurchasesAsync();
+        previewing = false;
+        if (result.IsSuccess && result.Value is { } plan)
+        {
+            pricePlan = plan;
+            // A delivery or rounding line starts unticked; the owner can tick it back.
+            unticked.Clear();
+            unticked.UnionWith(plan.Raises.Where(r => r.LooksLikeCharge).Select(r => r.Sku));
+            unticked.UnionWith(plan.Additions.Where(a => a.LooksLikeCharge).Select(a => a.Sku));
+        }
+        else { message = result.ErrorMessage; messageIsError = true; }
+    }
+
+    private async Task ApplyPriceListAsync()
+    {
+        using var busy = Busy.Begin("Updating your Payday price list…");
+        applyingPrices = true;
+        var result = await ProductsApi.ApplyFromPurchasesAsync(unticked.ToList());
+        applyingPrices = false;
+        if (!result.IsSuccess) { message = result.ErrorMessage; messageIsError = true; pricePlan = null; return; }
+        priceApplyResult = result.Value;
+        var companyResult = await CompanyApi.GetCompanyAsync();
+        if (companyResult.IsSuccess) company = companyResult.Value;
+        await LoadAsync();
+    }
+
+    private void ClosePricePlan()
+    {
+        if (applyingPrices) return;
+        pricePlan = null;
+        priceApplyResult = null;
+    }
+
+    private async Task StopPriceListAsync()
+    {
+        var result = await ProductsApi.StopFromPurchasesAsync();
+        if (!result.IsSuccess) { message = result.ErrorMessage; messageIsError = true; return; }
+        var companyResult = await CompanyApi.GetCompanyAsync();
+        if (companyResult.IsSuccess) company = companyResult.Value;
+        message = "New purchases no longer change the price list."; messageIsError = false;
+    }
     private bool showArchived;
     private string search = string.Empty;
     private PaydayProductRole? roleFilter;

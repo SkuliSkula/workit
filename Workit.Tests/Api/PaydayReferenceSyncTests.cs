@@ -110,5 +110,6 @@ public class PaydayReferenceSyncTests
         Task<ApiResult<PaydayProduct>> IPaydayProductsApi.GetBySkuAsync(string sku) => throw new NotSupportedException();
         Task<ApiResult<PaydayProductMovementsResponse>> IPaydayProductsApi.GetMovementsAsync(Guid id, int page, int perPage) => throw new NotSupportedException();
         Task<ApiResult<PaydayProduct>> IPaydayProductsApi.CreateAsync(CreateProductRequest request) => throw new NotSupportedException();
+        Task<ApiResult<PaydayProduct>> IPaydayProductsApi.UpdateAsync(Guid id, UpdateProductRequest request) => throw new NotSupportedException();
     }
 }

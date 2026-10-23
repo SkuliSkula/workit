@@ -16,6 +16,8 @@ public interface IPaydayProductsApi
     Task<ApiResult<List<PaydayLedgerAccount>>> GetSalesLedgerAccountsAsync();
     /// <summary>Creates a product; only the materials migration calls this.</summary>
     Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request);
+    /// <summary>Updates a product. Never carries a quantity — see UpdateProductRequest.</summary>
+    Task<ApiResult<PaydayProduct>> UpdateAsync(Guid id, UpdateProductRequest request);
 }
 
 internal sealed class PaydayProductsApi(IHttpClientFactory httpClientFactory, IPaydayTokenService tokenService)
@@ -42,4 +44,7 @@ internal sealed class PaydayProductsApi(IHttpClientFactory httpClientFactory, IP
 
     public Task<ApiResult<PaydayProduct>> CreateAsync(CreateProductRequest request) =>
         PostForJsonAsync<CreateProductRequest, PaydayProduct>("products", request, "The product could not be created in Payday right now.");
+
+    public Task<ApiResult<PaydayProduct>> UpdateAsync(Guid id, UpdateProductRequest request) =>
+        PutForJsonAsync<UpdateProductRequest, PaydayProduct>($"products/{id}", request, "The product could not be updated in Payday right now.");
 }

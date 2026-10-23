@@ -125,3 +125,13 @@
 .sg-conf--medium { background: #dbeafe; color: #1e40af; }
 .sg-conf--low    { background: #f1f5f9; color: #64748b; }
 @media (max-width: 800px) { .sg-row { grid-template-columns: 24px 1fr; } .sg-pick { grid-column: 2; } }
+
+.charge-hint {
+    margin-left: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #92400e;
+    background: #fef3c7;
+    border-radius: 999px;
+    padding: 1px 7px;
+}
