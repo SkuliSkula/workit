@@ -310,6 +310,14 @@
     margin: 0.2rem 0 0.5rem 0.25rem;
 }
 
+/* Confirmation beside "+ Add hours", until the job is collapsed again. */
+.job-hours-saved {
+    margin-left: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #166534;
+}
+
 /* ── Edit form / actions ────────────────────────────────────────────────── */
 
 .job-edit-form {
