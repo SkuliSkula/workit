@@ -457,6 +457,59 @@ else if (jobs.Count > 0)
                                 <p class="job-empty-note">No hours logged on this job yet.</p>
                             }
 
+                            @* Log hours without leaving the job *@
+                            @if (addingHoursForJob == job.Id)
+                            {
+                                var hoursTasks = TasksFor(job.Id);
+                                <div class="job-task-edit">
+                                    <div class="admin-grid">
+                                        <div>
+                                            <FluentSelect Label="Who *" TValue="string" TOption="string" @bind-Value="newHoursEmployeeId" style="width:100%">
+                                                @foreach (var emp in EmployeesForJob(job))
+                                                {
+                                                    <FluentOption TOption="string" Value="@emp.Id.ToString()">@emp.DisplayName</FluentOption>
+                                                }
+                                            </FluentSelect>
+                                        </div>
+                                        <div><FluentDatePicker Label="Date" @bind-Value="newHoursDate" style="width:100%" /></div>
+                                        <div><FluentNumberField TValue="decimal" Label="Hours" @bind-Value="newHoursHours" Min="0" Step="0.5" style="width:100%" /></div>
+                                        <div><FluentNumberField TValue="decimal" Label="Overtime (h)" @bind-Value="newHoursOvertime" Min="0" Step="0.5" style="width:100%" /></div>
+                                        <div><FluentNumberField TValue="int" Label="Driving units" @bind-Value="newHoursDriving" Min="0" style="width:100%" /></div>
+                                        @if (hoursTasks.Count > 0)
+                                        {
+                                            <div>
+                                                <FluentSelect Label="Task" TValue="string" TOption="string" @bind-Value="newHoursTaskId" style="width:100%">
+                                                    <FluentOption TOption="string" Value="">No task</FluentOption>
+                                                    @foreach (var t in hoursTasks.OrderBy(t => t.Status).ThenBy(t => t.SortOrder).ThenBy(t => t.TaskNumber))
+                                                    {
+                                                        <FluentOption TOption="string" Value="@t.Id.ToString()">@t.Code – @t.Name</FluentOption>
+                                                    }
+                                                </FluentSelect>
+                                            </div>
+                                        }
+                                        <div><FluentTextField Label="Notes" @bind-Value="newHoursNotes" Placeholder="Optional" style="width:100%" /></div>
+                                    </div>
+                                    <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+                                        <FluentButton Appearance="Appearance.Accent" Size="ButtonSize.Small" @onclick="@(() => AddHoursAsync(job))" Disabled="@(savingHours || !CanAddHours)">@(savingHours ? "Adding…" : "Add hours")</FluentButton>
+                                        <FluentButton Appearance="Appearance.Outline" Size="ButtonSize.Small" @onclick="@(() => addingHoursForJob = null)" Disabled="@savingHours">Cancel</FluentButton>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(hoursError))
+                                    {
+                                        <p class="job-empty-note" style="color:#b91c1c;">@hoursError</p>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <FluentButton Appearance="Appearance.Stealth" Size="ButtonSize.Small" @onclick="@(() => BeginAddHours(job))"
+                                              Disabled="@(employees.Count == 0)"
+                                              title="@(employees.Count == 0 ? "Add an employee first" : "Log hours on this job")">+ Add hours</FluentButton>
+                                @if (hoursSavedForJob == job.Id && !string.IsNullOrWhiteSpace(hoursSavedNote))
+                                {
+                                    <span class="job-hours-saved">@hoursSavedNote</span>
+                                }
+                            }
+
                             @* Materials *@
                             <div class="job-section-title">
                                 <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
@@ -624,6 +677,20 @@ else if (company is not null)
     private readonly List<NewTaskRow> newTasks = [new()];
 
     private sealed class NewTaskRow { public string Name { get; set; } = ""; public decimal? EstimatedHours { get; set; } }
+
+    // ── Quick hours ──
+    private Guid?    addingHoursForJob;
+    private string?  newHoursEmployeeId;
+    private DateTime? newHoursDate = DateTime.Today;
+    private decimal  newHoursHours;
+    private decimal  newHoursOvertime;
+    private int      newHoursDriving;
+    private string   newHoursTaskId = string.Empty;
+    private string   newHoursNotes  = string.Empty;
+    private bool     savingHours;
+    private string?  hoursError;
+    private Guid?    hoursSavedForJob;
+    private string?  hoursSavedNote;
 
     private List<JobTask> TasksFor(Guid jobId) => tasks.Where(t => t.JobId == jobId).ToList();
     private bool CustomerPlansTasks(Guid customerId) => customers.FirstOrDefault(c => c.Id == customerId)?.PlanJobsInTasks == true;
@@ -934,6 +1001,10 @@ else if (company is not null)
 
         expandedJobId = job.Id;
         editingJob    = null;
+        addingHoursForJob = null;
+        hoursError        = null;
+        hoursSavedNote    = null;
+        hoursSavedForJob  = null;
 
         if (!jobDetails.ContainsKey(job.Id))
             await LoadJobDetailAsync(job.Id);
@@ -947,6 +1018,9 @@ else if (company is not null)
 
         var entries = (await entriesTask).Value ?? [];
         var usages  = (await usageTask).Value   ?? [];
+
+        // The status chip reads from here, so keep it in step with the detail.
+        entriesByJob[jobId] = entries;
 
         var byEmp = entries
             .GroupBy(e => e.EmployeeId)
@@ -1142,6 +1216,73 @@ else if (company is not null)
     {
         var i = tasks.FindIndex(t => t.Id == updated.Id);
         if (i >= 0) tasks[i] = updated; else tasks.Add(updated);
+    }
+
+    // ── Quick hours ──────────────────────────────────────────────────────────
+
+    /// <summary>The job's own crew first — whoever worked is nearly always one of them.</summary>
+    private List<Employee> EmployeesForJob(Job job) =>
+    [
+        .. employees.Where(e => job.AssignedEmployeeIds.Contains(e.Id)),
+        .. employees.Where(e => !job.AssignedEmployeeIds.Contains(e.Id)),
+    ];
+
+    private bool CanAddHours =>
+        Guid.TryParse(newHoursEmployeeId, out _) && newHoursDate is not null
+        && (newHoursHours > 0 || newHoursOvertime > 0 || newHoursDriving > 0);
+
+    private void BeginAddHours(Job job)
+    {
+        addingHoursForJob  = job.Id;
+        // A whole day on the job is the common case; the crew's first name is the
+        // likely worker. Both are a tweak away.
+        newHoursEmployeeId = EmployeesForJob(job).FirstOrDefault()?.Id.ToString();
+        newHoursDate       = DateTime.Today;
+        newHoursHours      = standardHoursPerDay > 0 ? standardHoursPerDay : 8m;
+        newHoursOvertime   = 0m;
+        newHoursDriving    = 0;
+        newHoursTaskId     = string.Empty;
+        newHoursNotes      = string.Empty;
+        hoursError         = null;
+        hoursSavedNote     = null;
+        hoursSavedForJob   = null;
+        addingTaskForJob   = null;
+        editingTask        = null;
+    }
+
+    private async Task AddHoursAsync(Job job)
+    {
+        if (!CanAddHours || !Guid.TryParse(newHoursEmployeeId, out var employeeId) || newHoursDate is null) return;
+        savingHours = true; hoursError = null;
+        try
+        {
+            var result = await TimeEntriesApi.CreateTimeEntryAsync(new TimeEntry
+            {
+                JobId         = job.Id,
+                EmployeeId    = employeeId,
+                TaskId        = Guid.TryParse(newHoursTaskId, out var taskId) ? taskId : null,
+                WorkDate      = DateOnly.FromDateTime(newHoursDate.Value),
+                Hours         = newHoursHours,
+                OvertimeHours = newHoursOvertime,
+                DrivingUnits  = newHoursDriving,
+                Notes         = newHoursNotes.Trim(),
+            });
+
+            if (!result.IsSuccess) { hoursError = result.ErrorMessage; return; }
+
+            var who = employeeLookup.GetValueOrDefault(employeeId, "—");
+            hoursSavedNote = $"✓ {newHoursHours:0.#} h"
+                + (newHoursOvertime > 0 ? $" + {newHoursOvertime:0.#} OT" : "")
+                + (newHoursDriving > 0 ? $" + {newHoursDriving} driving" : "")
+                + $" for {who} on {newHoursDate.Value:d MMM}";
+            hoursSavedForJob = job.Id;
+            addingHoursForJob = null;
+
+            // Reload so the KPIs, the workforce list, the per-task hours and the
+            // status chip all show the new entry.
+            await LoadJobDetailAsync(job.Id);
+        }
+        finally { savingHours = false; }
     }
 
     private void BeginEditJob(Job job)
